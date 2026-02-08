@@ -1,6 +1,6 @@
 # Example User Workspace
 
-This is a template user workspace. Copy this directory to create your own:
+This is an example user workspace. Copy this directory to create your own:
 
 ```bash
 cp -r user/example user/<your-name>

@@ -1,10 +1,6 @@
-# Example User Workspace
+# Murilo's Workspace
 
-This is a template user workspace. Copy this directory to create your own:
-
-```bash
-cp -r user/example user/<your-name>
-```
+Personal workspace for PlantCLEF 2026 experiments.
 
 ## What User Workspaces Are For
 

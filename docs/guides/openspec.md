@@ -4,7 +4,7 @@ OpenSpec uses the OPSX workflow — a fluid, iterative approach to spec-driven c
 
 ## Setup
 
-After forking the template, initialize OpenSpec:
+Initialize OpenSpec in the repository:
 
 ```bash
 npm install -g @fission-ai/openspec@latest

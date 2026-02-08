@@ -1,6 +1,6 @@
 # Documentation
 
-Shared context and documentation for this CLEF project.
+Shared context and documentation for PlantCLEF 2026.
 
 ---
 

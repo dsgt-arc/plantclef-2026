@@ -118,7 +118,7 @@ OpenSpec uses the **OPSX workflow** — a fluid, iterative approach to spec-driv
 
 ### Setup
 
-After forking, run `openspec init` to generate OPSX commands in `.claude/commands/openspec/`. Configuration lives in `openspec/config.yaml`.
+Run `openspec init` to generate OPSX commands in `.claude/commands/openspec/`. Configuration lives in `openspec/config.yaml`.
 
 ### When to Use OpenSpec
 
