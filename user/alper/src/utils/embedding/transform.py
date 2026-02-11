@@ -1,8 +1,9 @@
 import timm
 import torch
 import numpy as np
-from plantclef.serde import deserialize_image
-from plantclef.model_setup import setup_fine_tuned_model
+from utils.serde import deserialize_image
+from utils.model_setup import setup_fine_tuned_model
+
 from pyspark.sql import DataFrame
 from pyspark.ml import Transformer
 from pyspark.ml.param import Param, Params, TypeConverters

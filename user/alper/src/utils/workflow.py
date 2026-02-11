@@ -15,12 +15,11 @@ from pyspark.sql.types import (
     StructField,
 )
 
-from plantclef.embedding.transform import WrappedFineTunedDINOv2
-from plantclef.detection.transform import WrappedGroundingDINO
-from plantclef.spark import spark_resource
-from plantclef.model_setup import setup_fine_tuned_model
-from plantclef.serde import deserialize_image, serialize_image
-
+from utils.embedding.transform import WrappedFineTunedDINOv2
+from utils.spark import spark_resource
+from utils.model_setup import setup_fine_tuned_model
+from utils.serde import deserialize_image, serialize_image
+#from utils.detection.transform import WrappedGroundingDINO
 
 def make_image_tiles_udf(grid_size: int):
     def split_into_grid(image: Image.Image):
@@ -113,6 +112,7 @@ class ProcessTransform(luigi.Task):
                 batch_size=self.batch_size,
             )
         elif self.task == "detect":
+            from utils.detection.transform import WrappedGroundingDINO
             return WrappedGroundingDINO(
                 input_col="tile" if self.use_grid else "data",
                 output_col="output",

@@ -2,10 +2,11 @@ import cv2
 import torch
 import numpy as np
 from PIL import Image
-from plantclef.serde import deserialize_image, serialize_image
+from utils.serde import deserialize_image, serialize_image
 
-from .classes import CLASSES_V1
-from .params import HasBatchSize, HasCheckpointPathGroundingDINO
+
+from utils.detection.classes import CLASSES_V1
+from utils.detection.params import HasBatchSize, HasCheckpointPathGroundingDINO
 from pyspark.sql import DataFrame
 from pyspark.ml import Transformer
 from pyspark.sql import functions as F
