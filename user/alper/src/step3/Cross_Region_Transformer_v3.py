@@ -1,179 +1,152 @@
-#!/usr/bin/env python
-
-import os
-import argparse
-import numpy as np
-import pyarrow as pa
-import pyarrow.parquet as pq
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 
-def build_student_ready(
-    step1_dir: str,
-    step2_dir: str,
-    out_dir: str,
-    num_tiles: int = 16,
-    emb_dim: int = 768,
-):
-    emb_bytes_per_tile = emb_dim * 2
-    os.makedirs(out_dir, exist_ok=True)
+class CrossRegionTransformer(nn.Module):
+    """
+    Cross-Region Transformer for multi-label classification from cached tile embeddings.
 
-    print("Reading Step 2 table")
-    t2 = pq.read_table(
-        step2_dir,
-        columns=[
-            "image_name",
-            "teacher_image_probs_f16",
-            "latitude",
-            "longitude",
-            "altitude",
-        ],
-    )
-    t2_df = t2.to_pandas()
+    Key behaviors (two requested suggestions):
+      1) Dedicated global token (CLS) for metadata injection:
+         - Metadata is projected and added ONLY to the CLS token, not broadcast to all tiles.
+      2) Positional encodings are shape-checked and batch-safe:
+         - pos_encodings must be [N, hidden_dim] and must match the current Num_Tiles.
 
-    lat = t2_df["latitude"].to_numpy()
-    lon = t2_df["longitude"].to_numpy()
-    alt = t2_df["altitude"].to_numpy()
-    valid = np.isfinite(lat) & np.isfinite(lon) & np.isfinite(alt)
+    Inputs:
+        region_embeddings: [B, N, input_dim]
+        metadata (optional): [B, metadata_dim]
+        pos_encodings (optional): [N, hidden_dim] (must match tile ordering used during tiling)
 
-    lat_mu, lat_sd = np.nanmean(lat[valid]), np.nanstd(lat[valid]) + 1e-6
-    lon_mu, lon_sd = np.nanmean(lon[valid]), np.nanstd(lon[valid]) + 1e-6
-    alt_mu, alt_sd = np.nanmean(alt[valid]), np.nanstd(alt[valid]) + 1e-6
+    Output:
+        logits: [B, num_classes] (use sigmoid for probabilities; train with BCEWithLogitsLoss)
+    """
 
-    t2_map = {}
-    for _, r in t2_df.iterrows():
-        img = r["image_name"]
-        blob = r["teacher_image_probs_f16"]
-        la, lo, al = r["latitude"], r["longitude"], r["altitude"]
+    def __init__(
+        self,
+        input_dim: int = 768,          # ViT embedding dim
+        hidden_dim: int = 512,         # Transformer hidden dim
+        num_heads: int = 8,
+        num_layers: int = 4,
+        num_classes: int = 7806,
+        metadata_dim: int = 4,  # lat, long, elevation, flag
+        dropout: float = 0.1,
+        use_attention_pooling: bool = True,  # if False, use CLS output directly
+    ):
+        super().__init__()
 
-        has = float(np.isfinite(la) and np.isfinite(lo) and np.isfinite(al))
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.num_classes = num_classes
+        self.metadata_dim = metadata_dim
+        self.use_attention_pooling = use_attention_pooling
 
-        if has == 1.0:
-            meta = np.array(
-                [
-                    (la - lat_mu) / lat_sd,
-                    (lo - lon_mu) / lon_sd,
-                    (al - alt_mu) / alt_sd,
-                    1.0,
-                ],
-                dtype=np.float32,
-            )
-        else:
-            meta = np.array([0.0, 0.0, 0.0, 0.0], dtype=np.float32)
+        # 1) Linear Projection to transformer hidden size
+        self.embedding_projection = nn.Linear(input_dim, hidden_dim)
 
-        t2_map[img] = (blob, meta)
-
-    print("Step 2 rows:", len(t2_map))
-
-    print("Reading Step 1 dataset")
-    ds = pq.ParquetDataset(step1_dir)
-
-    tiles = {}
-    rows_read = 0
-
-    for frag in ds.fragments:
-        tbl = frag.to_table(
-            columns=["image_name", "tile_index", "embedding_f16"]
+        # 2) Metadata projection (inject into CLS token only)
+        self.metadata_fc = nn.Sequential(
+            nn.Linear(metadata_dim, hidden_dim //2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim // 2, hidden_dim),
         )
-        df = tbl.to_pandas()
-        rows_read += len(df)
 
-        for img, ti, emb_blob in zip(
-            df["image_name"], df["tile_index"], df["embedding_f16"]
-        ):
-            if img not in tiles:
-                tiles[img] = [None] * num_tiles
+        # 3) Dedicated global token (CLS)
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, hidden_dim))
+        nn.init.trunc_normal_(self.cls_token, std=0.02)
 
-            if 0 <= int(ti) < num_tiles:
-                tiles[img][int(ti)] = emb_blob
+        # 4) Transformer encoder
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=hidden_dim,
+            nhead=num_heads,
+            dim_feedforward=hidden_dim * 4,
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+        )
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
-    print("Step 1 tile rows read:", rows_read)
-    print("Unique images in Step 1:", len(tiles))
-
-    out_image = []
-    out_tile_blob = []
-    out_teacher_blob = []
-    out_meta = []
-
-    missing_t2 = 0
-    bad_tiles = 0
-
-    for img, tile_list in tiles.items():
-        if img not in t2_map:
-            missing_t2 += 1
-            continue
-
-        if any(x is None for x in tile_list):
-            bad_tiles += 1
-            continue
-
-        packed = b"".join(tile_list)
-        expected = num_tiles * emb_bytes_per_tile
-
-        if len(packed) != expected:
-            bad_tiles += 1
-            continue
-
-        teacher_blob, meta = t2_map[img]
-
-        out_image.append(img)
-        out_tile_blob.append(packed)
-        out_teacher_blob.append(teacher_blob)
-        out_meta.append(meta)
-
-    print("Images kept:", len(out_image))
-    print("Missing Step 2 rows:", missing_t2)
-    print("Bad or incomplete tiles:", bad_tiles)
-
-    meta_arr = np.stack(out_meta, axis=0)
-
-    table_out = pa.Table.from_arrays(
-        [
-            pa.array(out_image, type=pa.string()),
-            pa.array(out_tile_blob, type=pa.binary()),
-            pa.array(out_teacher_blob, type=pa.binary()),
-            pa.FixedSizeListArray.from_arrays(
-                pa.array(meta_arr.reshape(-1), type=pa.float32()),
-                4,
-            ),
-        ],
-        names=[
-            "image_name",
-            "tile_embeddings_f16",
-            "teacher_image_probs_f16",
-            "metadata_tensor_f32",
-        ],
-    )
-
-    out_path = os.path.join(out_dir, "data.parquet")
-    pq.write_table(table_out, out_path, compression="zstd")
-
-    print("Wrote:", out_path)
+        # 5) Attention pooling head (optional)
+        self.pooling_attention = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.Tanh(),
+            nn.Linear(hidden_dim // 2, 1),
+        )
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--step1-dir", required=True)
-    parser.add_argument("--step2-dir", required=True)
-    parser.add_argument("--out-dir", required=True)
-    parser.add_argument("--num-tiles", type=int, default=16)
-    parser.add_argument("--emb-dim", type=int, default=768)
-
-    args = parser.parse_args()
-
-    build_student_ready(
-        step1_dir=args.step1_dir,
-        step2_dir=args.step2_dir,
-        out_dir=args.out_dir,
-        num_tiles=args.num_tiles,
-        emb_dim=args.emb_dim,
-    )
+        self.pre_classifier_norm = nn.LayerNorm(hidden_dim)
 
 
+        # 6) Multi-label classifier head
+        self.classifier = nn.Linear(hidden_dim, num_classes)
 
-''' 
-python build_student_ready_merged_data_step3a.py \
---step1-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_10k/feature_bank \
---step2-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_10k/teacher_image_probs_step2_imageTopK64 \
---out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_10k/student_ready_merged_input_step3a
+        self.dropout = nn.Dropout(dropout)
 
-'''
+    def forward(
+        self,
+        region_embeddings: torch.Tensor,
+        metadata: torch.Tensor | None = None,
+        pos_encodings: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """
+        Args:
+            region_embeddings: [B, N, input_dim]
+            metadata: [B, metadata_dim] or None
+            pos_encodings: [N, hidden_dim] or None (tile-only positional encodings)
+
+        Returns:
+            logits: [B, num_classes]
+        """
+        if region_embeddings.dim() != 3:
+            raise ValueError(f"region_embeddings must be [B, N, D], got {tuple(region_embeddings.shape)}")
+
+        B, N, D = region_embeddings.shape
+        if D != self.input_dim:
+            raise ValueError(f"Expected input_dim={self.input_dim}, got {D}")
+
+        # Step 1: Project tile embeddings to hidden dim
+        x = self.embedding_projection(region_embeddings)  # [B, N, H]
+
+        # Step 2: Add positional encodings to tiles only (shape-checked)
+        if pos_encodings is not None:
+            if pos_encodings.dim() != 2:
+                raise ValueError(f"pos_encodings must be [N, H], got {tuple(pos_encodings.shape)}")
+            if pos_encodings.shape != (N, self.hidden_dim):
+                raise ValueError(
+                    f"pos_encodings must be [N, H]=[{N}, {self.hidden_dim}], got {tuple(pos_encodings.shape)}"
+                )
+            x = x + pos_encodings.unsqueeze(0)  # [B, N, H]
+
+        # Step 3: Build CLS token and inject metadata into CLS only
+        cls = self.cls_token.expand(B, 1, self.hidden_dim)  # [B, 1, H]
+        if metadata is not None:
+            if metadata.dim() != 2:
+                raise ValueError(f"metadata must be [B, metadata_dim], got {tuple(metadata.shape)}")
+            if metadata.shape[0] != B or metadata.shape[1] != self.metadata_dim:
+                raise ValueError(
+                    f"metadata must be [B, metadata_dim]=[{B}, {self.metadata_dim}], got {tuple(metadata.shape)}"
+                )
+            cls = cls + self.metadata_fc(metadata).unsqueeze(1)  # [B, 1, H]
+
+        # Step 4: Prepend CLS to token sequence
+        x = torch.cat([cls, x], dim=1)  # [B, 1+N, H]
+
+        # Step 5: Cross-region self-attention
+        x = self.dropout(x)
+        x = self.transformer_encoder(x)  # [B, 1+N, H]
+
+        # Step 6: Pooling
+        if self.use_attention_pooling:
+            # Attend over CLS + tiles
+            attn = self.pooling_attention(x)     # [B, 1+N, 1]
+            attn = F.softmax(attn, dim=1)        # [B, 1+N, 1]
+            pooled = torch.sum(x * attn, dim=1)  # [B, H]
+        else:
+            # Use CLS output directly
+            pooled = x[:, 0, :]                  # [B, H]
+
+        pooled = self.pre_classifier_norm(pooled)  # [B, H]
+
+        # Step 7: Classifier head
+        logits = self.classifier(pooled)         # [B, num_classes]
+        return logits

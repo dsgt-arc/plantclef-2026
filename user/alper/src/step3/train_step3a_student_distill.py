@@ -52,7 +52,7 @@ class StudentReadyParquet(Dataset):
         if teacher.shape[0] != self.num_classes:
             raise ValueError(f"Teacher len {teacher.shape[0]} != {self.num_classes}")
 
-        meta = np.asarray(meta_list, dtype=np.float32)
+        meta = np.asarray(meta_list, dtype=np.float32).copy()
         if meta.shape[0] != 4:
             raise ValueError("metadata_tensor_f32 must be len 4")
 
@@ -130,6 +130,12 @@ def train_one_epoch(model, loader, optimizer, scaler, device, neg_sample_k, log_
             logits = model(tiles, metadata=meta)  # [B, 7806]
             loss = masked_distill_loss(logits, teacher, neg_sample_k=neg_sample_k)
 
+            pos_mask = teacher > 0
+            if pos_mask.any():
+                mean_p_pos = torch.sigmoid(logits[pos_mask]).mean().item()
+            else:
+                mean_p_pos = float("nan")
+
         if scaler is not None:
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
@@ -145,7 +151,26 @@ def train_one_epoch(model, loader, optimizer, scaler, device, neg_sample_k, log_
 
         if (step + 1) % log_every == 0:
             dt = time.time() - t0
-            print(f"  step {step+1:6d}  loss {running/(step+1):.6f}  sec {dt:.1f}")
+
+            # collapse monitoring metric
+            with torch.no_grad():
+                pos_mask = teacher > 0
+                if pos_mask.any():
+                    mean_p_pos = torch.sigmoid(logits[pos_mask]).mean().item()
+                    mean_t_pos = teacher[pos_mask].mean().item()
+                else:
+                    mean_p_pos = float("nan")
+                    mean_t_pos = float("nan")
+                
+
+            print(
+                f"  step {step+1:6d}  "
+                f"loss {running/(step+1):.6f}  "
+                f"mean_t_pos {mean_t_pos:.4f}  "
+                f"mean_p_pos {mean_p_pos:.4f}  "
+                f"sec {dt:.1f}"
+            )
+
 
     return running / max(1, len(loader))
 
@@ -221,7 +246,7 @@ def main():
     ).to(device)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scaler = torch.cuda.amp.GradScaler() if device.type == "cuda" else None
+    scaler = torch.amp.GradScaler("cuda") if device.type == "cuda" else None
 
     best = float("inf")
     bad = 0
@@ -259,3 +284,16 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+'''
+python train_step3a_student_distill.py \
+  --data-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_10k/student_ready_merged_input_step3a/data.parquet \
+  --out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_10k_step3a_distill \
+  --epochs 10 \
+  --batch-size 64 \
+  --num-workers 6 \
+  --neg-sample-k 128
+
+'''
