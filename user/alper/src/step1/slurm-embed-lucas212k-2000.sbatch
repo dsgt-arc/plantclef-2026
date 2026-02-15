@@ -36,7 +36,7 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step1/extrac
   --output-root ${OUTPUT_ROOT} \
   --manifest-dir ${MANIFEST_DIR} \
   --shard-id ${SLURM_ARRAY_TASK_ID} \
-  --num-shards 106 \
+  --num-shards 213 \
   --cpu-count ${SLURM_CPUS_PER_TASK} \
   --num-partitions 48 \
   --batch-size 16 \
