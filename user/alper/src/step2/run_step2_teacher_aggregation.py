@@ -110,7 +110,12 @@ def main() -> None:
 
     joined = agg_df.join(meta_small, on=args.image_col, how=args.join_type)
 
-    joined.write.mode("overwrite").option("compression", "snappy").parquet(args.out_parquet)
+    (joined
+    .coalesce(1)
+    .write
+    .mode("overwrite")
+    .option("compression", "snappy")
+    .parquet(args.out_parquet))
 
 
 if __name__ == "__main__":
