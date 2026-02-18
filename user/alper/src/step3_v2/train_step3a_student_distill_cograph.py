@@ -2,18 +2,137 @@
 
 import os
 import time
+import glob
+import bisect
 import argparse
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from Cross_Region_Transformer_v3 import CrossRegionTransformer  # already in your repo
 
 
-class StudentReadyParquet(Dataset):
+class ShardedStudentReadyParquet(Dataset):
+    """
+    Reads a sharded dataset created as:
+      data_root/shard_XXXX/data.parquet
+
+    Each shard parquet must contain columns:
+      tile_embeddings_f16 (binary)
+      teacher_image_probs_f16 (binary)
+      metadata_tensor_f32 (FixedSizeList[4] float32)
+    """
+
+    def __init__(
+        self,
+        data_root: str,
+        num_tiles: int = 16,
+        emb_dim: int = 768,
+        num_classes: int = 7806,
+        pattern: str = "shard_*/data.parquet",
+        cache_max_tables: int = 2,
+    ):
+        self.data_root = data_root
+        self.num_tiles = num_tiles
+        self.emb_dim = emb_dim
+        self.num_classes = num_classes
+        self.cache_max_tables = cache_max_tables
+
+        files = sorted(glob.glob(os.path.join(data_root, pattern)))
+        if not files:
+            raise ValueError(f"No shard parquet files found under {data_root} with pattern {pattern}")
+
+        self.files = files
+
+        # Build prefix sums of row counts for fast global index mapping
+        self.row_counts = []
+        self.cum_rows = [0]
+        for fp in self.files:
+            pf = pq.ParquetFile(fp)
+            n = pf.metadata.num_rows
+            self.row_counts.append(n)
+            self.cum_rows.append(self.cum_rows[-1] + n)
+
+        self.total_rows = self.cum_rows[-1]
+
+        # Small in process table cache
+        self._cache = {}        # path -> pa.Table
+        self._cache_order = []  # LRU order
+
+        # Validate required columns using the first file
+        first = pq.read_table(self.files[0], columns=["tile_embeddings_f16", "teacher_image_probs_f16", "metadata_tensor_f32"])
+        required = ["tile_embeddings_f16", "teacher_image_probs_f16", "metadata_tensor_f32"]
+        missing = [c for c in required if c not in first.column_names]
+        if missing:
+            raise ValueError(f"Missing columns {missing}. Found {first.column_names}")
+
+    def __len__(self):
+        return self.total_rows
+
+    def _get_table(self, fp: str) -> pa.Table:
+        if fp in self._cache:
+            # refresh LRU
+            if fp in self._cache_order:
+                self._cache_order.remove(fp)
+            self._cache_order.append(fp)
+            return self._cache[fp]
+
+        tbl = pq.read_table(fp, columns=["tile_embeddings_f16", "teacher_image_probs_f16", "metadata_tensor_f32"])
+        self._cache[fp] = tbl
+        self._cache_order.append(fp)
+
+        # evict LRU
+        while len(self._cache_order) > self.cache_max_tables:
+            old = self._cache_order.pop(0)
+            if old in self._cache:
+                del self._cache[old]
+
+        return tbl
+
+    def __getitem__(self, idx: int):
+        if idx < 0 or idx >= self.total_rows:
+            raise IndexError(idx)
+
+        # Find which shard file contains idx
+        shard_i = bisect.bisect_right(self.cum_rows, idx) - 1
+        local_i = idx - self.cum_rows[shard_i]
+        fp = self.files[shard_i]
+
+        tbl = self._get_table(fp)
+        row = tbl.slice(local_i, 1)
+
+        tile_blob = row.column("tile_embeddings_f16")[0].as_py()
+        teacher_blob = row.column("teacher_image_probs_f16")[0].as_py()
+        meta_list = row.column("metadata_tensor_f32")[0].as_py()  # list length 4
+
+        tiles = np.frombuffer(tile_blob, dtype=np.float16).astype(np.float32, copy=False)
+        tiles = tiles.reshape(self.num_tiles, self.emb_dim)
+
+        teacher = np.frombuffer(teacher_blob, dtype=np.float16).astype(np.float32, copy=False)
+        if teacher.shape[0] != self.num_classes:
+            raise ValueError(f"Teacher len {teacher.shape[0]} != {self.num_classes}")
+
+        meta = np.asarray(meta_list, dtype=np.float32).copy()
+        if meta.shape[0] != 4:
+            raise ValueError("metadata_tensor_f32 must be len 4")
+
+        return (
+            torch.from_numpy(tiles),    # [num_tiles, emb_dim]
+            torch.from_numpy(meta),     # [4]
+            torch.from_numpy(teacher),  # [num_classes]
+        )
+
+
+class SingleFileStudentReadyParquet(Dataset):
+    """
+    Backward compatible reader for a single parquet file path.
+    Suitable for 10k experiments.
+    """
+
     def __init__(
         self,
         parquet_path: str,
@@ -42,7 +161,7 @@ class StudentReadyParquet(Dataset):
 
         tile_blob = row["tile_embeddings_f16"]
         teacher_blob = row["teacher_image_probs_f16"]
-        meta_list = row["metadata_tensor_f32"]  # FixedSizeList -> list
+        meta_list = row["metadata_tensor_f32"]
 
         tiles = np.frombuffer(tile_blob, dtype=np.float16).astype(np.float32)
         tiles = tiles.reshape(self.num_tiles, self.emb_dim)
@@ -56,31 +175,23 @@ class StudentReadyParquet(Dataset):
             raise ValueError("metadata_tensor_f32 must be len 4")
 
         return (
-            torch.from_numpy(tiles),    # [16, 768]
-            torch.from_numpy(meta),     # [4]
-            torch.from_numpy(teacher),  # [7806]
+            torch.from_numpy(tiles),
+            torch.from_numpy(meta),
+            torch.from_numpy(teacher),
         )
 
 
 def masked_distill_loss(
-    logits: torch.Tensor,         # [B, C]
-    teacher_probs: torch.Tensor,  # [B, C] in [0,1], mostly zeros outside TopK
+    logits: torch.Tensor,
+    teacher_probs: torch.Tensor,
     neg_sample_k: int = 256,
 ):
-    """
-    Distillation when teacher is sparse TopK in a dense vector.
-    We treat nonzero teacher entries as supervised.
-    Zeros are unknown, not true negatives, so we only add a small random negative sample.
-
-    Loss = BCE on positives (teacher>0) + BCE on sampled negatives with target=0
-    """
     b, c = logits.shape
     device = logits.device
 
     pos_mask = teacher_probs > 0
     pos_count = pos_mask.sum().item()
 
-    # BCE on positives only
     if pos_count > 0:
         pos_logits = logits[pos_mask]
         pos_targets = teacher_probs[pos_mask]
@@ -88,7 +199,6 @@ def masked_distill_loss(
     else:
         pos_loss = logits.sum() * 0.0
 
-    # random negative sampling from teacher == 0
     if neg_sample_k > 0:
         neg_mask = ~pos_mask
         neg_losses = []
@@ -114,20 +224,12 @@ def masked_distill_loss(
 
 
 def co_graph_loss_from_probs(
-    probs: torch.Tensor,  # [B, C], sigmoid(logits)
-    ei: torch.Tensor | None,  # [E] int64
-    ej: torch.Tensor | None,  # [E] int64
-    ew: torch.Tensor | None,  # [E] float32
+    probs: torch.Tensor,
+    ei,
+    ej,
+    ew,
     max_edges: int,
 ):
-    """
-    Sparse co-occurrence regularizer.
-
-    For edges (i,j) with weight w, penalize (p_i - p_j)^2.
-    This encourages correlated labels to move together without forcing extra positives.
-
-    We subsample edges per batch to keep it cheap.
-    """
     if ei is None or ej is None or ew is None:
         return probs.sum() * 0.0
     if ei.numel() == 0:
@@ -144,11 +246,10 @@ def co_graph_loss_from_probs(
         ej_s = ej
         ew_s = ew
 
-    # probs[:, ei] => [B, E]
     pi = probs.index_select(dim=1, index=ei_s)
     pj = probs.index_select(dim=1, index=ej_s)
     diff2 = (pi - pj) ** 2
-    w = ew_s.view(1, -1)  # [1, E]
+    w = ew_s.view(1, -1)
     return (diff2 * w).mean()
 
 
@@ -178,7 +279,7 @@ def train_one_epoch(
         optimizer.zero_grad(set_to_none=True)
 
         with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=(device.type == "cuda")):
-            logits = model(tiles, metadata=meta)  # [B, 7806]
+            logits = model(tiles, metadata=meta)
             loss_distill = masked_distill_loss(logits, teacher, neg_sample_k=neg_sample_k)
 
             probs = torch.sigmoid(logits)
@@ -207,8 +308,6 @@ def train_one_epoch(
 
         if (step + 1) % log_every == 0:
             dt = time.time() - t0
-
-            # collapse monitoring metric
             with torch.no_grad():
                 pos_mask = teacher > 0
                 if pos_mask.any():
@@ -233,10 +332,6 @@ def train_one_epoch(
 
 @torch.no_grad()
 def eval_one_epoch(model, loader, device, neg_sample_k):
-    """
-    Eval remains teacher-alignment only (no co-graph term),
-    so you can compare directly to your prior Step 3A results.
-    """
     model.eval()
     total = 0.0
     for tiles, meta, teacher in loader:
@@ -251,7 +346,11 @@ def eval_one_epoch(model, loader, device, neg_sample_k):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data-parquet", required=True)
+
+    # Input
+    ap.add_argument("--data-parquet", type=str, default="", help="Single parquet file (10k style)")
+    ap.add_argument("--data-root", type=str, default="", help="Directory containing shard_*/data.parquet (212k style)")
+
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--epochs", type=int, default=10)
     ap.add_argument("--batch-size", type=int, default=64)
@@ -261,12 +360,19 @@ def main():
     ap.add_argument("--neg-sample-k", type=int, default=256)
     ap.add_argument("--val-split", type=float, default=0.05)
 
-    # Co-occurrence regularizer (optional)
+    ap.add_argument("--num-tiles", type=int, default=16)
+    ap.add_argument("--emb-dim", type=int, default=768)
+    ap.add_argument("--num-classes", type=int, default=7806)
+
+    # Co-occurrence regularizer
     ap.add_argument("--co-graph-npz", type=str, default="")
     ap.add_argument("--lambda-co", type=float, default=0.01)
     ap.add_argument("--co-edges-per-batch", type=int, default=200000)
 
     args = ap.parse_args()
+
+    if not args.data_root and not args.data_parquet:
+        raise ValueError("Provide --data-root for sharded data, or --data-parquet for a single file")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("device:", device)
@@ -274,14 +380,31 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
 
     # Load dataset
-    ds = StudentReadyParquet(args.data_parquet)
+    if args.data_root:
+        ds_obj = ShardedStudentReadyParquet(
+            data_root=args.data_root,
+            num_tiles=args.num_tiles,
+            emb_dim=args.emb_dim,
+            num_classes=args.num_classes,
+        )
+        print("dataset mode: sharded")
+        print("shards:", len(ds_obj.files), "rows:", len(ds_obj))
+    else:
+        ds_obj = SingleFileStudentReadyParquet(
+            parquet_path=args.data_parquet,
+            num_tiles=args.num_tiles,
+            emb_dim=args.emb_dim,
+            num_classes=args.num_classes,
+        )
+        print("dataset mode: single file")
+        print("rows:", len(ds_obj))
 
-    # quick deterministic split
-    n = len(ds)
+    # Split
+    n = len(ds_obj)
     n_val = int(n * args.val_split)
     n_train = n - n_val
     gen = torch.Generator().manual_seed(123)
-    train_ds, val_ds = torch.utils.data.random_split(ds, [n_train, n_val], generator=gen)
+    train_ds, val_ds = torch.utils.data.random_split(ds_obj, [n_train, n_val], generator=gen)
 
     train_loader = DataLoader(
         train_ds,
@@ -290,6 +413,7 @@ def main():
         num_workers=args.num_workers,
         pin_memory=(device.type == "cuda"),
         drop_last=True,
+        persistent_workers=(args.num_workers > 0),
     )
 
     val_loader = DataLoader(
@@ -299,15 +423,16 @@ def main():
         num_workers=args.num_workers,
         pin_memory=(device.type == "cuda"),
         drop_last=False,
+        persistent_workers=(args.num_workers > 0),
     )
 
-    # Build model
+    # Model
     model = CrossRegionTransformer(
-        input_dim=768,
+        input_dim=args.emb_dim,
         hidden_dim=512,
         num_heads=8,
         num_layers=4,
-        num_classes=7806,
+        num_classes=args.num_classes,
         metadata_dim=4,
         dropout=0.1,
         use_attention_pooling=True,
@@ -316,16 +441,15 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler("cuda") if device.type == "cuda" else None
 
-    # Load co-graph if provided
+    # Co-graph
     co_ei = None
     co_ej = None
     co_ew = None
     if args.co_graph_npz:
         g = np.load(args.co_graph_npz)
-        # expect keys: neigh_i, neigh_j, neigh_w
         for k in ["neigh_i", "neigh_j", "neigh_w"]:
             if k not in g:
-                raise ValueError(f"co-graph npz missing key '{k}'. Found keys: {list(g.keys())}")
+                raise ValueError(f"co graph npz missing key {k}. Found keys {list(g.keys())}")
 
         co_ei = torch.from_numpy(g["neigh_i"].astype(np.int64)).to(device)
         co_ej = torch.from_numpy(g["neigh_j"].astype(np.int64)).to(device)
@@ -333,7 +457,7 @@ def main():
 
         print("loaded co graph edges:", int(co_ei.numel()))
         if co_ei.numel() != co_ej.numel() or co_ei.numel() != co_ew.numel():
-            raise ValueError("co-graph arrays must have same length")
+            raise ValueError("co graph arrays must have same length")
 
     best = float("inf")
     bad = 0
@@ -391,20 +515,27 @@ if __name__ == "__main__":
     main()
 
 
+"""
+Example 212k usage
 
+python src/step3_v2/train_step3a_student_distill_cograph.py \
+  --data-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
+  --out-dir  /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_distill_baseline \
+  --epochs 10 \
+  --batch-size 64 \
+  --num-workers 6 \
+  --neg-sample-k 128
 
+Example 212k with co graph
 
-'''
-python step3/train_step3a_student_distill_cograph.py \
-  --data-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_10k/student_ready_merged_input_step3a/data.parquet \
-  --out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_10k_step3a_distill_cograph \
+python src/step3_v2/train_step3a_student_distill_cograph.py \
+  --data-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
+  --out-dir  /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_distill_cograph \
   --epochs 10 \
   --batch-size 64 \
   --num-workers 6 \
   --neg-sample-k 128 \
-  --co-graph-npz /path/to/your/cograph.npz \
+  --co-graph-npz /path/to/lucas212k_cograph_alpha060_min100_cap8_v1.npz \
   --lambda-co 0.01 \
   --co-edges-per-batch 200000
-
-
-'''
+"""
