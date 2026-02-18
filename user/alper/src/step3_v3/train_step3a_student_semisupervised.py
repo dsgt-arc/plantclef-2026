@@ -5,6 +5,8 @@ import time
 import glob
 import bisect
 import argparse
+from datetime import datetime
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -18,10 +20,10 @@ from Cross_Region_Transformer_v3 import CrossRegionTransformer
 
 class ShardedStudentReadyParquet(Dataset):
     """
-    Reads a sharded dataset created as:
+    Reads sharded dataset:
       data_root/shard_XXXX/data.parquet
 
-    Each shard parquet must contain columns:
+    Required columns:
       tile_embeddings_f16 (binary)
       teacher_image_probs_f16 (binary)
       metadata_tensor_f32 (FixedSizeList[4] float32)
@@ -125,10 +127,6 @@ class ShardedStudentReadyParquet(Dataset):
 
 
 class SingleFileStudentReadyParquet(Dataset):
-    """
-    Single parquet reader for smaller experiments.
-    """
-
     def __init__(
         self,
         parquet_path: str,
@@ -183,11 +181,6 @@ def masked_distill_loss_confident(
     teacher_conf_thr: float = 0.02,
     neg_sample_k: int = 128,
 ):
-    """
-    Weak teacher prior.
-    Only teacher entries above teacher_conf_thr are treated as supervised positives.
-    Everything else is unknown, not true negative, so we sample a small set of negatives.
-    """
     b, c = logits.shape
     device = logits.device
 
@@ -206,8 +199,8 @@ def masked_distill_loss_confident(
             zero_idx = torch.nonzero(neg_mask[i], as_tuple=False).squeeze(1)
             if zero_idx.numel() == 0:
                 continue
-            k = min(neg_sample_k, zero_idx.numel())
-            sel = zero_idx[torch.randint(0, zero_idx.numel(), (k,), device=device)]
+            k = min(int(neg_sample_k), int(zero_idx.numel()))
+            sel = zero_idx[torch.randint(0, int(zero_idx.numel()), (k,), device=device)]
             neg_logits = logits[i, sel]
             neg_targets = torch.zeros_like(neg_logits)
             neg_losses.append(
@@ -220,13 +213,7 @@ def masked_distill_loss_confident(
     return pos_loss + neg_loss
 
 
-def co_graph_loss_from_probs(
-    probs: torch.Tensor,
-    ei,
-    ej,
-    ew,
-    max_edges: int,
-):
+def co_graph_loss_from_probs(probs: torch.Tensor, ei, ej, ew, max_edges: int):
     if ei is None or ej is None or ew is None:
         return probs.sum() * 0.0
     if ei.numel() == 0:
@@ -239,9 +226,7 @@ def co_graph_loss_from_probs(
         ej_s = ej[sel]
         ew_s = ew[sel]
     else:
-        ei_s = ei
-        ej_s = ej
-        ew_s = ew
+        ei_s, ej_s, ew_s = ei, ej, ew
 
     pi = probs.index_select(dim=1, index=ei_s)
     pj = probs.index_select(dim=1, index=ej_s)
@@ -258,16 +243,6 @@ def apply_view(
     embed_noise_std: float,
     meta_drop_p: float,
 ):
-    """
-    Embedding space augmentations suitable for precomputed tiles.
-
-    Tile weakening applies a per tile scalar of either 1.0 or tile_weak_scale.
-    This reduces evidence instead of removing it.
-
-    Embed noise adds small gaussian noise.
-
-    Metadata drop masks the entire metadata vector sometimes to reduce over reliance.
-    """
     B, T, D = tiles.shape
     device = tiles.device
 
@@ -294,12 +269,6 @@ def consistency_loss_gated(
     tau_cons: float,
     topk_cons: int,
 ):
-    """
-    Multi label safe consistency.
-
-    Consistency is enforced only on labels that the weak view considers present.
-    You can gate by probability threshold, or by top K per sample.
-    """
     B, C = probs_weak.shape
 
     if topk_cons > 0:
@@ -422,7 +391,7 @@ def train_one_epoch(
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
-        running += loss.item()
+        running += float(loss.item())
 
         if (step + 1) % log_every == 0:
             dt = time.time() - t0
@@ -451,9 +420,6 @@ def train_one_epoch(
 
 @torch.no_grad()
 def eval_one_epoch(model, loader, device, neg_sample_k, teacher_conf_thr):
-    """
-    Eval remains teacher alignment only, so you can track drift.
-    """
     model.eval()
     total = 0.0
     for tiles, meta, teacher in loader:
@@ -468,18 +434,19 @@ def eval_one_epoch(model, loader, device, neg_sample_k, teacher_conf_thr):
             teacher_conf_thr=teacher_conf_thr,
             neg_sample_k=neg_sample_k,
         )
-        total += loss.item()
+        total += float(loss.item())
     return total / max(1, len(loader))
 
 
-def save_checkpoint(path, epoch, model, optimizer, val_loss, args, best, bad):
+def save_latest_checkpoint(path, epoch, run_stamp, model, optimizer, val_loss, best_val, bad_epochs, args):
     payload = {
         "epoch": int(epoch),
+        "run_stamp": run_stamp,
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
         "val_loss": float(val_loss),
-        "best_val_loss": float(best),
-        "bad_epochs": int(bad),
+        "best_val_loss": float(best_val),
+        "bad_epochs": int(bad_epochs),
         "args": vars(args),
     }
     torch.save(payload, path)
@@ -519,7 +486,7 @@ def main():
     ap.add_argument("--strong-embed-noise-std", type=float, default=0.005)
     ap.add_argument("--strong-meta-drop-p", type=float, default=0.10)
 
-    ap.add_argument("--resume", type=str, default="", help="Path to a checkpoint .pt to resume from")
+    ap.add_argument("--resume", type=str, default="")
 
     args = ap.parse_args()
 
@@ -530,6 +497,9 @@ def main():
     print("device:", device)
 
     os.makedirs(args.out_dir, exist_ok=True)
+
+    run_stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    print("run stamp:", run_stamp)
 
     if args.data_root:
         ds_obj = ShardedStudentReadyParquet(
@@ -590,22 +560,16 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler("cuda") if device.type == "cuda" else None
 
-    co_ei = None
-    co_ej = None
-    co_ew = None
+    co_ei = co_ej = co_ew = None
     if args.co_graph_npz:
         g = np.load(args.co_graph_npz)
         for k in ["neigh_i", "neigh_j", "neigh_w"]:
             if k not in g:
                 raise ValueError(f"co graph npz missing key {k}. Found keys {list(g.keys())}")
-
         co_ei = torch.from_numpy(g["neigh_i"].astype(np.int64)).to(device)
         co_ej = torch.from_numpy(g["neigh_j"].astype(np.int64)).to(device)
         co_ew = torch.from_numpy(g["neigh_w"].astype(np.float32)).to(device)
-
         print("loaded co graph edges:", int(co_ei.numel()))
-        if co_ei.numel() != co_ej.numel() or co_ei.numel() != co_ew.numel():
-            raise ValueError("co graph arrays must have same length")
 
     print(
         f"teacher_conf_thr {args.teacher_conf_thr}  "
@@ -642,7 +606,14 @@ def main():
         if "bad_epochs" in ckpt:
             bad = int(ckpt["bad_epochs"])
 
+        if "run_stamp" in ckpt:
+            run_stamp = str(ckpt["run_stamp"])
+
         print(f"resumed from {args.resume}  start_epoch {start_epoch}  best {best:.6f}  bad_epochs {bad}")
+        print("run stamp:", run_stamp)
+
+    latest_path = os.path.join(args.out_dir, f"latest_{run_stamp}.pt")
+    best_path = os.path.join(args.out_dir, f"student_best_{run_stamp}.pt")
 
     for epoch in range(start_epoch, args.epochs + 1):
         print(f"\nEpoch {epoch}/{args.epochs}")
@@ -679,25 +650,24 @@ def main():
         )
         print(f"train_loss {tr:.6f}  val_loss {vl:.6f}")
 
-        ckpt_path = os.path.join(args.out_dir, f"student_epoch_{epoch:02d}.pt")
-        save_checkpoint(
-            ckpt_path,
+        save_latest_checkpoint(
+            latest_path,
             epoch=epoch,
+            run_stamp=run_stamp,
             model=model,
             optimizer=optimizer,
             val_loss=vl,
+            best_val=best,
+            bad_epochs=bad,
             args=args,
-            best=best,
-            bad=bad,
         )
-        print(f"saved epoch checkpoint: {ckpt_path}")
+        print("saved latest checkpoint:", latest_path)
 
         if vl + 1e-6 < best:
             best = vl
             bad = 0
-            best_path = os.path.join(args.out_dir, "student_best.pt")
             torch.save(model.state_dict(), best_path)
-            print(f"saved best: {best_path}")
+            print("saved best:", best_path)
         else:
             bad += 1
             if bad >= patience:
@@ -709,12 +679,17 @@ if __name__ == "__main__":
     main()
 
 
-"""
-Example run with co graph and semi supervised consistency
 
+
+
+
+
+
+
+'''
 python src/step3_v3/train_step3a_student_semisupervised.py \
   --data-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
-  --out-dir  /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup_cograph \
+  --out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup_cograph \
   --epochs 10 \
   --batch-size 64 \
   --num-workers 6 \
@@ -723,31 +698,15 @@ python src/step3_v3/train_step3a_student_semisupervised.py \
   --lambda-co 0.01 \
   --co-edges-per-batch 200000 \
   --teacher-conf-thr 0.02 \
-  --lambda-cons 0.03 \
+  --lambda-cons 0.05 \
   --tau-cons 0.10 \
-  --strong-tile-weak-p 0.20 \
-  --strong-tile-weak-scale 0.30 \
-  --strong-embed-noise-std 0.005 \
-  --strong-meta-drop-p 0.10
-
-Resume example
-
-python src/step3_v3/train_step3a_student_semisupervised.py \
-  --data-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
-  --out-dir  /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup_cograph \
-  --epochs 10 \
-  --batch-size 64 \
-  --num-workers 6 \
-  --neg-sample-k 128 \
-  --co-graph-npz /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/graphs/lucas_212k_cograph_ecology_top8_alpha060_pmi_min100_top50.npz \
-  --lambda-co 0.01 \
-  --co-edges-per-batch 200000 \
-  --teacher-conf-thr 0.02 \
-  --lambda-cons 0.03 \
-  --tau-cons 0.10 \
+  --topk-cons 0 \
   --strong-tile-weak-p 0.20 \
   --strong-tile-weak-scale 0.30 \
   --strong-embed-noise-std 0.005 \
   --strong-meta-drop-p 0.10 \
-  --resume /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup_cograph/student_epoch_03.pt
-"""
+  --resume /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup_cograph/latest_YYYYMMDD_HHMM.pt
+
+
+
+'''

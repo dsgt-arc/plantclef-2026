@@ -5,6 +5,8 @@ import time
 import glob
 import bisect
 import argparse
+from datetime import datetime
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -13,20 +15,10 @@ from torch.utils.data import Dataset, DataLoader
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from Cross_Region_Transformer_v3 import CrossRegionTransformer  # already in your repo
+from Cross_Region_Transformer_v3 import CrossRegionTransformer
 
 
 class ShardedStudentReadyParquet(Dataset):
-    """
-    Reads a sharded dataset created as:
-      data_root/shard_XXXX/data.parquet
-
-    Each shard parquet must contain columns:
-      tile_embeddings_f16 (binary)
-      teacher_image_probs_f16 (binary)
-      metadata_tensor_f32 (FixedSizeList[4] float32)
-    """
-
     def __init__(
         self,
         data_root: str,
@@ -45,10 +37,8 @@ class ShardedStudentReadyParquet(Dataset):
         files = sorted(glob.glob(os.path.join(data_root, pattern)))
         if not files:
             raise ValueError(f"No shard parquet files found under {data_root} with pattern {pattern}")
-
         self.files = files
 
-        # Build prefix sums of row counts for fast global index mapping
         self.row_counts = []
         self.cum_rows = [0]
         for fp in self.files:
@@ -56,15 +46,15 @@ class ShardedStudentReadyParquet(Dataset):
             n = pf.metadata.num_rows
             self.row_counts.append(n)
             self.cum_rows.append(self.cum_rows[-1] + n)
-
         self.total_rows = self.cum_rows[-1]
 
-        # Small in process table cache
-        self._cache = {}        # path -> pa.Table
-        self._cache_order = []  # LRU order
+        self._cache = {}
+        self._cache_order = []
 
-        # Validate required columns using the first file
-        first = pq.read_table(self.files[0], columns=["tile_embeddings_f16", "teacher_image_probs_f16", "metadata_tensor_f32"])
+        first = pq.read_table(
+            self.files[0],
+            columns=["tile_embeddings_f16", "teacher_image_probs_f16", "metadata_tensor_f32"],
+        )
         required = ["tile_embeddings_f16", "teacher_image_probs_f16", "metadata_tensor_f32"]
         missing = [c for c in required if c not in first.column_names]
         if missing:
@@ -75,7 +65,6 @@ class ShardedStudentReadyParquet(Dataset):
 
     def _get_table(self, fp: str) -> pa.Table:
         if fp in self._cache:
-            # refresh LRU
             if fp in self._cache_order:
                 self._cache_order.remove(fp)
             self._cache_order.append(fp)
@@ -85,19 +74,16 @@ class ShardedStudentReadyParquet(Dataset):
         self._cache[fp] = tbl
         self._cache_order.append(fp)
 
-        # evict LRU
         while len(self._cache_order) > self.cache_max_tables:
             old = self._cache_order.pop(0)
             if old in self._cache:
                 del self._cache[old]
-
         return tbl
 
     def __getitem__(self, idx: int):
         if idx < 0 or idx >= self.total_rows:
             raise IndexError(idx)
 
-        # Find which shard file contains idx
         shard_i = bisect.bisect_right(self.cum_rows, idx) - 1
         local_i = idx - self.cum_rows[shard_i]
         fp = self.files[shard_i]
@@ -107,7 +93,7 @@ class ShardedStudentReadyParquet(Dataset):
 
         tile_blob = row.column("tile_embeddings_f16")[0].as_py()
         teacher_blob = row.column("teacher_image_probs_f16")[0].as_py()
-        meta_list = row.column("metadata_tensor_f32")[0].as_py()  # list length 4
+        meta_list = row.column("metadata_tensor_f32")[0].as_py()
 
         tiles = np.frombuffer(tile_blob, dtype=np.float16).astype(np.float32, copy=False)
         tiles = tiles.reshape(self.num_tiles, self.emb_dim)
@@ -120,19 +106,10 @@ class ShardedStudentReadyParquet(Dataset):
         if meta.shape[0] != 4:
             raise ValueError("metadata_tensor_f32 must be len 4")
 
-        return (
-            torch.from_numpy(tiles),    # [num_tiles, emb_dim]
-            torch.from_numpy(meta),     # [4]
-            torch.from_numpy(teacher),  # [num_classes]
-        )
+        return torch.from_numpy(tiles), torch.from_numpy(meta), torch.from_numpy(teacher)
 
 
 class SingleFileStudentReadyParquet(Dataset):
-    """
-    Backward compatible reader for a single parquet file path.
-    Suitable for 10k experiments.
-    """
-
     def __init__(
         self,
         parquet_path: str,
@@ -174,25 +151,15 @@ class SingleFileStudentReadyParquet(Dataset):
         if meta.shape[0] != 4:
             raise ValueError("metadata_tensor_f32 must be len 4")
 
-        return (
-            torch.from_numpy(tiles),
-            torch.from_numpy(meta),
-            torch.from_numpy(teacher),
-        )
+        return torch.from_numpy(tiles), torch.from_numpy(meta), torch.from_numpy(teacher)
 
 
-def masked_distill_loss(
-    logits: torch.Tensor,
-    teacher_probs: torch.Tensor,
-    neg_sample_k: int = 256,
-):
+def masked_distill_loss(logits: torch.Tensor, teacher_probs: torch.Tensor, neg_sample_k: int = 256):
     b, c = logits.shape
     device = logits.device
 
     pos_mask = teacher_probs > 0
-    pos_count = pos_mask.sum().item()
-
-    if pos_count > 0:
+    if pos_mask.any():
         pos_logits = logits[pos_mask]
         pos_targets = teacher_probs[pos_mask]
         pos_loss = nn.functional.binary_cross_entropy_with_logits(pos_logits, pos_targets, reduction="mean")
@@ -206,30 +173,19 @@ def masked_distill_loss(
             zero_idx = torch.nonzero(neg_mask[i], as_tuple=False).squeeze(1)
             if zero_idx.numel() == 0:
                 continue
-            k = min(neg_sample_k, zero_idx.numel())
-            sel = zero_idx[torch.randint(0, zero_idx.numel(), (k,), device=device)]
+            k = min(int(neg_sample_k), int(zero_idx.numel()))
+            sel = zero_idx[torch.randint(0, int(zero_idx.numel()), (k,), device=device)]
             neg_logits = logits[i, sel]
             neg_targets = torch.zeros_like(neg_logits)
-            neg_losses.append(
-                nn.functional.binary_cross_entropy_with_logits(neg_logits, neg_targets, reduction="mean")
-            )
-        if len(neg_losses) > 0:
-            neg_loss = torch.stack(neg_losses).mean()
-        else:
-            neg_loss = logits.sum() * 0.0
+            neg_losses.append(nn.functional.binary_cross_entropy_with_logits(neg_logits, neg_targets, reduction="mean"))
+        neg_loss = torch.stack(neg_losses).mean() if len(neg_losses) > 0 else (logits.sum() * 0.0)
     else:
         neg_loss = logits.sum() * 0.0
 
     return pos_loss + neg_loss
 
 
-def co_graph_loss_from_probs(
-    probs: torch.Tensor,
-    ei,
-    ej,
-    ew,
-    max_edges: int,
-):
+def co_graph_loss_from_probs(probs: torch.Tensor, ei, ej, ew, max_edges: int):
     if ei is None or ej is None or ew is None:
         return probs.sum() * 0.0
     if ei.numel() == 0:
@@ -242,15 +198,27 @@ def co_graph_loss_from_probs(
         ej_s = ej[sel]
         ew_s = ew[sel]
     else:
-        ei_s = ei
-        ej_s = ej
-        ew_s = ew
+        ei_s, ej_s, ew_s = ei, ej, ew
 
     pi = probs.index_select(dim=1, index=ei_s)
     pj = probs.index_select(dim=1, index=ej_s)
     diff2 = (pi - pj) ** 2
     w = ew_s.view(1, -1)
     return (diff2 * w).mean()
+
+
+def save_latest_checkpoint(path, epoch, model, optimizer, val_loss, best_val, bad_epochs, args, run_stamp):
+    payload = {
+        "epoch": int(epoch),
+        "run_stamp": run_stamp,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "val_loss": float(val_loss),
+        "best_val_loss": float(best_val),
+        "bad_epochs": int(bad_epochs),
+        "args": vars(args),
+    }
+    torch.save(payload, path)
 
 
 def train_one_epoch(
@@ -304,26 +272,15 @@ def train_one_epoch(
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
-        running += loss.item()
+        running += float(loss.item())
 
         if (step + 1) % log_every == 0:
             dt = time.time() - t0
-            with torch.no_grad():
-                pos_mask = teacher > 0
-                if pos_mask.any():
-                    mean_p_pos = torch.sigmoid(logits[pos_mask]).mean().item()
-                    mean_t_pos = teacher[pos_mask].mean().item()
-                else:
-                    mean_p_pos = float("nan")
-                    mean_t_pos = float("nan")
-
             print(
                 f"  step {step+1:6d}  "
                 f"loss {running/(step+1):.6f}  "
                 f"l_dist {float(loss_distill.item()):.6f}  "
                 f"l_co {float(loss_co.item()):.6f}  "
-                f"mean_t_pos {mean_t_pos:.4f}  "
-                f"mean_p_pos {mean_p_pos:.4f}  "
                 f"sec {dt:.1f}"
             )
 
@@ -340,16 +297,15 @@ def eval_one_epoch(model, loader, device, neg_sample_k):
         teacher = teacher.to(device, non_blocking=True)
         logits = model(tiles, metadata=meta)
         loss = masked_distill_loss(logits, teacher, neg_sample_k=neg_sample_k)
-        total += loss.item()
+        total += float(loss.item())
     return total / max(1, len(loader))
 
 
 def main():
     ap = argparse.ArgumentParser()
 
-    # Input
-    ap.add_argument("--data-parquet", type=str, default="", help="Single parquet file (10k style)")
-    ap.add_argument("--data-root", type=str, default="", help="Directory containing shard_*/data.parquet (212k style)")
+    ap.add_argument("--data-parquet", type=str, default="")
+    ap.add_argument("--data-root", type=str, default="")
 
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--epochs", type=int, default=10)
@@ -364,10 +320,11 @@ def main():
     ap.add_argument("--emb-dim", type=int, default=768)
     ap.add_argument("--num-classes", type=int, default=7806)
 
-    # Co-occurrence regularizer
     ap.add_argument("--co-graph-npz", type=str, default="")
     ap.add_argument("--lambda-co", type=float, default=0.01)
     ap.add_argument("--co-edges-per-batch", type=int, default=200000)
+
+    ap.add_argument("--resume", type=str, default="")
 
     args = ap.parse_args()
 
@@ -379,7 +336,9 @@ def main():
 
     os.makedirs(args.out_dir, exist_ok=True)
 
-    # Load dataset
+    run_stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    print("run stamp:", run_stamp)
+
     if args.data_root:
         ds_obj = ShardedStudentReadyParquet(
             data_root=args.data_root,
@@ -399,7 +358,6 @@ def main():
         print("dataset mode: single file")
         print("rows:", len(ds_obj))
 
-    # Split
     n = len(ds_obj)
     n_val = int(n * args.val_split)
     n_train = n - n_val
@@ -426,7 +384,6 @@ def main():
         persistent_workers=(args.num_workers > 0),
     )
 
-    # Model
     model = CrossRegionTransformer(
         input_dim=args.emb_dim,
         hidden_dim=512,
@@ -441,29 +398,51 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler("cuda") if device.type == "cuda" else None
 
-    # Co-graph
-    co_ei = None
-    co_ej = None
-    co_ew = None
+    co_ei = co_ej = co_ew = None
     if args.co_graph_npz:
         g = np.load(args.co_graph_npz)
         for k in ["neigh_i", "neigh_j", "neigh_w"]:
             if k not in g:
                 raise ValueError(f"co graph npz missing key {k}. Found keys {list(g.keys())}")
-
         co_ei = torch.from_numpy(g["neigh_i"].astype(np.int64)).to(device)
         co_ej = torch.from_numpy(g["neigh_j"].astype(np.int64)).to(device)
         co_ew = torch.from_numpy(g["neigh_w"].astype(np.float32)).to(device)
-
         print("loaded co graph edges:", int(co_ei.numel()))
-        if co_ei.numel() != co_ej.numel() or co_ei.numel() != co_ew.numel():
-            raise ValueError("co graph arrays must have same length")
 
+    start_epoch = 1
     best = float("inf")
     bad = 0
     patience = 3
 
-    for epoch in range(1, args.epochs + 1):
+    if args.resume:
+        ckpt = torch.load(args.resume, map_location="cpu")
+        if "model_state_dict" not in ckpt or "optimizer_state_dict" not in ckpt:
+            raise ValueError("Resume checkpoint missing model_state_dict or optimizer_state_dict")
+
+        model.load_state_dict(ckpt["model_state_dict"])
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+
+        if "epoch" in ckpt:
+            start_epoch = int(ckpt["epoch"]) + 1
+
+        if "best_val_loss" in ckpt:
+            best = float(ckpt["best_val_loss"])
+        elif "val_loss" in ckpt:
+            best = float(ckpt["val_loss"])
+
+        if "bad_epochs" in ckpt:
+            bad = int(ckpt["bad_epochs"])
+
+        if "run_stamp" in ckpt:
+            run_stamp = str(ckpt["run_stamp"])
+
+        print(f"resumed from {args.resume}  start_epoch {start_epoch}  best {best:.6f}  bad_epochs {bad}")
+        print("run stamp:", run_stamp)
+
+    latest_path = os.path.join(args.out_dir, f"latest_{run_stamp}.pt")
+    best_path = os.path.join(args.out_dir, f"student_best_{run_stamp}.pt")
+
+    for epoch in range(start_epoch, args.epochs + 1):
         print(f"\nEpoch {epoch}/{args.epochs}")
 
         tr = train_one_epoch(
@@ -484,24 +463,22 @@ def main():
         vl = eval_one_epoch(model, val_loader, device, args.neg_sample_k)
         print(f"train_loss {tr:.6f}  val_loss {vl:.6f}")
 
-        ckpt = os.path.join(args.out_dir, f"student_epoch_{epoch:02d}.pt")
-        torch.save(
-            {
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "val_loss": vl,
-                "co_graph_npz": args.co_graph_npz,
-                "lambda_co": args.lambda_co,
-                "co_edges_per_batch": args.co_edges_per_batch,
-            },
-            ckpt,
+        save_latest_checkpoint(
+            latest_path,
+            epoch=epoch,
+            model=model,
+            optimizer=optimizer,
+            val_loss=vl,
+            best_val=best,
+            bad_epochs=bad,
+            args=args,
+            run_stamp=run_stamp,
         )
+        print("saved latest checkpoint:", latest_path)
 
         if vl + 1e-6 < best:
             best = vl
             bad = 0
-            best_path = os.path.join(args.out_dir, "student_v1_distilled.pt")
             torch.save(model.state_dict(), best_path)
             print("saved best:", best_path)
         else:
@@ -515,19 +492,22 @@ if __name__ == "__main__":
     main()
 
 
+
 """
 
-Example 212k with co graph
 
-python src/step3_v2/train_step3a_student_distill_cograph.py \
+Resume example
+
+  python src/step3_v2/train_step3a_student_distill_cograph.py \
   --data-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
-  --out-dir  /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_distill_cograph_alpha080 \
+  --out-dir  /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_distill \
   --epochs 10 \
   --batch-size 64 \
   --num-workers 6 \
   --neg-sample-k 128 \
   --co-graph-npz /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/graphs/lucas_212k_cograph_ecology_top8_alpha060_pmi_min100_top50.npz \
   --lambda-co 0.01 \
-  --co-edges-per-batch 200000
+  --co-edges-per-batch 200000 \
+  --resume /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_distill/latest_20260218_2310.pt
 
 """

@@ -3,6 +3,8 @@
 import os
 import glob
 import argparse
+from datetime import datetime
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -138,15 +140,7 @@ def collate_varlen(batch):
     return tiles, meta, idx_list, prob_list
 
 
-def masked_selftrain_loss(
-    logits: torch.Tensor,
-    idx_list,
-    prob_list,
-    neg_sample_k: int = 256,
-):
-    """
-    Soft positive BCE on pseudo positives plus sampled negatives toward 0.
-    """
+def masked_selftrain_loss(logits: torch.Tensor, idx_list, prob_list, neg_sample_k: int = 256):
     B, C = logits.shape
     losses = []
 
@@ -194,9 +188,6 @@ def masked_teacher_prior_loss(
     teacher_conf_thr: float,
     neg_sample_k: int,
 ):
-    """
-    Optional weak teacher prior during Step 3B refinement.
-    """
     B, C = logits.shape
     if C != num_classes:
         raise ValueError("num_classes mismatch")
@@ -259,6 +250,19 @@ def co_graph_loss_from_probs(probs, ei, ej, ew, max_edges: int):
     return (diff2 * w).mean()
 
 
+def save_latest_checkpoint(path, epoch, run_stamp, model, optimizer, epoch_loss, best_loss, args):
+    payload = {
+        "epoch": int(epoch),
+        "run_stamp": run_stamp,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "epoch_loss": float(epoch_loss),
+        "best_epoch_loss": float(best_loss),
+        "args": vars(args),
+    }
+    torch.save(payload, path)
+
+
 def main():
     ap = argparse.ArgumentParser()
 
@@ -282,12 +286,10 @@ def main():
 
     ap.add_argument("--neg-sample-k", type=int, default=256)
 
-    # optional weak teacher prior during refinement
     ap.add_argument("--lambda-teacher", type=float, default=0.0)
     ap.add_argument("--teacher-conf-thr", type=float, default=0.02)
     ap.add_argument("--teacher-neg-sample-k", type=int, default=128)
 
-    # optional co graph regularization during refinement
     ap.add_argument("--co-graph-npz", type=str, default="")
     ap.add_argument("--lambda-co", type=float, default=0.0)
     ap.add_argument("--co-edges-per-batch", type=int, default=200000)
@@ -296,10 +298,17 @@ def main():
     ap.add_argument("--emb-dim", type=int, default=768)
     ap.add_argument("--num-classes", type=int, default=7806)
 
+    ap.add_argument("--resume", type=str, default="")
+
     args = ap.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("device:", device)
+
+    os.makedirs(args.out_dir, exist_ok=True)
+
+    run_stamp = datetime.now().strftime("%Y%m%d_%H%M")
+    print("run stamp:", run_stamp)
 
     pseudo_map = load_pseudo_map(args.pseudo_parquet)
 
@@ -347,9 +356,38 @@ def main():
         co_ew = torch.from_numpy(g["neigh_w"].astype(np.float32)).to(device)
         print("loaded co graph edges:", int(co_ei.numel()))
 
-    os.makedirs(args.out_dir, exist_ok=True)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    scaler = torch.amp.GradScaler("cuda") if device.type == "cuda" else None
 
-    for epoch in range(1, args.epochs + 1):
+    start_epoch = 1
+    best_loss = float("inf")
+
+    if args.resume:
+        ckpt = torch.load(args.resume, map_location="cpu")
+        if "model_state_dict" not in ckpt or "optimizer_state_dict" not in ckpt:
+            raise ValueError("Resume checkpoint missing model_state_dict or optimizer_state_dict")
+
+        model.load_state_dict(ckpt["model_state_dict"])
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+
+        if "epoch" in ckpt:
+            start_epoch = int(ckpt["epoch"]) + 1
+
+        if "best_epoch_loss" in ckpt:
+            best_loss = float(ckpt["best_epoch_loss"])
+        elif "epoch_loss" in ckpt:
+            best_loss = float(ckpt["epoch_loss"])
+
+        if "run_stamp" in ckpt:
+            run_stamp = str(ckpt["run_stamp"])
+
+        print(f"resumed from {args.resume}  start_epoch {start_epoch}  best_epoch_loss {best_loss:.6f}")
+        print("run stamp:", run_stamp)
+
+    latest_path = os.path.join(args.out_dir, f"latest_{run_stamp}.pt")
+    best_path = os.path.join(args.out_dir, f"student_best_{run_stamp}.pt")
+
+    for epoch in range(start_epoch, args.epochs + 1):
         if epoch <= args.freeze_epochs:
             freeze_by_name(model, args.trainable_names.split(","))
             print("freeze mode on. trainable substrings:", args.trainable_names)
@@ -358,15 +396,9 @@ def main():
                 p.requires_grad = True
             print("freeze mode off. training all parameters")
 
-        optimizer = torch.optim.AdamW(
-            [p for p in model.parameters() if p.requires_grad],
-            lr=args.lr,
-            weight_decay=args.weight_decay,
-        )
-        scaler = torch.amp.GradScaler("cuda") if device.type == "cuda" else None
-
         model.train()
         running = 0.0
+        steps = 0
 
         for step, batch in enumerate(loader):
             if want_teacher:
@@ -424,20 +456,30 @@ def main():
                 optimizer.step()
 
             running += float(loss.item())
+            steps += 1
 
             if (step + 1) % 50 == 0:
-                print(f"  step {step+1:6d}  loss {running/(step+1):.6f}")
+                print(f"  step {step+1:6d}  loss {running/max(1, steps):.6f}")
 
-        epoch_loss = running / max(1, (step + 1))
+        epoch_loss = running / max(1, steps)
         print(f"epoch {epoch} loss {epoch_loss:.6f}")
 
-        out_path = os.path.join(args.out_dir, f"student_step3b_epoch_{epoch:02d}.pt")
-        torch.save(model.state_dict(), out_path)
-        print("saved:", out_path)
+        save_latest_checkpoint(
+            latest_path,
+            epoch=epoch,
+            run_stamp=run_stamp,
+            model=model,
+            optimizer=optimizer,
+            epoch_loss=epoch_loss,
+            best_loss=best_loss,
+            args=args,
+        )
+        print("saved latest checkpoint:", latest_path)
 
-    final_path = os.path.join(args.out_dir, "student_step3b_final.pt")
-    torch.save(model.state_dict(), final_path)
-    print("saved final:", final_path)
+        if epoch_loss + 1e-12 < best_loss:
+            best_loss = epoch_loss
+            torch.save(model.state_dict(), best_path)
+            print("saved best:", best_path)
 
 
 if __name__ == "__main__":
@@ -447,17 +489,19 @@ if __name__ == "__main__":
 
 '''
 
-python src/step3_v3/train_step3b_selftrain_refinement.py \
+python src/step3_v3/train_step3b2_selftrain_refinement.py \
   --merged-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
   --pseudo-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/step3b_pseudolabels/top8_rel085.parquet \
-  --init-ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup_cograph/student_best.pt \
-  --out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3b_selftrain_from_semisup \
+  --init-ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup_cograph/student_best_YYYYMMDD_HHMM.pt \
+  --out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3b2_selftrain_from_semisup \
   --epochs 4 \
   --batch-size 64 \
   --num-workers 6 \
   --lr 3e-5 \
   --freeze-epochs 2 \
   --co-graph-npz /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/graphs/lucas_212k_cograph_ecology_top8_alpha060_pmi_min100_top50.npz \
-  --lambda-co 0.01
+  --lambda-co 0.01 \
+  --co-edges-per-batch 200000 \
+  --resume /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3b2_selftrain_from_semisup/latest_YYYYMMDD_HHMM.pt
 
 '''
