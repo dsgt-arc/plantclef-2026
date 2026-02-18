@@ -516,26 +516,18 @@ if __name__ == "__main__":
 
 
 """
-Example 212k usage
-
-python src/step3_v2/train_step3a_student_distill_cograph.py \
-  --data-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
-  --out-dir  /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_distill_baseline \
-  --epochs 10 \
-  --batch-size 64 \
-  --num-workers 6 \
-  --neg-sample-k 128
 
 Example 212k with co graph
 
 python src/step3_v2/train_step3a_student_distill_cograph.py \
   --data-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
-  --out-dir  /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_distill_cograph \
+  --out-dir  /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_distill_cograph_alpha080 \
   --epochs 10 \
   --batch-size 64 \
   --num-workers 6 \
   --neg-sample-k 128 \
-  --co-graph-npz /path/to/lucas212k_cograph_alpha060_min100_cap8_v1.npz \
+  --co-graph-npz /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/graphs/lucas_212k_cograph_ecology_top8_alpha060_pmi_min100_top50.npz \
   --lambda-co 0.01 \
   --co-edges-per-batch 200000
+
 """
