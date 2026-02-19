@@ -187,10 +187,10 @@ if __name__ == "__main__":
 
 
 '''
-python step3/infer_step3b_pseudolabels_top8.py \
-  --data-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_10k/student_ready_merged_input_step3a/data.parquet \
-  --ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_10k_step3a_distill/student_v1_distilled.pt \
-  --out-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_10k/step3b_pseudolabels/top8_rel085.parquet \
+python step3_v2/infer_step3b_pseudolabels_top8.py \
+  --data-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
+  --ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_distill/student_best_20260218_2210.pt \
+  --out-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/step3b_pseudolabels/top8_rel085.parquet \
   --batch-size 256 \
   --num-workers 6 \
   --topk 64 \
