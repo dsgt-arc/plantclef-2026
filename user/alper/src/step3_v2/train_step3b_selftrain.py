@@ -279,3 +279,17 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+'''
+python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step3_v2/train_step3b_selftrain.py \
+  --merged-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
+  --pseudo-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/step3b_pseudolabels \
+  --init-ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_distill/student_best_20260218_2210.pt \
+  --out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3b_distill \
+  --epochs 4 \
+  --batch-size 64 \
+  --num-workers 6 \
+  --lr 3e-5
+
+'''

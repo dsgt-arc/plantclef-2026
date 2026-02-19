@@ -3,6 +3,7 @@
 import os
 import glob
 import argparse
+import time
 from datetime import datetime
 
 import numpy as np
@@ -263,6 +264,12 @@ def save_latest_checkpoint(path, epoch, run_stamp, model, optimizer, epoch_loss,
     torch.save(payload, path)
 
 
+
+def append_epoch_report(report_path: str, line: str):
+    os.makedirs(os.path.dirname(report_path), exist_ok=True)
+    with open(report_path, "a", encoding="utf-8") as f:
+        f.write(line.rstrip() + "\n")
+
 def main():
     ap = argparse.ArgumentParser()
 
@@ -309,6 +316,9 @@ def main():
 
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M")
     print("run stamp:", run_stamp)
+
+    report_path = os.path.join(args.out_dir, f"epoch_report_{run_stamp}.txt")
+    append_epoch_report(report_path, f"# run_stamp={run_stamp}  started_at={datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     pseudo_map = load_pseudo_map(args.pseudo_parquet)
 
@@ -383,11 +393,14 @@ def main():
 
         print(f"resumed from {args.resume}  start_epoch {start_epoch}  best_epoch_loss {best_loss:.6f}")
         print("run stamp:", run_stamp)
+        report_path = os.path.join(args.out_dir, f"epoch_report_{run_stamp}.txt")
+        append_epoch_report(report_path, f"# resumed_from={args.resume}  resumed_at={datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  start_epoch={start_epoch}")
 
     latest_path = os.path.join(args.out_dir, f"latest_{run_stamp}.pt")
     best_path = os.path.join(args.out_dir, f"student_best_{run_stamp}.pt")
 
     for epoch in range(start_epoch, args.epochs + 1):
+        t_epoch0 = time.time()
         if epoch <= args.freeze_epochs:
             freeze_by_name(model, args.trainable_names.split(","))
             print("freeze mode on. trainable substrings:", args.trainable_names)
@@ -462,7 +475,9 @@ def main():
                 print(f"  step {step+1:6d}  loss {running/max(1, steps):.6f}")
 
         epoch_loss = running / max(1, steps)
-        print(f"epoch {epoch} loss {epoch_loss:.6f}")
+        epoch_seconds = time.time() - t_epoch0
+        completed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"epoch {epoch} loss {epoch_loss:.6f}  sec {epoch_seconds:.1f}  completed_at {completed_at}")
 
         save_latest_checkpoint(
             latest_path,
@@ -476,10 +491,16 @@ def main():
         )
         print("saved latest checkpoint:", latest_path)
 
+        append_epoch_report(
+            report_path,
+            f"{completed_at}  epoch={epoch:03d}  epoch_loss={epoch_loss:.6f}  best_epoch_loss={best_loss:.6f}  epoch_seconds={epoch_seconds:.1f}  latest_checkpoint={os.path.basename(latest_path)}"
+        )
+
         if epoch_loss + 1e-12 < best_loss:
             best_loss = epoch_loss
             torch.save(model.state_dict(), best_path)
             print("saved best:", best_path)
+            append_epoch_report(report_path, f"{completed_at}  saved_best={os.path.basename(best_path)}  new_best_epoch_loss={best_loss:.6f}")
 
 
 if __name__ == "__main__":
@@ -491,9 +512,9 @@ if __name__ == "__main__":
 
 python src/step3_v3/train_step3b2_selftrain_refinement.py \
   --merged-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
-  --pseudo-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/step3b_pseudolabels/top8_rel085.parquet \
+  --pseudo-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k_SSL/step3b_pseudolabels/top8_rel085.parquet \
   --init-ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup_cograph/student_best_YYYYMMDD_HHMM.pt \
-  --out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3b2_selftrain_from_semisup \
+  --out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_SSL_step3b2_selftrain_from_semisup \
   --epochs 4 \
   --batch-size 64 \
   --num-workers 6 \
@@ -502,6 +523,7 @@ python src/step3_v3/train_step3b2_selftrain_refinement.py \
   --co-graph-npz /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/graphs/lucas_212k_cograph_ecology_top8_alpha060_pmi_min100_top50.npz \
   --lambda-co 0.01 \
   --co-edges-per-batch 200000 \
+  
   --resume /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3b2_selftrain_from_semisup/latest_YYYYMMDD_HHMM.pt
 
 '''

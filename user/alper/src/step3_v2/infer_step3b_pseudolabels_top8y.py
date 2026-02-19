@@ -187,7 +187,7 @@ if __name__ == "__main__":
 
 
 '''
-python step3_v2/infer_step3b_pseudolabels_top8.py \
+python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step3_v2/infer_step3b_pseudolabels_top8y.py \
   --data-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
   --ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_distill/student_best_20260218_2210.pt \
   --out-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/step3b_pseudolabels/top8_rel085.parquet \

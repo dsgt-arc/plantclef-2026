@@ -438,6 +438,39 @@ def eval_one_epoch(model, loader, device, neg_sample_k, teacher_conf_thr):
     return total / max(1, len(loader))
 
 
+def append_epoch_report(
+    report_path: str,
+    epoch: int,
+    train_loss: float,
+    val_loss: float,
+    best_val_loss: float,
+    bad_epochs: int,
+    epoch_seconds: float,
+    latest_ckpt_path: str,
+):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    header = "timestamp\tepoch\ttrain_loss\tval_loss\tbest_val_loss\tbad_epochs\tepoch_seconds\tlatest_checkpoint\n"
+    line = (
+        f"{ts}\t"
+        f"{int(epoch)}\t"
+        f"{float(train_loss):.6f}\t"
+        f"{float(val_loss):.6f}\t"
+        f"{float(best_val_loss):.6f}\t"
+        f"{int(bad_epochs)}\t"
+        f"{float(epoch_seconds):.1f}\t"
+        f"{os.path.basename(str(latest_ckpt_path))}\n"
+    )
+
+    if not os.path.exists(report_path):
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(header)
+
+    with open(report_path, "a", encoding="utf-8") as f:
+        f.write(line)
+        f.flush()
+
+
+
 def save_latest_checkpoint(path, epoch, run_stamp, model, optimizer, val_loss, best_val, bad_epochs, args):
     payload = {
         "epoch": int(epoch),
@@ -500,6 +533,10 @@ def main():
 
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M")
     print("run stamp:", run_stamp)
+
+report_path = os.path.join(args.out_dir, f"epoch_report_{run_stamp}.txt")
+print("epoch report:", report_path)
+
 
     if args.data_root:
         ds_obj = ShardedStudentReadyParquet(
@@ -612,11 +649,15 @@ def main():
         print(f"resumed from {args.resume}  start_epoch {start_epoch}  best {best:.6f}  bad_epochs {bad}")
         print("run stamp:", run_stamp)
 
+report_path = os.path.join(args.out_dir, f"epoch_report_{run_stamp}.txt")
+print("epoch report:", report_path)
+
     latest_path = os.path.join(args.out_dir, f"latest_{run_stamp}.pt")
     best_path = os.path.join(args.out_dir, f"student_best_{run_stamp}.pt")
 
     for epoch in range(start_epoch, args.epochs + 1):
         print(f"\nEpoch {epoch}/{args.epochs}")
+        epoch_t0 = time.time()
 
         tr = train_one_epoch(
             model=model,
@@ -661,18 +702,34 @@ def main():
             bad_epochs=bad,
             args=args,
         )
-        print("saved latest checkpoint:", latest_path)
+        epoch_sec = time.time() - epoch_t0
 
-        if vl + 1e-6 < best:
-            best = vl
-            bad = 0
-            torch.save(model.state_dict(), best_path)
-            print("saved best:", best_path)
-        else:
-            bad += 1
-            if bad >= patience:
-                print("early stop: plateau")
-                break
+early_stop = False
+
+if vl + 1e-6 < best:
+    best = vl
+    bad = 0
+    torch.save(model.state_dict(), best_path)
+    print("saved best:", best_path)
+else:
+    bad += 1
+    if bad >= patience:
+        print("early stop: plateau")
+        early_stop = True
+
+append_epoch_report(
+    report_path=report_path,
+    epoch=epoch,
+    train_loss=tr,
+    val_loss=vl,
+    best_val_loss=best,
+    bad_epochs=bad,
+    epoch_seconds=epoch_sec,
+    latest_ckpt_path=latest_path,
+)
+
+if early_stop:
+    break
 
 
 if __name__ == "__main__":
@@ -688,13 +745,13 @@ if __name__ == "__main__":
 
 '''
 python src/step3_v3/train_step3a_student_semisupervised.py \
-  --data-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
-  --out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup_cograph \
+  --data-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/merged_input_step3a \
+  --out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup \
   --epochs 10 \
   --batch-size 64 \
   --num-workers 6 \
   --neg-sample-k 128 \
-  --co-graph-npz /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/graphs/lucas_212k_cograph_ecology_top8_alpha060_pmi_min100_top50.npz \
+  --co-graph-npz /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/graphs/lucas_212k_SSL_cograph_ecology_top8_alpha060_pmi_min100_top50.npz \
   --lambda-co 0.01 \
   --co-edges-per-batch 200000 \
   --teacher-conf-thr 0.02 \
@@ -705,7 +762,9 @@ python src/step3_v3/train_step3a_student_semisupervised.py \
   --strong-tile-weak-scale 0.30 \
   --strong-embed-noise-std 0.005 \
   --strong-meta-drop-p 0.10 \
-  --resume /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup_cograph/latest_YYYYMMDD_HHMM.pt
+  
+  
+  --resume /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup/latest_YYYYMMDD_HHMM.pt
 
 
 
