@@ -46,7 +46,9 @@ class ShardedStudentReadyParquet(Dataset):
 
         files = sorted(glob.glob(os.path.join(data_root, pattern)))
         if not files:
-            raise ValueError(f"No shard parquet files found under {data_root} with pattern {pattern}")
+            raise ValueError(
+                f"No shard parquet files found under {data_root} with pattern {pattern}"
+            )
 
         self.files = files
 
@@ -65,7 +67,11 @@ class ShardedStudentReadyParquet(Dataset):
 
         first = pq.read_table(
             self.files[0],
-            columns=["tile_embeddings_f16", "teacher_image_probs_f16", "metadata_tensor_f32"],
+            columns=[
+                "tile_embeddings_f16",
+                "teacher_image_probs_f16",
+                "metadata_tensor_f32",
+            ],
         )
         required = ["tile_embeddings_f16", "teacher_image_probs_f16", "metadata_tensor_f32"]
         missing = [c for c in required if c not in first.column_names]
@@ -82,7 +88,10 @@ class ShardedStudentReadyParquet(Dataset):
             self._cache_order.append(fp)
             return self._cache[fp]
 
-        tbl = pq.read_table(fp, columns=["tile_embeddings_f16", "teacher_image_probs_f16", "metadata_tensor_f32"])
+        tbl = pq.read_table(
+            fp,
+            columns=["tile_embeddings_f16", "teacher_image_probs_f16", "metadata_tensor_f32"],
+        )
         self._cache[fp] = tbl
         self._cache_order.append(fp)
 
@@ -188,7 +197,9 @@ def masked_distill_loss_confident(
     if pos_mask.any():
         pos_logits = logits[pos_mask]
         pos_targets = teacher_probs[pos_mask]
-        pos_loss = nn.functional.binary_cross_entropy_with_logits(pos_logits, pos_targets, reduction="mean")
+        pos_loss = nn.functional.binary_cross_entropy_with_logits(
+            pos_logits, pos_targets, reduction="mean"
+        )
     else:
         pos_loss = logits.sum() * 0.0
 
@@ -204,7 +215,9 @@ def masked_distill_loss_confident(
             neg_logits = logits[i, sel]
             neg_targets = torch.zeros_like(neg_logits)
             neg_losses.append(
-                nn.functional.binary_cross_entropy_with_logits(neg_logits, neg_targets, reduction="mean")
+                nn.functional.binary_cross_entropy_with_logits(
+                    neg_logits, neg_targets, reduction="mean"
+                )
             )
         neg_loss = torch.stack(neg_losses).mean() if len(neg_losses) > 0 else (logits.sum() * 0.0)
     else:
@@ -323,7 +336,11 @@ def train_one_epoch(
 
         optimizer.zero_grad(set_to_none=True)
 
-        with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=(device.type == "cuda")):
+        with torch.autocast(
+            device_type="cuda",
+            dtype=torch.float16,
+            enabled=(device.type == "cuda"),
+        ):
             if lambda_cons > 0.0:
                 weak_tiles, weak_meta = tiles, meta
                 strong_tiles, strong_meta = apply_view(
@@ -449,7 +466,10 @@ def append_epoch_report(
     latest_ckpt_path: str,
 ):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-    header = "timestamp\tepoch\ttrain_loss\tval_loss\tbest_val_loss\tbad_epochs\tepoch_seconds\tlatest_checkpoint\n"
+    header = (
+        "timestamp\tepoch\ttrain_loss\tval_loss\tbest_val_loss\tbad_epochs\t"
+        "epoch_seconds\tlatest_checkpoint\n"
+    )
     line = (
         f"{ts}\t"
         f"{int(epoch)}\t"
@@ -468,7 +488,6 @@ def append_epoch_report(
     with open(report_path, "a", encoding="utf-8") as f:
         f.write(line)
         f.flush()
-
 
 
 def save_latest_checkpoint(path, epoch, run_stamp, model, optimizer, val_loss, best_val, bad_epochs, args):
@@ -533,10 +552,6 @@ def main():
 
     run_stamp = datetime.now().strftime("%Y%m%d_%H%M")
     print("run stamp:", run_stamp)
-
-report_path = os.path.join(args.out_dir, f"epoch_report_{run_stamp}.txt")
-print("epoch report:", report_path)
-
 
     if args.data_root:
         ds_obj = ShardedStudentReadyParquet(
@@ -649,8 +664,8 @@ print("epoch report:", report_path)
         print(f"resumed from {args.resume}  start_epoch {start_epoch}  best {best:.6f}  bad_epochs {bad}")
         print("run stamp:", run_stamp)
 
-report_path = os.path.join(args.out_dir, f"epoch_report_{run_stamp}.txt")
-print("epoch report:", report_path)
+    report_path = os.path.join(args.out_dir, f"epoch_report_{run_stamp}.txt")
+    print("epoch report:", report_path)
 
     latest_path = os.path.join(args.out_dir, f"latest_{run_stamp}.pt")
     best_path = os.path.join(args.out_dir, f"student_best_{run_stamp}.pt")
@@ -702,56 +717,51 @@ print("epoch report:", report_path)
             bad_epochs=bad,
             args=args,
         )
+
         epoch_sec = time.time() - epoch_t0
 
-early_stop = False
+        early_stop = False
+        if vl + 1e-6 < best:
+            best = vl
+            bad = 0
+            torch.save(model.state_dict(), best_path)
+            print("saved best:", best_path)
+        else:
+            bad += 1
+            if bad >= patience:
+                print("early stop: plateau")
+                early_stop = True
 
-if vl + 1e-6 < best:
-    best = vl
-    bad = 0
-    torch.save(model.state_dict(), best_path)
-    print("saved best:", best_path)
-else:
-    bad += 1
-    if bad >= patience:
-        print("early stop: plateau")
-        early_stop = True
+        append_epoch_report(
+            report_path=report_path,
+            epoch=epoch,
+            train_loss=tr,
+            val_loss=vl,
+            best_val_loss=best,
+            bad_epochs=bad,
+            epoch_seconds=epoch_sec,
+            latest_ckpt_path=latest_path,
+        )
 
-append_epoch_report(
-    report_path=report_path,
-    epoch=epoch,
-    train_loss=tr,
-    val_loss=vl,
-    best_val_loss=best,
-    bad_epochs=bad,
-    epoch_seconds=epoch_sec,
-    latest_ckpt_path=latest_path,
-)
-
-if early_stop:
-    break
+        if early_stop:
+            break
 
 
 if __name__ == "__main__":
     main()
 
 
+"""
+Example command:
 
-
-
-
-
-
-
-'''
 python src/step3_v3/train_step3a_student_semisupervised.py \
-  --data-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/merged_input_step3a \
-  --out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup \
+  --data-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
+  --out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_SSL_step3a_ \
   --epochs 10 \
   --batch-size 64 \
   --num-workers 6 \
   --neg-sample-k 128 \
-  --co-graph-npz /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/graphs/lucas_212k_SSL_cograph_ecology_top8_alpha060_pmi_min100_top50.npz \
+  --co-graph-npz /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/graphs/lucas_212k_cograph_ecology_top8_alpha060_pmi_min100_top50.npz \
   --lambda-co 0.01 \
   --co-edges-per-batch 200000 \
   --teacher-conf-thr 0.02 \
@@ -763,9 +773,5 @@ python src/step3_v3/train_step3a_student_semisupervised.py \
   --strong-embed-noise-std 0.005 \
   --strong-meta-drop-p 0.10 \
   
-  
   --resume /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3a_semisup/latest_YYYYMMDD_HHMM.pt
-
-
-
-'''
+"""
