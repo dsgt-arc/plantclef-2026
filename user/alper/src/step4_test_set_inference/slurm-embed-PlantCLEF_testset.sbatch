@@ -19,7 +19,6 @@ mkdir -p logs
 
 echo "Running on host: $(hostname)"
 echo "Job: ${SLURM_JOB_NAME}  JobID: ${SLURM_JOB_ID}"
-python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 nvidia-smi
 
 # Helps reduce CUDA memory fragmentation in long-running jobs
@@ -29,6 +28,8 @@ export PYTORCH_ALLOC_CONF=expandable_segments:True
 cd /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction
 source .venv/bin/activate
 
+python -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'none')"
+
 # Paths
 DATASET_NAME="plantclef_2026_test"
 IMAGES_DIR="/storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/data/raw/PlanCLEF_test_data/images"
@@ -36,7 +37,6 @@ IMAGES_DIR="/storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2
 MANIFEST_DIR="${PLANTCLEF_ROOT}/manifests/${DATASET_NAME}"
 MANIFEST_PATH="${MANIFEST_DIR}/test_manifest.txt"
 
-# Output root for the embedding parquet
 OUTPUT_ROOT="${PLANTCLEF_ROOT}/parquet/${DATASET_NAME}/feature_bank_single"
 OUT_SHARD="${OUTPUT_ROOT}/shard_0000"
 
@@ -54,11 +54,10 @@ wc -l "${MANIFEST_PATH}" || true
 echo "First 5 lines:"
 head -n 5 "${MANIFEST_PATH}" || true
 
-# During debugging, it's safer to remove partial outputs from previous failed attempts
 rm -rf "${OUT_SHARD}"
 
-# Run extractor
-python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step1/extract_lucas_embeddings.py ExtractLUCAS_Embeddings \
+# Run extractor 
+python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_set_inference/extract_testdata_embeddings.py ExtractLUCAS_Embeddings \
   --task embeddings \
   --dataset-name "${DATASET_NAME}" \
   --input-path "${IMAGES_DIR}" \
@@ -71,12 +70,11 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step1/extrac
   --num-partitions 20 \
   --batch-size 32 \
   --grid-size 4 \
-  --single-file True \
-  --overwrite True \
+  --ExtractLUCAS-Embeddings-single-file \
+  --overwrite \
   --local-scheduler
 
-# Luigi can sometimes report failed tasks without a nonzero exit code.
-# Force FAIL if Luigi indicates failures.
+# Luigi sometimes reports failed tasks without nonzero exit code
 OUT_LOG="logs/${SLURM_JOB_NAME}_${SLURM_JOB_ID}.out"
 if grep -q "This progress looks :(" "${OUT_LOG}"; then
   echo "Luigi reported failed tasks in ${OUT_LOG}"
@@ -85,5 +83,3 @@ fi
 
 echo "Done. Output shard: ${OUT_SHARD}"
 ls -lah "${OUT_SHARD}" || true
-
-
