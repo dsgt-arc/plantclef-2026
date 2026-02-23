@@ -20,16 +20,6 @@ from Cross_Region_Transformer_v3 import CrossRegionTransformer
 
 
 def load_species_map(path: Optional[str], num_classes: int) -> List[int]:
-    """
-    Returns a list that maps class_index to species_id.
-
-    Supported formats
-      json list: [1395806, 1351284, ...]
-      csv with columns: class_index,species_id
-      txt one species_id per line
-
-    If path is None, uses identity mapping 0..num_classes-1.
-    """
     if path is None:
         return list(range(num_classes))
 
@@ -64,11 +54,6 @@ def load_species_map(path: Optional[str], num_classes: int) -> List[int]:
 
 
 def format_species_list(species_ids: List[int]) -> str:
-    """
-    Required format examples
-      "[1395806]"
-      "[1351284, 1494911]"
-    """
     return "[" + ", ".join(str(s) for s in species_ids) + "]"
 
 
@@ -89,7 +74,6 @@ def _coerce_meta(meta_val: Any, meta_dim: int) -> np.ndarray:
     elif isinstance(meta_val, (bytes, bytearray, memoryview)):
         meta = np.frombuffer(meta_val, dtype=np.float32)
     else:
-        # Arrow FixedSizeList often becomes list. Fallback here is best effort.
         try:
             meta = np.array(meta_val, dtype=np.float32)
         except Exception:
@@ -101,19 +85,6 @@ def _coerce_meta(meta_val: Any, meta_dim: int) -> np.ndarray:
 
 
 class TestEmbeddingsParquetFixedN(Dataset):
-    """
-    Reads sharded dataset:
-      data_root/shard_XXXX/data.parquet
-
-    Required columns:
-      quadrat_id (string)
-      tile_embeddings_f16 (binary) float16 bytes of shape [n_tiles, emb_dim]
-
-    Optional columns:
-      metadata_tensor_f32 (FixedSizeList[meta_dim] float32) or list[meta_dim] float32
-      If missing, metadata defaults to zeros.
-    """
-
     def __init__(
         self,
         data_root: str,
@@ -186,7 +157,6 @@ def collate_fn(batch):
 def _looks_like_state_dict(d: Dict[str, Any]) -> bool:
     if not isinstance(d, dict) or not d:
         return False
-    # Heuristic: a state dict has string keys and tensor values or compatible types
     some_key = next(iter(d.keys()))
     if not isinstance(some_key, str):
         return False
@@ -195,27 +165,15 @@ def _looks_like_state_dict(d: Dict[str, Any]) -> bool:
 
 
 def load_checkpoint_state(ckpt_path: str) -> Dict[str, Any]:
-    """
-    Supports several checkpoint formats used across your Step 3A and Step 3B2 scripts.
-
-    Priority:
-      1) model_state_dict
-      2) model
-      3) state_dict
-      4) raw state dict
-    """
     ckpt = torch.load(ckpt_path, map_location="cpu")
 
     if isinstance(ckpt, dict):
         if "model_state_dict" in ckpt and isinstance(ckpt["model_state_dict"], dict):
             return ckpt["model_state_dict"]
-
         if "model" in ckpt and isinstance(ckpt["model"], dict):
             return ckpt["model"]
-
         if "state_dict" in ckpt and isinstance(ckpt["state_dict"], dict):
             return ckpt["state_dict"]
-
         if _looks_like_state_dict(ckpt):
             return ckpt
 
@@ -223,6 +181,26 @@ def load_checkpoint_state(ckpt_path: str) -> Dict[str, Any]:
         "Checkpoint format not recognized. Expected a dict containing model_state_dict, model, or state_dict, "
         "or a raw state_dict."
     )
+
+
+def load_class_mask_npy(path: str, num_classes: int) -> np.ndarray:
+    """
+    Loads a boolean mask of shape [num_classes].
+    True means class is allowed.
+    False means class will be suppressed.
+    """
+    if not os.path.exists(path):
+        raise FileNotFoundError(path)
+    m = np.load(path)
+    if m.ndim != 1:
+        raise ValueError(f"class mask must be 1D, got shape {m.shape}")
+    if m.shape[0] != num_classes:
+        raise ValueError(f"class mask length {m.shape[0]} does not match num_classes {num_classes}")
+    if m.dtype != np.bool_:
+        m = m.astype(np.bool_)
+    if not m.any():
+        raise ValueError("class mask has zero allowed classes (all False)")
+    return m
 
 
 @torch.no_grad()
@@ -235,6 +213,8 @@ def infer_to_dataframe(
     threshold: float,
     min_k: int,
     amp: bool,
+    class_mask: Optional[torch.Tensor],
+    mask_value: float,
 ) -> pd.DataFrame:
     model.eval()
 
@@ -250,6 +230,11 @@ def infer_to_dataframe(
                 logits = model(x_tiles, metadata=x_meta)
         else:
             logits = model(x_tiles, metadata=x_meta)
+
+        # Apply mask on logits before sigmoid
+        if class_mask is not None:
+            # class_mask is True for allowed classes
+            logits = logits.masked_fill(~class_mask, mask_value)
 
         probs = torch.sigmoid(logits).float().cpu()
 
@@ -287,7 +272,7 @@ def main():
     ap.add_argument("--num-classes", type=int, default=7806)
     ap.add_argument("--species-map", default=None, help="Optional class_index to species_id mapping file")
 
-    ap.add_argument("--n-tiles", type=int, default=16, help="Tile count per sample, example 16 or 25")
+    ap.add_argument("--n-tiles", type=int, default=16)
     ap.add_argument("--emb-dim", type=int, default=768)
     ap.add_argument("--meta-dim", type=int, default=4)
 
@@ -307,16 +292,35 @@ def main():
     ap.add_argument("--num-layers", type=int, default=4)
     ap.add_argument("--dropout", type=float, default=0.1)
 
-    # Your Step 3B2 training uses attention pooling True.
-    # Defaulting to True prevents silent mismatches.
     ap.add_argument("--use-attention-pooling", action="store_true", default=True)
     ap.add_argument("--no-attention-pooling", dest="use_attention_pooling", action="store_false")
 
-    ap.add_argument("--allow-partial-load", action="store_true", help="If set, uses strict=False for state dict loading")
+    ap.add_argument("--allow-partial-load", action="store_true")
+
+    # Masking options
+    ap.add_argument(
+        "--class-mask-npy",
+        default=None,
+        help="Optional .npy boolean mask of shape [num_classes]. True=allowed classes.",
+    )
+    ap.add_argument(
+        "--mask-value",
+        type=float,
+        default=-30.0,
+        help="Logit value assigned to masked classes. Default -30 makes sigmoid ~ 0.",
+    )
 
     args = ap.parse_args()
 
     device = torch.device("cuda" if (args.device == "cuda" and torch.cuda.is_available()) else "cpu")
+
+    # Load optional mask
+    class_mask_t: Optional[torch.Tensor] = None
+    if args.class_mask_npy:
+        m = load_class_mask_npy(args.class_mask_npy, args.num_classes)
+        print(f"Loaded class mask: allowed {int(m.sum())} / {args.num_classes} classes")
+        # shape [C] -> broadcast to [B, C]
+        class_mask_t = torch.from_numpy(m).to(device=device, dtype=torch.bool).view(1, -1)
 
     ds = TestEmbeddingsParquetFixedN(
         data_root=args.test_root,
@@ -374,6 +378,8 @@ def main():
         threshold=args.threshold,
         min_k=args.min_k,
         amp=args.amp,
+        class_mask=class_mask_t,
+        mask_value=float(args.mask_value),
     )
 
     out_dir = os.path.dirname(os.path.abspath(args.out_csv))
@@ -386,16 +392,20 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+
+
+
 '''
+## 1) Run WITHOUT species masking
+
 
 source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
 
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_set_inference/step4_generate_test_submit.py \
   --test-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/plantclef_2026_test/feature_bank_single \
   --pattern "shard_*/data.parquet" \
-  --ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3b2_selftrain/student_best_20260220_2210.pt \
-  --out-csv /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/submissions/run_step3b2_best.csv \
+  --ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/<YOUR_STEP3B_CKPT>.pt \
+  --out-csv /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/submissions/run_nomask.csv \
   --num-classes 7806 \
   --n-tiles 16 \
   --emb-dim 768 \
@@ -407,5 +417,33 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_s
   --device cuda \
   --amp \
   --use-attention-pooling
+
+
+  
+
+  ## 2) Run WITH species masking
+
+
+source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
+
+python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_set_inference/step4_generate_test_submit.py \
+  --test-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/plantclef_2026_test/feature_bank_single \
+  --pattern "shard_*/data.parquet" \
+  --ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/<YOUR_STEP3B_CKPT>.pt \
+  --out-csv /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/submissions/run_masked.csv \
+  --num-classes 7806 \
+  --class-mask-npy /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/masks/sw_europe_mask_bool.npy \
+  --mask-value -30 \
+  --n-tiles 16 \
+  --emb-dim 768 \
+  --meta-dim 4 \
+  --batch-rows 512 \
+  --topk 64 \
+  --threshold 0.0 \
+  --min-k 1 \
+  --device cuda \
+  --amp \
+  --use-attention-pooling
+
 
 '''

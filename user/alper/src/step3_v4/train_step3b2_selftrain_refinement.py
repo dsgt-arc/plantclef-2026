@@ -508,7 +508,7 @@ Example command
 python src/step3_v4/train_step3b2_selftrain_refinement.py \
   --merged-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k/student_ready_merged_input_step3a \
   --pseudo-parquet /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/lucas_212k_SSL/step3b_pseudolabels/top8_rel085.parquet \
-  --init-ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_SSL_step3a/student_best_YYYYMMDD_HHMM.pt \
+  --init-ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_SSL_step3a_/student_best_20260223_0319.pt \
   --out-dir /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_SSL_step3b2_nometa \
   --epochs 4 \
   --batch-size 64 \
