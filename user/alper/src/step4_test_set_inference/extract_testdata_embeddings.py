@@ -98,10 +98,11 @@ def _default_output_root(root: Path, dataset_name: str) -> Path:
 
 class ExtractLUCAS_Embeddings(ProcessTransform):
     """
-    Shard safe embedding extraction.
+    Embedding extraction that produces Step 4 compatible parquet.
 
-    single_file=True will coalesce to a single parquet part file.
-    Spark will still write to a folder, but it will contain one part file.
+    Output schema per image:
+      quadrat_id (string)
+      tile_embeddings_f16 (binary)  float16 bytes for [n_tiles, emb_dim]
     """
 
     dataset_name = luigi.Parameter(default="lucas_10k")
@@ -126,6 +127,8 @@ class ExtractLUCAS_Embeddings(ProcessTransform):
     debug_sample_n = luigi.IntParameter(default=5)
 
     single_file = luigi.BoolParameter(default=False)
+
+    write_image_name = luigi.BoolParameter(default=False)
 
     def _resolve_paths(self):
         root = _plantclef_root()
@@ -157,15 +160,17 @@ class ExtractLUCAS_Embeddings(ProcessTransform):
     def run(self):
         input_path, checkpoint_path, shard_out, manifest = self._resolve_paths()
 
+        n_tiles_expected = int(self.grid_size) * int(self.grid_size)
+
         logger.info("=" * 88)
-        logger.info("LUCAS Embedding Extraction")
+        logger.info("Test Embedding Extraction (Step4-compatible)")
         logger.info("=" * 88)
         logger.info(f"Dataset name: {self.dataset_name}")
         logger.info(f"Shard: {self.shard_id} / {self.num_shards}")
         logger.info(f"Input path: {input_path}")
         logger.info(f"Checkpoint: {checkpoint_path}")
         logger.info(f"Output shard dir: {shard_out}")
-        logger.info(f"Grid size: {self.grid_size}x{self.grid_size}")
+        logger.info(f"Grid size: {self.grid_size}x{self.grid_size} -> n_tiles={n_tiles_expected}")
         logger.info(f"Batch size: {self.batch_size}")
         logger.info(f"Model: {self.model_name}")
         logger.info(f"Manifest: {manifest if manifest else '(none, will scan input_path)'}")
@@ -251,7 +256,7 @@ class ExtractLUCAS_Embeddings(ProcessTransform):
                 )
                 logger.info("Embedder initialized.")
 
-                logger.info("Step 5: Extracting per tile embeddings and logits...")
+                logger.info("Step 5: Extracting per tile embeddings...")
                 transformed = embedder.transform(df_tiles)
 
                 expected_fields = {"cls_token", "logits"}
@@ -259,17 +264,60 @@ class ExtractLUCAS_Embeddings(ProcessTransform):
                 if not expected_fields.issubset(actual_fields):
                     raise ValueError(f"Schema validation failed. Expected {expected_fields}, got {actual_fields}")
 
-                to_f16_bytes = udf(
-                    lambda arr: np.asarray(arr, dtype=np.float16).tobytes(),
-                    BinaryType(),
-                )
+                # Collect per image, sort by tile_index, pack into float16 bytes [n_tiles, emb_dim]
+                def _pack_tiles(tile_rows):
+                    """
+                    tile_rows: list of Rows with fields:
+                      tile_index: int
+                      cls_token: list[float]
+                    returns: bytes of float16 array shaped [n_tiles, emb_dim]
+                    """
+                    if tile_rows is None:
+                        return b""
 
-                final_df = transformed.select(
+                    # sort by tile_index
+                    tile_rows = sorted(tile_rows, key=lambda r: int(r["tile_index"]))
+
+                    if len(tile_rows) != n_tiles_expected:
+                        raise ValueError(f"Expected {n_tiles_expected} tiles, got {len(tile_rows)}")
+
+                    # infer emb_dim from first token
+                    first = tile_rows[0]["cls_token"]
+                    emb_dim = len(first)
+
+                    mat = np.zeros((n_tiles_expected, emb_dim), dtype=np.float16)
+                    for i, r in enumerate(tile_rows):
+                        tok = r["cls_token"]
+                        if len(tok) != emb_dim:
+                            raise ValueError(f"Inconsistent emb_dim: {len(tok)} vs {emb_dim}")
+                        mat[i, :] = np.asarray(tok, dtype=np.float16)
+
+                    return mat.tobytes()
+
+                pack_tiles_udf = udf(_pack_tiles, BinaryType())
+
+                per_tile = transformed.select(
                     "image_name",
                     "tile_index",
-                    to_f16_bytes(F.col("embeddings_raw.cls_token")).alias("embedding_f16"),
-                    to_f16_bytes(F.col("embeddings_raw.logits")).alias("teacher_logits_f16"),
+                    F.col("embeddings_raw.cls_token").alias("cls_token"),
                 )
+
+                grouped = (
+                    per_tile.groupBy("image_name")
+                    .agg(
+                        F.collect_list(F.struct("tile_index", "cls_token")).alias("tile_rows")
+                    )
+                )
+
+                base_cols = [
+                    F.regexp_replace(F.col("image_name"), r"\.jpg$", "").alias("quadrat_id"),
+                    pack_tiles_udf(F.col("tile_rows")).alias("tile_embeddings_f16"),
+                ]
+
+                if self.write_image_name:
+                    base_cols.insert(0, F.col("image_name"))
+
+                final_df = grouped.select(*base_cols)
 
                 write_mode = "overwrite" if self.overwrite else "errorifexists"
                 logger.info(f"Step 6: Writing parquet ({write_mode}) to: {shard_out}")
@@ -280,10 +328,7 @@ class ExtractLUCAS_Embeddings(ProcessTransform):
                     logger.info("Using coalesce(1) so Spark writes a single parquet part file.")
                     writer_df = writer_df.coalesce(1)
                 else:
-                    writer_df = (
-                        writer_df.repartition(self.num_partitions, "image_name")
-                        .sortWithinPartitions("image_name", "tile_index")
-                    )
+                    writer_df = writer_df.repartition(self.num_partitions, "quadrat_id").sortWithinPartitions("quadrat_id")
 
                 (
                     writer_df.write.mode(write_mode)
@@ -307,15 +352,21 @@ if __name__ == "__main__":
 
 
 
-'''
 
+'''
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_set_inference/extract_testdata_embeddings.py ExtractLUCAS_Embeddings \
+  --task plantclef_2026_test_embed_shard0000 \
   --dataset-name plantclef_2026_test \
   --manifest-path /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/manifests/plantclef_2026_test_manifest.txt \
-  --output-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/test_feature_bank \
+  --output-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/plantclef_2026_test/feature_bank_single \
+  --output-path /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/plantclef_2026_test/feature_bank_single/shard_0000 \
   --shard-id 0 \
   --num-shards 1 \
-  --single-file True \
+  --grid-size 4 \
+  --batch-size 32 \
+  --num-partitions 20 \
+  --single-file \
+  --write-image-name \
   --local-scheduler
 
 '''

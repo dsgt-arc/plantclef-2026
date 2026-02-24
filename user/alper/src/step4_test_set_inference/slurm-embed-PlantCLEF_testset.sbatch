@@ -21,17 +21,16 @@ echo "Running on host: $(hostname)"
 echo "Job: ${SLURM_JOB_NAME}  JobID: ${SLURM_JOB_ID}"
 nvidia-smi
 
-# Helps reduce CUDA memory fragmentation in long-running jobs
 export PYTORCH_ALLOC_CONF=expandable_segments:True
 
-# Activate your venv
 cd /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction
 source .venv/bin/activate
 
 python -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'none')"
 
-# Paths
 DATASET_NAME="plantclef_2026_test"
+
+# Verify this path exists on your system. If it is a typo, fix PlanCLEF -> PlantCLEF.
 IMAGES_DIR="/storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/data/raw/PlanCLEF_test_data/images"
 
 MANIFEST_DIR="${PLANTCLEF_ROOT}/manifests/${DATASET_NAME}"
@@ -43,7 +42,11 @@ OUT_SHARD="${OUTPUT_ROOT}/shard_0000"
 mkdir -p "${MANIFEST_DIR}"
 mkdir -p "${OUTPUT_ROOT}"
 
-# Create manifest if missing
+if [ ! -d "${IMAGES_DIR}" ]; then
+  echo "ERROR: IMAGES_DIR does not exist: ${IMAGES_DIR}"
+  exit 2
+fi
+
 if [ ! -f "${MANIFEST_PATH}" ]; then
   echo "Creating manifest at: ${MANIFEST_PATH}"
   find "${IMAGES_DIR}" -type f \( -iname "*.jpg" -o -iname "*.jpeg" \) > "${MANIFEST_PATH}"
@@ -56,9 +59,8 @@ head -n 5 "${MANIFEST_PATH}" || true
 
 rm -rf "${OUT_SHARD}"
 
-# Run extractor 
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_set_inference/extract_testdata_embeddings.py ExtractLUCAS_Embeddings \
-  --task embeddings \
+  --task "plantclef_2026_test_embed_shard0000" \
   --dataset-name "${DATASET_NAME}" \
   --input-path "${IMAGES_DIR}" \
   --output-root "${OUTPUT_ROOT}" \
@@ -70,11 +72,11 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_s
   --num-partitions 20 \
   --batch-size 32 \
   --grid-size 4 \
-  --ExtractLUCAS-Embeddings-single-file \
+  --single-file \
+  --write-image-name \
   --overwrite \
   --local-scheduler
 
-# Luigi sometimes reports failed tasks without nonzero exit code
 OUT_LOG="logs/${SLURM_JOB_NAME}_${SLURM_JOB_ID}.out"
 if grep -q "This progress looks :(" "${OUT_LOG}"; then
   echo "Luigi reported failed tasks in ${OUT_LOG}"
