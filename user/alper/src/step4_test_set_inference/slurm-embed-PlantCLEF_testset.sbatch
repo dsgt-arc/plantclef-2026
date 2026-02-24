@@ -7,8 +7,9 @@
 #SBATCH --cpus-per-task=6
 #SBATCH --mem=64G
 #SBATCH --time=04:00:00
-#SBATCH --output=logs/%x_%j.out
-#SBATCH --error=logs/%x_%j.err
+#SBATCH --array=0-3
+#SBATCH --output=logs/%x_%A_%a.out
+#SBATCH --error=logs/%x_%A_%a.err
 #SBATCH --mail-type=FAIL
 #SBATCH --mail-user=aerten3@gatech.edu
 
@@ -18,11 +19,13 @@ set -euo pipefail
 mkdir -p logs
 
 echo "Running on host: $(hostname)"
-echo "Job: ${SLURM_JOB_NAME}  JobID: ${SLURM_JOB_ID}"
-nvidia-smi
+echo "Job: ${SLURM_JOB_NAME}  JobID: ${SLURM_JOB_ID}  ArrayTaskID: ${SLURM_ARRAY_TASK_ID}"
+nvidia-smi || true
 
+# Helps reduce CUDA memory fragmentation
 export PYTORCH_ALLOC_CONF=expandable_segments:True
 
+# Activate your venv
 cd /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction
 source .venv/bin/activate
 
@@ -30,16 +33,26 @@ python -c "import torch; print('CUDA available:', torch.cuda.is_available()); pr
 
 DATASET_NAME="plantclef_2026_test"
 
-# Verify this path exists on your system. If it is a typo, fix PlanCLEF -> PlantCLEF.
+# Verify this path exists on your system. If it is a typo, fix PlanCLEF to PlantCLEF.
 IMAGES_DIR="/storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/data/raw/PlanCLEF_test_data/images"
 
-MANIFEST_DIR="${PLANTCLEF_ROOT}/manifests/${DATASET_NAME}"
-MANIFEST_PATH="${MANIFEST_DIR}/test_manifest.txt"
+# You already created 4 manifest shards here
+MANIFEST_BASE="/storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/manifests/${DATASET_NAME}/sharded_4"
 
+NUM_MANIFEST_SHARDS=4
+MANIFEST_SHARD_ID="${SLURM_ARRAY_TASK_ID}"
+
+if [ "${MANIFEST_SHARD_ID}" -lt 0 ] || [ "${MANIFEST_SHARD_ID}" -ge "${NUM_MANIFEST_SHARDS}" ]; then
+  echo "ERROR: SLURM_ARRAY_TASK_ID=${MANIFEST_SHARD_ID} is out of range 0..$((NUM_MANIFEST_SHARDS-1))"
+  exit 2
+fi
+
+MANIFEST_PATH="${MANIFEST_BASE}/test_manifest_shard_$(printf "%02d" ${MANIFEST_SHARD_ID}).txt"
+
+# Output goes under PLANTCLEF_ROOT parquet path, each array task writes a distinct shard directory
 OUTPUT_ROOT="${PLANTCLEF_ROOT}/parquet/${DATASET_NAME}/feature_bank_single"
-OUT_SHARD="${OUTPUT_ROOT}/shard_0000"
+OUT_SHARD="${OUTPUT_ROOT}/shard_$(printf "%04d" ${MANIFEST_SHARD_ID})"
 
-mkdir -p "${MANIFEST_DIR}"
 mkdir -p "${OUTPUT_ROOT}"
 
 if [ ! -d "${IMAGES_DIR}" ]; then
@@ -48,37 +61,47 @@ if [ ! -d "${IMAGES_DIR}" ]; then
 fi
 
 if [ ! -f "${MANIFEST_PATH}" ]; then
-  echo "Creating manifest at: ${MANIFEST_PATH}"
-  find "${IMAGES_DIR}" -type f \( -iname "*.jpg" -o -iname "*.jpeg" \) > "${MANIFEST_PATH}"
+  echo "ERROR: Manifest shard does not exist: ${MANIFEST_PATH}"
+  exit 2
 fi
+
+echo "Using manifest: ${MANIFEST_PATH}"
+echo "Writing output shard: ${OUT_SHARD}"
 
 echo "Manifest count:"
 wc -l "${MANIFEST_PATH}" || true
 echo "First 5 lines:"
 head -n 5 "${MANIFEST_PATH}" || true
 
+# Remove any partial output from previous runs for this shard
 rm -rf "${OUT_SHARD}"
 
+TASK_NAME="${DATASET_NAME}_embed_shard$(printf "%04d" ${MANIFEST_SHARD_ID})"
+
+# Important settings to avoid GPU OOM
+# num_partitions=1 keeps Spark from launching multiple concurrent GPU using tasks inside one job
+# batch_size=8 is safer than 32 for this model and tiling setup
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_set_inference/extract_testdata_embeddings.py ExtractLUCAS_Embeddings \
-  --task "plantclef_2026_test_embed_shard0000" \
   --dataset-name "${DATASET_NAME}" \
   --input-path "${IMAGES_DIR}" \
   --output-root "${OUTPUT_ROOT}" \
   --output-path "${OUT_SHARD}" \
+  --task "${TASK_NAME}" \
   --manifest-path "${MANIFEST_PATH}" \
-  --shard-id 0 \
+  --shard-id "${MANIFEST_SHARD_ID}" \
   --num-shards 1 \
   --cpu-count "${SLURM_CPUS_PER_TASK}" \
-  --num-partitions 20 \
-  --batch-size 32 \
+  --num-partitions 1 \
+  --batch-size 16 \
   --grid-size 4 \
   --single-file \
   --write-image-name \
   --overwrite \
   --local-scheduler
 
-OUT_LOG="logs/${SLURM_JOB_NAME}_${SLURM_JOB_ID}.out"
-if grep -q "This progress looks :(" "${OUT_LOG}"; then
+# Fail the job if Luigi reported failures
+OUT_LOG="logs/${SLURM_JOB_NAME}_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}.out"
+if [ -f "${OUT_LOG}" ] && grep -q "This progress looks :(" "${OUT_LOG}"; then
   echo "Luigi reported failed tasks in ${OUT_LOG}"
   exit 1
 fi
