@@ -429,10 +429,10 @@ source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_set_inference/step4_generate_test_submit.py \
   --test-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/plantclef_2026_test/feature_bank_single \
   --pattern "shard_*/data.parquet" \
-  --ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/<YOUR_STEP3B_CKPT>.pt \
-  --out-csv /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/submissions/run_masked.csv \
+  --ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_SSL_step3b2_nometa/student_best_20260223_1452.pt \
+  --out-csv /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/submissions/260223_run1_masked.csv \
   --num-classes 7806 \
-  --class-mask-npy /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/masks/sw_europe_mask_bool.npy \
+  --class-mask-npy /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/species_masking/sw_europe_mask_bool.npy \
   --mask-value -30 \
   --n-tiles 16 \
   --emb-dim 768 \
