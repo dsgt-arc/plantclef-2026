@@ -14,7 +14,11 @@
 #SBATCH --mail-user=aerten3@gatech.edu
 
 set -euo pipefail
-: "${PLANTCLEF_ROOT:?PLANTCLEF_ROOT is not set}"
+PLANTCLEF_ROOT="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0"
+export PLANTCLEF_ROOT
+
+MODEL_PATH="${PLANTCLEF_ROOT}/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth"
+export MODEL_PATH
 
 mkdir -p logs
 
@@ -33,11 +37,9 @@ python -c "import torch; print('CUDA available:', torch.cuda.is_available()); pr
 
 DATASET_NAME="plantclef_2026_test"
 
-# Verify this path exists on your system. If it is a typo, fix PlanCLEF to PlantCLEF.
-IMAGES_DIR="/storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/data/raw/PlanCLEF_test_data/images"
+IMAGES_DIR="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/PlanCLEF_test_data/images"
 
-# You already created 4 manifest shards here
-MANIFEST_BASE="/storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/manifests/${DATASET_NAME}/sharded_4"
+MANIFEST_BASE="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/manifests/${DATASET_NAME}/sharded_4"
 
 NUM_MANIFEST_SHARDS=4
 MANIFEST_SHARD_ID="${SLURM_ARRAY_TASK_ID}"
@@ -49,8 +51,7 @@ fi
 
 MANIFEST_PATH="${MANIFEST_BASE}/test_manifest_shard_$(printf "%02d" ${MANIFEST_SHARD_ID}).txt"
 
-# Output goes under PLANTCLEF_ROOT parquet path, each array task writes a distinct shard directory
-OUTPUT_ROOT="${PLANTCLEF_ROOT}/parquet/${DATASET_NAME}/feature_bank_single"
+OUTPUT_ROOT="${PLANTCLEF_ROOT}/parquet/${DATASET_NAME}/feature_bank"
 OUT_SHARD="${OUTPUT_ROOT}/shard_$(printf "%04d" ${MANIFEST_SHARD_ID})"
 
 mkdir -p "${OUTPUT_ROOT}"
@@ -73,19 +74,16 @@ wc -l "${MANIFEST_PATH}" || true
 echo "First 5 lines:"
 head -n 5 "${MANIFEST_PATH}" || true
 
-# Remove any partial output from previous runs for this shard
 rm -rf "${OUT_SHARD}"
 
 TASK_NAME="${DATASET_NAME}_embed_shard$(printf "%04d" ${MANIFEST_SHARD_ID})"
 
-# Important settings to avoid GPU OOM
-# num_partitions=1 keeps Spark from launching multiple concurrent GPU using tasks inside one job
-# batch_size=8 is safer than 32 for this model and tiling setup
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_set_inference/extract_testdata_embeddings.py ExtractLUCAS_Embeddings \
   --dataset-name "${DATASET_NAME}" \
   --input-path "${IMAGES_DIR}" \
   --output-root "${OUTPUT_ROOT}" \
   --output-path "${OUT_SHARD}" \
+  --model-path "${MODEL_PATH}" \
   --task "${TASK_NAME}" \
   --manifest-path "${MANIFEST_PATH}" \
   --shard-id "${MANIFEST_SHARD_ID}" \
@@ -99,10 +97,9 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_s
   --overwrite \
   --local-scheduler
 
-# Fail the job if Luigi reported failures
-OUT_LOG="logs/${SLURM_JOB_NAME}_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}.out"
-if [ -f "${OUT_LOG}" ] && grep -q "This progress looks :(" "${OUT_LOG}"; then
-  echo "Luigi reported failed tasks in ${OUT_LOG}"
+ERR_LOG="logs/${SLURM_JOB_NAME}_${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID}.err"
+if [ -f "${ERR_LOG}" ] && grep -q "This progress looks :(" "${ERR_LOG}"; then
+  echo "Luigi reported failed tasks in ${ERR_LOG}"
   exit 1
 fi
 
