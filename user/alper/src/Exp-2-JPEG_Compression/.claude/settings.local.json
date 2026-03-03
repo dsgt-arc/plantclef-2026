@@ -3,7 +3,9 @@
     "allow": [
       "WebSearch",
       "WebFetch(domain:pillow.readthedocs.io)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(xargs grep:*)",
+      "WebFetch(domain:arxiv.org)"
     ]
   }
 }
