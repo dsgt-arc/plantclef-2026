@@ -156,7 +156,7 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step2_B_teac
   --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260301_teacher_step2_masked.csv \
   --num-classes 7806 \
   --species-map /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_to_species_id.json \
-  --class-mask-npy ps-clef2026_plantclef-0/species_masking/sw_europe_mask_bool.npy \
+  --class-mask-npy /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/species_masking/sw_europe_mask_bool.npy \
   --topk 8 \
   --threshold 0.05 \
   --min-k 1
