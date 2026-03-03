@@ -33,7 +33,7 @@ def load_class_to_species_map(path: str, num_classes: int) -> List[int]:
         return [int(x) for x in arr]
 
     if ext == ".csv":
-        df = pd.read_csv(path)
+        df = pd.read_csv(path, sep=";")
         if "class_index" not in df.columns or "species_id" not in df.columns:
             raise ValueError("CSV mapping must have columns class_index and species_id")
         df = df.sort_values("class_index")
@@ -59,7 +59,7 @@ def load_metadata(path: str, cols: Tuple[str, str, str]) -> pd.DataFrame:
     if path.endswith(".parquet"):
         df = pd.read_parquet(path)
     else:
-        df = pd.read_csv(path)
+        df = pd.read_csv(path, sep=";")
 
     species_col, lat_col, lon_col = cols
     for c in [species_col, lat_col, lon_col]:
@@ -210,50 +210,17 @@ if __name__ == "__main__":
 
 Keep any species that has at least one training observation in a Southwestern Europe bounding box.
 
-python build_step4_sw_europe_mask.py \
-  --metadata /path/to/training_metadata_212k.csv \
-  --class-to-species /path/to/class_to_species_id.json \
+python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_set_inference/build_sw_europe_mask_for_inference.py \
+  --metadata /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/data/raw/metadata_PlantCLEF_training_set/PlantCLEF2024singleplanttrainingdata.csv \
+  --class-to-species /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/data/raw/class_id_to_species_mapping/class_to_species_id.json \
   --num-classes 7806 \
   --species-col species_id \
   --lat-col latitude \
   --lon-col longitude \
   --mode bbox_any \
-  --out-mask-npy /path/to/masks/sw_europe_mask_bool.npy \
-  --out-stats-json /path/to/masks/sw_europe_mask_stats.json
+  --out-mask-npy /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/species_masking/sw_europe_mask_bool.npy \
+  --out-stats-json /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/species_masking/sw_europe_mask_stats.json \
+  --out-species-txt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/species_masking/sw_europe_allowed_species_ids.txt
 
-
-
-Mode 2: matches the paragraph you quoted
-
-For each species, find its closest training observation to the reference point (44, 4), then keep species whose closest observation lies in the bounding box.
-
-python build_step4_sw_europe_mask.py \
-  --metadata /path/to/training_metadata_212k.csv \
-  --class-to-species /path/to/class_to_species_id.json \
-  --num-classes 7806 \
-  --species-col species_id \
-  --lat-col latitude \
-  --lon-col longitude \
-  --mode refpoint_nearest \
-  --ref-lat 44 --ref-lon 4 \
-  --out-mask-npy /path/to/masks/sw_europe_mask_bool.npy \
-  --out-stats-json /path/to/masks/sw_europe_mask_stats.json
-
-  
-Then use it in your inference script
-
-Use the optional flag you added earlier:
-
-python infer_step4_test_submit.py \
-  --test-root /path/to/test_student_ready \
-  --ckpt /path/to/student_best.pt \
-  --out-csv /path/to/submission_masked.csv \
-  --num-classes 7806 \
-  --n-tiles 16 \
-  --class-mask-npy /path/to/masks/sw_europe_mask_bool.npy \
-  --mask-value -30 \
-  --amp
-    
-    
     
     '''

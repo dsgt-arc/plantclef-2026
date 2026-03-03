@@ -19,16 +19,48 @@ import pyarrow.parquet as pq
 from Cross_Region_Transformer_v3 import CrossRegionTransformer
 
 
+def _ensure_full_class_map(class_to_species: Dict[int, int], num_classes: int, src: str) -> List[int]:
+    missing = [i for i in range(num_classes) if i not in class_to_species]
+    if missing:
+        raise ValueError(
+            f"{src} does not define all class indices. Missing {len(missing)} indices. "
+            f"First missing: {missing[:10]}"
+        )
+
+    extra = [k for k in class_to_species.keys() if k < 0 or k >= num_classes]
+    if extra:
+        raise ValueError(f"{src} contains out of range class_index values. Examples: {sorted(extra)[:10]}")
+
+    out = [int(class_to_species[i]) for i in range(num_classes)]
+    return out
+
+
+def _try_parse_two_ints(line: str) -> Optional[Tuple[int, int]]:
+    s = line.strip()
+    if not s or s.startswith("#"):
+        return None
+    # split on whitespace or comma
+    parts = [p for p in s.replace(",", " ").split() if p]
+    if len(parts) != 2:
+        return None
+    try:
+        a = int(parts[0])
+        b = int(parts[1])
+        return a, b
+    except Exception:
+        return None
+
+
 def load_species_map(path: Optional[str], num_classes: int) -> List[int]:
     """
-    Returns a list that maps class_index to species_id.
+    Returns a list of length num_classes:
+      species_map[class_index] = species_id
 
-    Supported formats
-      json list: [1395806, 1351284, ...]
-      csv with columns: class_index,species_id
-      txt one species_id per line
-
-    If path is None, uses identity mapping 0..num_classes-1.
+    Supported:
+      - None: identity 0..num_classes-1
+      - .json: list length num_classes
+      - .csv: either columns class_index and species_id, or any two int columns (auto detected)
+      - .txt: either one int per line (length num_classes), or two ints per line (pairs)
     """
     if path is None:
         return list(range(num_classes))
@@ -37,6 +69,7 @@ def load_species_map(path: Optional[str], num_classes: int) -> List[int]:
         raise FileNotFoundError(path)
 
     ext = os.path.splitext(path)[1].lower()
+    src = f"species map {path}"
 
     if ext == ".json":
         with open(path, "r", encoding="utf-8") as f:
@@ -49,26 +82,117 @@ def load_species_map(path: Optional[str], num_classes: int) -> List[int]:
 
     if ext == ".csv":
         df = pd.read_csv(path)
-        if "class_index" not in df.columns or "species_id" not in df.columns:
-            raise ValueError("CSV species map must have columns class_index and species_id")
-        df = df.sort_values("class_index")
-        if len(df) != num_classes:
-            raise ValueError(f"CSV species map rows {len(df)} does not match num_classes {num_classes}")
-        return [int(x) for x in df["species_id"].tolist()]
 
+        # Preferred explicit columns
+        if "class_index" in df.columns and "species_id" in df.columns:
+            df2 = df[["class_index", "species_id"]].copy()
+            df2["class_index"] = df2["class_index"].astype(int)
+            df2["species_id"] = df2["species_id"].astype(int)
+            class_to_species = dict(zip(df2["class_index"].tolist(), df2["species_id"].tolist()))
+            return _ensure_full_class_map(class_to_species, num_classes, src)
+
+        # Fallback: find two integer like columns and auto detect orientation
+        int_cols = []
+        for c in df.columns:
+            try:
+                _ = pd.to_numeric(df[c], errors="raise").astype(np.int64)
+                int_cols.append(c)
+            except Exception:
+                pass
+
+        if len(int_cols) < 2:
+            raise ValueError(
+                "CSV species map must have columns class_index and species_id, "
+                "or at least two integer columns."
+            )
+
+        c1, c2 = int_cols[0], int_cols[1]
+        a = pd.to_numeric(df[c1], errors="raise").astype(np.int64).to_numpy()
+        b = pd.to_numeric(df[c2], errors="raise").astype(np.int64).to_numpy()
+
+        # Decide which column is class_index by coverage of 0..num_classes-1
+        a_set = set(int(x) for x in a.tolist())
+        b_set = set(int(x) for x in b.tolist())
+        want = set(range(num_classes))
+
+        a_is_class = want.issubset(a_set) and max(a_set) >= num_classes - 1
+        b_is_class = want.issubset(b_set) and max(b_set) >= num_classes - 1
+
+        if a_is_class and not b_is_class:
+            class_to_species = {int(ai): int(bi) for ai, bi in zip(a, b)}
+            return _ensure_full_class_map(class_to_species, num_classes, src)
+        if b_is_class and not a_is_class:
+            class_to_species = {int(bi): int(ai) for ai, bi in zip(a, b)}
+            return _ensure_full_class_map(class_to_species, num_classes, src)
+
+        # If ambiguous, prefer the one with more in range hits
+        a_hits = sum((0 <= int(x) < num_classes) for x in a.tolist())
+        b_hits = sum((0 <= int(x) < num_classes) for x in b.tolist())
+        if a_hits >= b_hits:
+            class_to_species = {int(ai): int(bi) for ai, bi in zip(a, b)}
+        else:
+            class_to_species = {int(bi): int(ai) for ai, bi in zip(a, b)}
+        return _ensure_full_class_map(class_to_species, num_classes, src)
+
+    # TXT parsing
     with open(path, "r", encoding="utf-8") as f:
-        lines = [ln.strip() for ln in f.readlines() if ln.strip()]
-    if len(lines) != num_classes:
-        raise ValueError(f"TXT species map lines {len(lines)} does not match num_classes {num_classes}")
-    return [int(x) for x in lines]
+        raw_lines = [ln.strip() for ln in f.readlines() if ln.strip() and not ln.strip().startswith("#")]
+
+    # Case 1: one int per line, length num_classes
+    one_int = True
+    vals: List[int] = []
+    for ln in raw_lines:
+        try:
+            vals.append(int(ln))
+        except Exception:
+            one_int = False
+            break
+
+    if one_int:
+        if len(vals) != num_classes:
+            raise ValueError(f"TXT species map lines {len(vals)} does not match num_classes {num_classes}")
+        return [int(x) for x in vals]
+
+    # Case 2: two ints per line, interpret as pairs
+    pairs: List[Tuple[int, int]] = []
+    for ln in raw_lines:
+        p = _try_parse_two_ints(ln)
+        if p is None:
+            raise ValueError(f"Unrecognized line in {path}: {ln}")
+        pairs.append(p)
+
+    if len(pairs) < num_classes:
+        raise ValueError(
+            f"{src} has only {len(pairs)} pairs, expected at least {num_classes} to cover all classes"
+        )
+
+    col1 = [a for a, _ in pairs]
+    col2 = [b for _, b in pairs]
+    want = set(range(num_classes))
+    s1 = set(col1)
+    s2 = set(col2)
+
+    col1_is_class = want.issubset(s1)
+    col2_is_class = want.issubset(s2)
+
+    if col1_is_class and not col2_is_class:
+        class_to_species = {int(a): int(b) for a, b in pairs}
+        return _ensure_full_class_map(class_to_species, num_classes, src)
+    if col2_is_class and not col1_is_class:
+        class_to_species = {int(b): int(a) for a, b in pairs}
+        return _ensure_full_class_map(class_to_species, num_classes, src)
+
+    # Ambiguous: choose column with more values in range
+    col1_hits = sum((0 <= int(x) < num_classes) for x in col1)
+    col2_hits = sum((0 <= int(x) < num_classes) for x in col2)
+    if col1_hits >= col2_hits:
+        class_to_species = {int(a): int(b) for a, b in pairs}
+    else:
+        class_to_species = {int(b): int(a) for a, b in pairs}
+    return _ensure_full_class_map(class_to_species, num_classes, src)
 
 
 def format_species_list(species_ids: List[int]) -> str:
-    """
-    Required format examples
-      "[1395806]"
-      "[1351284, 1494911]"
-    """
     return "[" + ", ".join(str(s) for s in species_ids) + "]"
 
 
@@ -89,7 +213,6 @@ def _coerce_meta(meta_val: Any, meta_dim: int) -> np.ndarray:
     elif isinstance(meta_val, (bytes, bytearray, memoryview)):
         meta = np.frombuffer(meta_val, dtype=np.float32)
     else:
-        # Arrow FixedSizeList often becomes list. Fallback here is best effort.
         try:
             meta = np.array(meta_val, dtype=np.float32)
         except Exception:
@@ -101,19 +224,6 @@ def _coerce_meta(meta_val: Any, meta_dim: int) -> np.ndarray:
 
 
 class TestEmbeddingsParquetFixedN(Dataset):
-    """
-    Reads sharded dataset:
-      data_root/shard_XXXX/data.parquet
-
-    Required columns:
-      quadrat_id (string)
-      tile_embeddings_f16 (binary) float16 bytes of shape [n_tiles, emb_dim]
-
-    Optional columns:
-      metadata_tensor_f32 (FixedSizeList[meta_dim] float32) or list[meta_dim] float32
-      If missing, metadata defaults to zeros.
-    """
-
     def __init__(
         self,
         data_root: str,
@@ -177,8 +287,8 @@ class TestEmbeddingsParquetFixedN(Dataset):
 
 
 def collate_fn(batch):
-    x_tiles = torch.stack([b[0] for b in batch], dim=0)  # [B, T, D]
-    x_meta = torch.stack([b[1] for b in batch], dim=0)   # [B, M]
+    x_tiles = torch.stack([b[0] for b in batch], dim=0)
+    x_meta = torch.stack([b[1] for b in batch], dim=0)
     qids = [b[2] for b in batch]
     return x_tiles, x_meta, qids
 
@@ -186,7 +296,6 @@ def collate_fn(batch):
 def _looks_like_state_dict(d: Dict[str, Any]) -> bool:
     if not isinstance(d, dict) or not d:
         return False
-    # Heuristic: a state dict has string keys and tensor values or compatible types
     some_key = next(iter(d.keys()))
     if not isinstance(some_key, str):
         return False
@@ -195,27 +304,15 @@ def _looks_like_state_dict(d: Dict[str, Any]) -> bool:
 
 
 def load_checkpoint_state(ckpt_path: str) -> Dict[str, Any]:
-    """
-    Supports several checkpoint formats used across your Step 3A and Step 3B2 scripts.
-
-    Priority:
-      1) model_state_dict
-      2) model
-      3) state_dict
-      4) raw state dict
-    """
     ckpt = torch.load(ckpt_path, map_location="cpu")
 
     if isinstance(ckpt, dict):
         if "model_state_dict" in ckpt and isinstance(ckpt["model_state_dict"], dict):
             return ckpt["model_state_dict"]
-
         if "model" in ckpt and isinstance(ckpt["model"], dict):
             return ckpt["model"]
-
         if "state_dict" in ckpt and isinstance(ckpt["state_dict"], dict):
             return ckpt["state_dict"]
-
         if _looks_like_state_dict(ckpt):
             return ckpt
 
@@ -223,6 +320,21 @@ def load_checkpoint_state(ckpt_path: str) -> Dict[str, Any]:
         "Checkpoint format not recognized. Expected a dict containing model_state_dict, model, or state_dict, "
         "or a raw state_dict."
     )
+
+
+def load_class_mask_npy(path: str, num_classes: int) -> np.ndarray:
+    if not os.path.exists(path):
+        raise FileNotFoundError(path)
+    m = np.load(path)
+    if m.ndim != 1:
+        raise ValueError(f"class mask must be 1D, got shape {m.shape}")
+    if m.shape[0] != num_classes:
+        raise ValueError(f"class mask length {m.shape[0]} does not match num_classes {num_classes}")
+    if m.dtype != np.bool_:
+        m = m.astype(np.bool_)
+    if not m.any():
+        raise ValueError("class mask has zero allowed classes (all False)")
+    return m
 
 
 @torch.no_grad()
@@ -235,6 +347,8 @@ def infer_to_dataframe(
     threshold: float,
     min_k: int,
     amp: bool,
+    class_mask: Optional[torch.Tensor],
+    mask_value: float,
 ) -> pd.DataFrame:
     model.eval()
 
@@ -250,6 +364,9 @@ def infer_to_dataframe(
                 logits = model(x_tiles, metadata=x_meta)
         else:
             logits = model(x_tiles, metadata=x_meta)
+
+        if class_mask is not None:
+            logits = logits.masked_fill(~class_mask, mask_value)
 
         probs = torch.sigmoid(logits).float().cpu()
 
@@ -287,7 +404,7 @@ def main():
     ap.add_argument("--num-classes", type=int, default=7806)
     ap.add_argument("--species-map", default=None, help="Optional class_index to species_id mapping file")
 
-    ap.add_argument("--n-tiles", type=int, default=16, help="Tile count per sample, example 16 or 25")
+    ap.add_argument("--n-tiles", type=int, default=16)
     ap.add_argument("--emb-dim", type=int, default=768)
     ap.add_argument("--meta-dim", type=int, default=4)
 
@@ -307,16 +424,23 @@ def main():
     ap.add_argument("--num-layers", type=int, default=4)
     ap.add_argument("--dropout", type=float, default=0.1)
 
-    # Your Step 3B2 training uses attention pooling True.
-    # Defaulting to True prevents silent mismatches.
     ap.add_argument("--use-attention-pooling", action="store_true", default=True)
     ap.add_argument("--no-attention-pooling", dest="use_attention_pooling", action="store_false")
 
-    ap.add_argument("--allow-partial-load", action="store_true", help="If set, uses strict=False for state dict loading")
+    ap.add_argument("--allow-partial-load", action="store_true")
+
+    ap.add_argument("--class-mask-npy", default=None, help="Optional .npy boolean mask [num_classes], True allowed.")
+    ap.add_argument("--mask-value", type=float, default=-30.0, help="Logit for masked classes, default -30.")
 
     args = ap.parse_args()
 
     device = torch.device("cuda" if (args.device == "cuda" and torch.cuda.is_available()) else "cpu")
+
+    class_mask_t: Optional[torch.Tensor] = None
+    if args.class_mask_npy:
+        m = load_class_mask_npy(args.class_mask_npy, args.num_classes)
+        print(f"Loaded class mask: allowed {int(m.sum())} / {args.num_classes} classes")
+        class_mask_t = torch.from_numpy(m).to(device=device, dtype=torch.bool).view(1, -1)
 
     ds = TestEmbeddingsParquetFixedN(
         data_root=args.test_root,
@@ -337,6 +461,7 @@ def main():
     )
 
     species_map = load_species_map(args.species_map, args.num_classes)
+    print(f"Loaded species map length {len(species_map)}. Example first 10: {species_map[:10]}")
 
     model = CrossRegionTransformer(
         input_dim=args.input_dim,
@@ -374,6 +499,8 @@ def main():
         threshold=args.threshold,
         min_k=args.min_k,
         amp=args.amp,
+        class_mask=class_mask_t,
+        mask_value=float(args.mask_value),
     )
 
     out_dir = os.path.dirname(os.path.abspath(args.out_csv))
@@ -386,23 +513,55 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+
+
 '''
+## 1) Run WITHOUT species masking
+
 
 source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
 
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_set_inference/step4_generate_test_submit.py \
   --test-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/plantclef_2026_test/feature_bank_single \
-  --pattern "shard_*/data.parquet" \
-  --ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_step3b2_selftrain/student_best_20260220_2210.pt \
-  --out-csv /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/submissions/run_step3b2_best.csv \
+  --pattern "shard_*/part-*.parquet" \
+  --ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_SSL_step3b2_nometa/student_best_20260223_1452.pt \
+  --out-csv /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/submissions/260223_run2_unmasked_top8_thr0_1.csv \
   --num-classes 7806 \
+  --species-map /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/data/raw/class_id_to_species_mapping/class_to_species_id.json \
   --n-tiles 16 \
   --emb-dim 768 \
   --meta-dim 4 \
   --batch-rows 512 \
-  --topk 64 \
-  --threshold 0.0 \
+  --topk 8 \
+  --threshold 0.1 \
+  --min-k 1 \
+  --device cuda \
+  --amp \
+  --use-attention-pooling
+
+
+  
+
+  ## 2) Run WITH species masking
+
+
+source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
+
+python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_set_inference/step4_generate_test_submit.py \
+  --test-root /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/parquet/plantclef_2026_test/feature_bank_single \
+  --pattern "shard_*/part-*.parquet" \
+  --ckpt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/checkpoints/lucas_212k_SSL_step3b2_nometa/student_best_20260223_1452.pt \
+  --out-csv /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/submissions/260223_run1_masked_top8_thr0_1.csv \
+  --num-classes 7806 \
+  --species-map /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/data/raw/class_id_to_species_mapping/class_to_species_id.json \
+  --class-mask-npy /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/species_masking/sw_europe_mask_bool.npy \
+  --mask-value -30 \
+  --n-tiles 16 \
+  --emb-dim 768 \
+  --meta-dim 4 \
+  --batch-rows 512 \
+  --topk 8 \
+  --threshold 0.1 \
   --min-k 1 \
   --device cuda \
   --amp \
