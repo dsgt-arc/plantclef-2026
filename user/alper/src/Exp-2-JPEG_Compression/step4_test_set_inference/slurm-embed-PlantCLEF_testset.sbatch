@@ -51,7 +51,7 @@ fi
 
 MANIFEST_PATH="${MANIFEST_BASE}/test_manifest_shard_$(printf "%02d" ${MANIFEST_SHARD_ID}).txt"
 
-OUTPUT_ROOT="${PLANTCLEF_ROOT}/parquet/${DATASET_NAME}/feature_bank"
+OUTPUT_ROOT="${PLANTCLEF_ROOT}/parquet/${DATASET_NAME}/feature_bank_JPEG_compressed"
 OUT_SHARD="${OUTPUT_ROOT}/shard_$(printf "%04d" ${MANIFEST_SHARD_ID})"
 
 mkdir -p "${OUTPUT_ROOT}"
@@ -78,7 +78,7 @@ rm -rf "${OUT_SHARD}"
 
 TASK_NAME="${DATASET_NAME}_embed_shard$(printf "%04d" ${MANIFEST_SHARD_ID})"
 
-python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_set_inference/extract_testdata_embeddings.py ExtractLUCAS_Embeddings \
+python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step4_test_set_inference/extract_testdata_embeddings.py ExtractLUCAS_Embeddings \
   --dataset-name "${DATASET_NAME}" \
   --input-path "${IMAGES_DIR}" \
   --output-root "${OUTPUT_ROOT}" \

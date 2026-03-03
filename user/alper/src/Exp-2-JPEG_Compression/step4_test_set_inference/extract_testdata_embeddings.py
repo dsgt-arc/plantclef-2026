@@ -394,12 +394,12 @@ if __name__ == "__main__":
 
 
 '''
-python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_set_inference/extract_testdata_embeddings.py ExtractLUCAS_Embeddings \
+python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step4_test_set_inference/extract_testdata_embeddings.py ExtractLUCAS_Embeddings \
   --task plantclef_2026_test_embed_shard0000 \
   --dataset-name plantclef_2026_test \
   --manifest-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/manifests/plantclef_2026_test_manifest.txt \
   --output-root /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/feature_bank_single \
-  --output-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/feature_bank_single/shard_0000 \
+  --output-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/feature_bank_JPEG_compressed/shard_0000 \
   --shard-id 0 \
   --num-shards 1 \
   --grid-size 4 \
