@@ -1,0 +1,9 @@
+cd C:\Users\alper\Documents\PlantCLEF_2026_Local\_GitHub\plantclef-2026\user\alper\src\Exp-2-JPEG_Compression 
+claude
+
+
+ask clarifying questions, use as many agents as possible, visualize as much as possible	
+
+
+
+shift + tab to switch on plan mode
