@@ -238,9 +238,9 @@ if __name__ == "__main__":
 '''
 ## Option 1 graph rerank
    
-python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step_2_C_teacher_testing_co-graph/generate_test_submission_from_aggregation.py \
+python plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step2_C_teacher_testing_co-graph/generate_test_submission_from_aggregation.py \
   --in-parquet /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/teacher_step2_agg/teacher_image_probs.parquet \
-  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260301_teacher_cograph_rerank_lam010.csv \
+  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260303_teacher_cograph_rerank_lam010.csv \
   --probs-col teacher_image_probs_f16 \
   --species-map /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_to_species_id.json \
   --topk 8 \
@@ -256,9 +256,9 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step_2_C_tea
 
 ## Option 2 graph mask expansion
 
-python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step_2_C_teacher_testing_co-graph/generate_test_submission_from_aggregation.py \
+python plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step2_C_teacher_testing_co-graph/generate_test_submission_from_aggregation.py \
   --in-parquet /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/teacher_step2_agg/teacher_image_probs.parquet \
-  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260301_teacher_cograph_mask_seed8_neigh50.csv \
+  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260303_teacher_cograph_mask_seed8_neigh50.csv \
   --probs-col teacher_image_probs_f16 \
   --species-map /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_to_species_id.json \
   --topk 8 \
@@ -273,9 +273,9 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step_2_C_tea
 
   ## Baaeline for co-graph submissions, without the co-graph
 
-  python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step_2_C_teacher_testing_co-graph/generate_test_submission_from_aggregation.py \
+  python plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step2_C_teacher_testing_co-graph/generate_test_submission_from_aggregation.py \
   --in-parquet /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/teacher_step2_agg/teacher_image_probs.parquet \
-  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260301_teacher_baseline_without_co-graph.csv \
+  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260303_teacher_baseline_wo_co-graph_JPEG_comp.csv \
   --probs-col teacher_image_probs_f16 \
   --species-map /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_to_species_id.json \
   --topk 8 \

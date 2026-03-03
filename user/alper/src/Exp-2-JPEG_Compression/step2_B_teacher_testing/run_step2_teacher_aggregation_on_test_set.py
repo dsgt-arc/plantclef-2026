@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+import sys
+from pathlib import Path
+
+# Add Exp-2-JPEG_Compression to import path so sibling folder "step2" is visible
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import os
 import glob
 import argparse
@@ -96,8 +102,8 @@ if __name__ == "__main__":
 
 
 '''
-python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step2_B_teacher_testing/run_step2_teacher_aggregation_on_test_set.py \
-  --in-parquet-root /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/feature_bank \
+python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step2_B_teacher_testing/run_step2_teacher_aggregation_on_test_set.py \
+  --in-parquet-root /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/feature_bank_JPEG_compressed \
   --pattern "shard_*/*.parquet" \
   --out-parquet /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/teacher_step2_agg/teacher_image_probs.parquet \
   --logits-col teacher_logits_f16 \

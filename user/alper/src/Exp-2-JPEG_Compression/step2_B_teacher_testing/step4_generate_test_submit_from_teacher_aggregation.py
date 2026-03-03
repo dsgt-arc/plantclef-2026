@@ -139,9 +139,9 @@ if __name__ == "__main__":
 '''
 ## Submission without species mask
 
-python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step2_B_teacher_testing/step4_generate_test_submit_from_teacher_aggregation.py \
+python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step2_B_teacher_testing/step4_generate_test_submit_from_teacher_aggregation.py \
   --in-parquet /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/teacher_step2_agg/teacher_image_probs.parquet \
-  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260301_teacher_step2_nomask.csv \
+  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260303_teacher_step2_nomask_JPEG.csv \
   --num-classes 7806 \
   --species-map /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_to_species_id.json \
   --topk 8 \
@@ -151,9 +151,9 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step2_B_teac
 
   ## Submission with species mask
 
-  python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step2_B_teacher_testing/step4_generate_test_submit_from_teacher_aggregation.py \
+  python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step2_B_teacher_testing/step4_generate_test_submit_from_teacher_aggregation.py \
   --in-parquet /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/teacher_step2_agg/teacher_image_probs.parquet \
-  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260301_teacher_step2_masked.csv \
+  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260303_teacher_step2_masked_JPEG.csv \
   --num-classes 7806 \
   --species-map /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_to_species_id.json \
   --class-mask-npy /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/species_masking/sw_europe_mask_bool.npy \
