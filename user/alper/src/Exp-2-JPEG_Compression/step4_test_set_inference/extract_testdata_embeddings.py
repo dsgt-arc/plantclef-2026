@@ -400,13 +400,17 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_C
   --manifest-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/manifests/plantclef_2026_test_manifest.txt \
   --output-root /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/feature_bank_single \
   --output-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/feature_bank_JPEG_compressed/shard_0000 \
+  --checkpoint-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth \
   --shard-id 0 \
   --num-shards 1 \
+  --num-partitions 1 \
+  --batch-size 16 \
   --grid-size 4 \
-  --batch-size 32 \
-  --num-partitions 20 \
+  --jpeg-quality 85 \
+  --jpeg-subsampling 1 \
   --single-file \
   --write-image-name \
+  --overwrite \
   --local-scheduler
 
 '''
