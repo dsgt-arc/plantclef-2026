@@ -89,8 +89,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--num-classes", type=int, default=7806)
     p.add_argument("--n-tiles", type=int, default=16)
 
-    p.add_argument("--per-tile-topk", type=int, default=10,
-                    help="Number of top species to extract per tile for voting")
+    p.add_argument("--per-tile-topk", type=int, default=5,
+                    help="Number of top species to extract per tile for voting (reference paper uses 5)")
 
     return p.parse_args()
 
@@ -166,6 +166,6 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_C
   --logits-col teacher_logits_f16 \
   --num-classes 7806 \
   --n-tiles 16 \
-  --per-tile-topk 10
+  --per-tile-topk 5
 
 '''

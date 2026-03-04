@@ -140,7 +140,7 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_C
   --logits-col teacher_logits_f16 \
   --num-classes 7806 \
   --n-tiles 16 \
-  --per-tile-topk 10
+  --per-tile-topk 5
 
 
 ## Step 2: Generate submission CSV (geo mask applied HERE, after aggregation)
