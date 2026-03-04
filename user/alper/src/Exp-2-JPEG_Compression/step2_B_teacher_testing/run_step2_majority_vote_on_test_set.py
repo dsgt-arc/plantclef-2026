@@ -2,10 +2,12 @@
 """
 Majority vote aggregation of per-tile logits, matching the reference paper pipeline.
 
-Reference order of operations:
+Reference order of operations (from classification/aggregation.py):
   1. Per tile: softmax(T=1.0) on ALL classes -> top-K species per tile
-  2. Across 16 tiles: count species frequency -> rank by frequency
-  3. Geographic filtering applied LATER in the submission script (NOT here)
+  2. Group by base_quadrat_id (strips date suffix to combine seasonal images)
+  3. Across ALL tiles from ALL seasonal images: count species frequency -> rank
+  4. Assign ranked species to every original quadrat_id in the group
+  5. Geographic filtering applied LATER in the submission script (NOT here)
 """
 
 import sys
@@ -15,11 +17,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import os
+import re
 import glob
 import json
 import argparse
-from typing import List
-from collections import Counter
+from typing import List, Dict
+from collections import Counter, defaultdict
 
 import numpy as np
 import pyarrow as pa
@@ -41,42 +44,51 @@ def softmax(logits: np.ndarray) -> np.ndarray:
     return ex / np.sum(ex, axis=1, keepdims=True, dtype=np.float32)
 
 
-def majority_vote_aggregate(
+def extract_base_quadrat_id(quadrat_id: str) -> str:
+    """
+    Extract base quadrat ID by removing date suffixes.
+    Copied from reference: classification/aggregation.py:22-33
+
+    Groups seasonal images of the same location together.
+    E.g., CBN-PdlC-A1-20130807 -> CBN-PdlC-A1
+    """
+    patterns = [
+        (r"^(CBN-.*?-.*?)-\d{8}$", 1),       # CBN
+        (r"^(GUARDEN-.*?-.*?)-.*$", 1),       # GUARDEN-AMB
+        (r"^(LISAH-.*?)-\d{8}$", 1),          # LISAH
+        (r"^(OPTMix-\d+)-.*$", 1),            # OPTMix
+        (r"^(RNNB-\d+-\d+)-\d{8}$", 1),       # RNNB
+    ]
+    for pattern, group_idx in patterns:
+        match = re.match(pattern, quadrat_id)
+        if match:
+            return match.group(group_idx)
+    return quadrat_id  # fallback
+
+
+def get_per_tile_species(
     tile_logits: np.ndarray,
     per_tile_topk: int,
-) -> List[int]:
+) -> List[List[int]]:
     """
-    Majority vote aggregation matching the reference paper.
-
-    1. Per tile: softmax(T=1.0) on full 7806 classes -> top-K species indices
-    2. Across tiles: count frequency of each species
-    3. Return species ranked by vote count (desc), ties broken by frequency order.
-
-    NO geo mask is applied here — that happens post-aggregation.
+    Per tile: softmax(T=1.0) -> top-K species indices.
+    Returns list of lists (one per tile).
     """
     n_tiles, num_classes = tile_logits.shape
-    probs = softmax(tile_logits)  # [T, C]
+    probs = softmax(tile_logits)
 
-    # Collect votes: for each tile, get top-K species
-    vote_counter = Counter()
-
+    per_tile = []
     for t in range(n_tiles):
-        tile_probs = probs[t]
         k = min(per_tile_topk, num_classes)
-        top_indices = np.argpartition(tile_probs, -k)[-k:]
+        top_indices = np.argpartition(probs[t], -k)[-k:]
+        per_tile.append([int(idx) for idx in top_indices])
 
-        for idx in top_indices:
-            vote_counter[int(idx)] += 1
-
-    # Rank by vote count (desc) — matches reference Counter.most_common()
-    ranked = [species for species, _ in vote_counter.most_common()]
-
-    return ranked
+    return per_tile
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Majority vote aggregation of per-tile logits (replaces Noisy-OR)"
+        description="Majority vote aggregation of per-tile logits (matching reference paper)"
     )
 
     p.add_argument("--in-parquet-root", required=True, help="Folder containing shard_0000 etc")
@@ -89,8 +101,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--num-classes", type=int, default=7806)
     p.add_argument("--n-tiles", type=int, default=16)
 
-    p.add_argument("--per-tile-topk", type=int, default=5,
-                    help="Number of top species to extract per tile for voting (reference paper uses 5)")
+    p.add_argument("--per-tile-topk", type=int, default=9,
+                    help="Number of top species to extract per tile for voting (reference uses 9)")
 
     return p.parse_args()
 
@@ -104,9 +116,9 @@ def main() -> None:
 
     print(f"Found {len(files)} parquet files")
 
-    out_ids: List[str] = []
-    out_ranked: List[str] = []
-    out_votes: List[str] = []
+    # --- Pass 1: collect per-tile species for every image ---
+    # image_tiles[qid] = list of per-tile species lists
+    image_tiles: Dict[str, List[List[int]]] = {}
 
     for fp in files:
         table = pq.read_table(fp, columns=[args.id_col, args.logits_col])
@@ -122,24 +134,49 @@ def main() -> None:
                 buf, n_tiles=int(args.n_tiles), num_classes=int(args.num_classes)
             )
 
-            ranked_species = majority_vote_aggregate(
-                tile_logits,
-                per_tile_topk=int(args.per_tile_topk),
-            )
+            per_tile = get_per_tile_species(tile_logits, int(args.per_tile_topk))
+            image_tiles[qid] = per_tile
 
-            # Recompute vote counts for the output (for analysis)
-            probs = softmax(tile_logits)
-            vote_counter = Counter()
-            for t in range(tile_logits.shape[0]):
-                k = min(int(args.per_tile_topk), int(args.num_classes))
-                top_idx = np.argpartition(probs[t], -k)[-k:]
-                for idx in top_idx:
-                    vote_counter[int(idx)] += 1
-            vote_counts = [vote_counter.get(s, 0) for s in ranked_species]
+    print(f"Loaded per-tile species for {len(image_tiles)} images")
 
-            out_ids.append(qid)
-            out_ranked.append(json.dumps(ranked_species))
-            out_votes.append(json.dumps(vote_counts))
+    # --- Pass 2: group by base_quadrat_id and aggregate ---
+    # Groups seasonal images of the same location (matching reference aggregation.py)
+    groups: Dict[str, List[str]] = defaultdict(list)
+    for qid in image_tiles:
+        base_id = extract_base_quadrat_id(qid)
+        groups[base_id].append(qid)
+
+    n_grouped = sum(1 for g in groups.values() if len(g) > 1)
+    print(f"Grouped into {len(groups)} base quadrats ({n_grouped} with multiple seasonal images)")
+
+    # For each group: flatten all per-tile species -> Counter -> ranked
+    group_ranked: Dict[str, List[int]] = {}
+    group_votes: Dict[str, List[int]] = {}
+
+    for base_id, qids in groups.items():
+        vote_counter = Counter()
+        total_tiles = 0
+        for qid in qids:
+            for tile_species in image_tiles[qid]:
+                for sp in tile_species:
+                    vote_counter[sp] += 1
+                total_tiles += 1
+
+        ranked = [species for species, _ in vote_counter.most_common()]
+        votes = [vote_counter[s] for s in ranked]
+        group_ranked[base_id] = ranked
+        group_votes[base_id] = votes
+
+    # --- Output: one row per original quadrat_id, each with its group's ranked species ---
+    out_ids: List[str] = []
+    out_ranked: List[str] = []
+    out_votes: List[str] = []
+
+    for qid in sorted(image_tiles.keys()):
+        base_id = extract_base_quadrat_id(qid)
+        out_ids.append(qid)
+        out_ranked.append(json.dumps(group_ranked[base_id]))
+        out_votes.append(json.dumps(group_votes[base_id]))
 
     out_table = pa.Table.from_pydict(
         {
@@ -166,6 +203,6 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_C
   --logits-col teacher_logits_f16 \
   --num-classes 7806 \
   --n-tiles 16 \
-  --per-tile-topk 5
+  --per-tile-topk 9
 
 '''
