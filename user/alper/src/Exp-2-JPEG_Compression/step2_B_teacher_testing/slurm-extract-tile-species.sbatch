@@ -14,6 +14,7 @@
 #SBATCH --mail-user=aerten3@gatech.edu
 
 set -euo pipefail
+
 PLANTCLEF_ROOT="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0"
 export PLANTCLEF_ROOT
 
@@ -33,13 +34,23 @@ export PYTORCH_ALLOC_CONF=expandable_segments:True
 cd /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction
 source .venv/bin/activate
 
+# ------------------------------------------------------------------------------
+# FIX 1: Make Exp-2-JPEG_Compression visible as a top-level python path so
+# "import utils" resolves to Exp-2-JPEG_Compression/utils for BOTH driver and Spark.
+# ------------------------------------------------------------------------------
+EXP_ROOT="/storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_Compression"
+export PYTHONPATH="${EXP_ROOT}:${PYTHONPATH:-}"
+
+echo "PYTHONPATH=${PYTHONPATH}"
+python -c "import sys; print('sys.path[0:5]=', sys.path[:5])"
+python -c "import utils; print('utils imported from:', utils.__file__)"
+
 python -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'none')"
 
 DATASET_NAME="plantclef_2026_test"
 
-IMAGES_DIR="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/PlanCLEF_test_data/images"
-
-MANIFEST_BASE="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/manifests/${DATASET_NAME}/sharded_4"
+IMAGES_DIR="${PLANTCLEF_ROOT}/data/raw/PlanCLEF_test_data/images"
+MANIFEST_BASE="${PLANTCLEF_ROOT}/manifests/${DATASET_NAME}/sharded_4"
 
 NUM_MANIFEST_SHARDS=4
 MANIFEST_SHARD_ID="${SLURM_ARRAY_TASK_ID}"
@@ -52,7 +63,7 @@ fi
 MANIFEST_PATH="${MANIFEST_BASE}/test_manifest_shard_$(printf "%02d" ${MANIFEST_SHARD_ID}).txt"
 
 # Output goes to tile_species (no JPEG compression — match reference paper exactly)
-OUTPUT_ROOT="${PLANTCLEF_ROOT}/parquet/${DATASET_NAME}/tile_species"
+OUTPUT_ROOT="${PLANTCLEF_ROOT}/parquet/${DATASET_NAME}/tile_species_direct"
 OUT_SHARD="${OUTPUT_ROOT}/shard_$(printf "%04d" ${MANIFEST_SHARD_ID})"
 
 mkdir -p "${OUTPUT_ROOT}"
@@ -78,6 +89,14 @@ head -n 5 "${MANIFEST_PATH}" || true
 rm -rf "${OUT_SHARD}"
 
 TASK_NAME="${DATASET_NAME}_tile_species_shard$(printf "%04d" ${MANIFEST_SHARD_ID})"
+
+# ------------------------------------------------------------------------------
+# FIX 2: Propagate the same python path into Spark executors.
+# Your script should read SPARK_EXECUTOR_PYTHONPATH and set:
+#   spark.conf.set("spark.executorEnv.PYTHONPATH", os.environ["SPARK_EXECUTOR_PYTHONPATH"])
+# This env var is here so you can keep sbatch as the single source of truth.
+# ------------------------------------------------------------------------------
+export SPARK_EXECUTOR_PYTHONPATH="${PYTHONPATH}"
 
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step2_B_teacher_testing/extract_testdata_tile_species.py ExtractTileSpecies \
   --dataset-name "${DATASET_NAME}" \

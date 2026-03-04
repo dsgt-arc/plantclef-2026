@@ -204,9 +204,9 @@ if __name__ == "__main__":
 ## No JPEG — with geo mask, top-10 (matching reference paper exactly)
 
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step2_B_teacher_testing/generate_submit_from_tile_species.py \
-  --in-parquet-root /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/tile_species \
+  --in-parquet-root /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/tile_species_direct \
   --pattern "shard_*/*.parquet" \
-  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260304_tile_species_majority_vote_top10_masked_noJPEG.csv \
+  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260304_tile_species_majority_vote_top10_masked.csv \
   --num-classes 7806 \
   --species-map /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_to_species_id.json \
   --class-mask-npy /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/species_masking/sw_europe_mask_bool.npy \
@@ -219,7 +219,7 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_C
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step2_B_teacher_testing/generate_submit_from_tile_species.py \
   --in-parquet-root /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/tile_species \
   --pattern "shard_*/*.parquet" \
-  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260304_tile_species_majority_vote_top10_nomask_noJPEG.csv \
+  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260304_tile_species_majority_vote_top10_nomask.csv \
   --num-classes 7806 \
   --species-map /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_to_species_id.json \
   --topk 10 \

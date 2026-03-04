@@ -8,9 +8,6 @@ Key difference from extract_testdata_embeddings.py:
   - Extracts top-K species per tile directly (torch.topk)
   - Stores per-tile species lists as JSON string (no float16 logit storage)
 
-This matches the reference paper's classification/transform.py which applies
-torch.softmax(logits, dim=1) during inference before any storage or aggregation.
-
 Output parquet schema:
   quadrat_id (string)        - image ID (filename without .jpg)
   tile_species_json (string) - JSON array of N_TILES arrays, each with top-K species indices
@@ -36,15 +33,55 @@ from pyspark.sql.types import ArrayType, IntegerType, StringType, StructType, St
 from pyspark.sql.functions import udf
 from pyspark.ml.functions import predict_batch_udf
 
-# Add Exp-2-JPEG_Compression to import path so "utils" is visible
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
+
+def _ensure_exp_root_on_path() -> Path:
+    """
+    Ensure Exp-2-JPEG_Compression is on sys.path and PYTHONPATH so that:
+      - driver can `import utils`
+      - Spark executors can `import utils` when we set spark.executorEnv.PYTHONPATH
+
+    Returns the experiment root directory (Exp-2-JPEG_Compression).
+    """
+    # Allow sbatch to override explicitly if desired
+    env_root = os.environ.get("EXP_JPEG_ROOT", "").strip()
+    if env_root:
+        exp_root = Path(env_root).expanduser().resolve()
+    else:
+        # This script lives in:
+        #   Exp-2-JPEG_Compression/step2_B_teacher_testing/extract_testdata_tile_species.py
+        exp_root = Path(__file__).resolve().parents[1]
+
+    if not (exp_root / "utils").is_dir():
+        raise FileNotFoundError(f"Expected utils/ under: {exp_root}")
+
+    exp_root_str = str(exp_root)
+
+    # Make available to the current process
+    if exp_root_str not in sys.path:
+        sys.path.insert(0, exp_root_str)
+
+    # Make available via environment for Spark executor propagation
+    cur_pp = os.environ.get("PYTHONPATH", "")
+    if cur_pp:
+        parts = cur_pp.split(":")
+        if exp_root_str not in parts:
+            os.environ["PYTHONPATH"] = exp_root_str + ":" + cur_pp
+    else:
+        os.environ["PYTHONPATH"] = exp_root_str
+
+    return exp_root
+
+
+# Ensure path is set before importing repo-local modules
+EXP_ROOT = _ensure_exp_root_on_path()
 
 from utils.serde import deserialize_image
 from utils.workflow import make_image_tiles_udf
 from utils.spark import spark_resource
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 
 def _require_env(name: str) -> str:
@@ -74,7 +111,6 @@ def _read_manifest_lines(manifest_path: Path) -> List[str]:
 
 
 def _apply_jpeg_compression(image: Image.Image, quality: int, subsampling: int) -> Image.Image:
-    """JPEG round-trip to align pixel statistics with DINOv2 training data."""
     if image.mode != "RGB":
         image = image.convert("RGB")
     buf = io.BytesIO()
@@ -84,16 +120,6 @@ def _apply_jpeg_compression(image: Image.Image, quality: int, subsampling: int) 
 
 
 class TileSpeciesExtractor:
-    """
-    Extracts top-K species per tile with softmax applied in PyTorch (float32).
-    Matches reference paper's classification/transform.py data flow.
-
-    Unlike WrappedFineTunedDINOv2 which returns raw logits, this class:
-      1. Applies torch.softmax(logits, dim=1) in float32 on GPU
-      2. Extracts top-K species indices via torch.topk
-      3. Returns only the species indices (no logits, no cls_token)
-    """
-
     def __init__(
         self,
         model_path: str,
@@ -122,23 +148,24 @@ class TileSpeciesExtractor:
         )
 
         self.data_config = timm.data.resolve_model_data_config(self.model)
-        self.transforms = timm.data.create_transform(
-            **self.data_config, is_training=False
-        )
+        self.transforms = timm.data.create_transform(**self.data_config, is_training=False)
 
-        # Custom transform for JPEG mode (Lanczos interpolation per paper Figure 5)
-        img_size = self.data_config["input_size"][-1]  # 518
-        self._pil_resize_crop = T.Compose([
-            T.Resize(img_size, interpolation=T.InterpolationMode.LANCZOS),
-            T.CenterCrop(img_size),
-        ])
-        self._to_tensor_normalize = T.Compose([
-            T.ToTensor(),
-            T.Normalize(
-                mean=self.data_config.get("mean", (0.485, 0.456, 0.406)),
-                std=self.data_config.get("std", (0.229, 0.224, 0.225)),
-            ),
-        ])
+        img_size = self.data_config["input_size"][-1]
+        self._pil_resize_crop = T.Compose(
+            [
+                T.Resize(img_size, interpolation=T.InterpolationMode.LANCZOS),
+                T.CenterCrop(img_size),
+            ]
+        )
+        self._to_tensor_normalize = T.Compose(
+            [
+                T.ToTensor(),
+                T.Normalize(
+                    mean=self.data_config.get("mean", (0.485, 0.456, 0.406)),
+                    std=self.data_config.get("std", (0.229, 0.224, 0.225)),
+                ),
+            ]
+        )
 
     def _make_predict_fn(self):
         per_tile_topk = self.per_tile_topk
@@ -149,35 +176,24 @@ class TileSpeciesExtractor:
                 for img in image_batch:
                     pil_img = deserialize_image(img)
                     pil_img = self._pil_resize_crop(pil_img)
-                    pil_img = _apply_jpeg_compression(
-                        pil_img, self.jpeg_quality, self.jpeg_subsampling
-                    )
+                    pil_img = _apply_jpeg_compression(pil_img, self.jpeg_quality, self.jpeg_subsampling)
                     images.append(self._to_tensor_normalize(pil_img))
             else:
-                images = [
-                    self.transforms(deserialize_image(img))
-                    for img in image_batch
-                ]
+                images = [self.transforms(deserialize_image(img)) for img in image_batch]
 
             model_inputs = torch.stack(images).to(self.device)
 
             with torch.no_grad():
                 logits = self.model(model_inputs)
-                # KEY DIFFERENCE: softmax in float32 on GPU, matching reference paper
                 probs = torch.softmax(logits, dim=1)
                 _, topk_indices = torch.topk(probs, k=per_tile_topk, dim=1)
 
-            return [
-                {"top_species": topk_indices[i].cpu().tolist()}
-                for i in range(len(image_batch))
-            ]
+            return [{"top_species": topk_indices[i].cpu().tolist()} for i in range(len(image_batch))]
 
         return predict
 
     def transform(self, df, input_col: str, output_col: str):
-        schema = StructType([
-            StructField("top_species", ArrayType(IntegerType())),
-        ])
+        schema = StructType([StructField("top_species", ArrayType(IntegerType()))])
         return df.withColumn(
             output_col,
             predict_batch_udf(
@@ -189,11 +205,6 @@ class TileSpeciesExtractor:
 
 
 class ExtractTileSpecies(luigi.Task):
-    """
-    Luigi task: extract per-tile top-K species with float32 softmax.
-    Produces parquet with (quadrat_id, tile_species_json).
-    """
-
     task = luigi.Parameter(default="tile_species")
     dataset_name = luigi.Parameter(default="plantclef_2026_test")
     input_path = luigi.Parameter(default="")
@@ -261,8 +272,10 @@ class ExtractTileSpecies(luigi.Task):
         n_tiles = int(self.grid_size) ** 2
 
         logger.info("=" * 88)
-        logger.info("Tile Species Extraction (softmax in PyTorch float32, matching reference paper)")
+        logger.info("Tile Species Extraction")
         logger.info("=" * 88)
+        logger.info(f"EXP_ROOT: {EXP_ROOT}")
+        logger.info(f"PYTHONPATH: {os.environ.get('PYTHONPATH', '')}")
         logger.info(f"Dataset: {self.dataset_name}")
         logger.info(f"Shard: {self.shard_id} / {self.num_shards}")
         logger.info(f"Input: {input_path}")
@@ -285,7 +298,11 @@ class ExtractTileSpecies(luigi.Task):
             with spark_resource(cores=self.cpu_count) as spark:
                 spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "false")
 
-                # --- Read images ---
+                # Critical fix: propagate PYTHONPATH into Spark executors
+                exec_pp = os.environ.get("SPARK_EXECUTOR_PYTHONPATH") or os.environ.get("PYTHONPATH")
+                if exec_pp:
+                    spark.conf.set("spark.executorEnv.PYTHONPATH", exec_pp)
+
                 file_list: Optional[List[str]] = None
                 if manifest is not None:
                     file_list = _read_manifest_lines(manifest)
@@ -310,7 +327,6 @@ class ExtractTileSpecies(luigi.Task):
 
                 df = df.repartition(self.num_partitions)
 
-                # --- Tile ---
                 logger.info(f"Tiling {self.grid_size}x{self.grid_size}...")
                 tile_udf = make_image_tiles_udf(self.grid_size)
                 df_tiles = (
@@ -323,8 +339,7 @@ class ExtractTileSpecies(luigi.Task):
                     )
                 )
 
-                # --- Extract per-tile species with float32 softmax ---
-                logger.info("Extracting per-tile species (softmax in PyTorch float32)...")
+                logger.info("Extracting per-tile species...")
                 extractor = TileSpeciesExtractor(
                     model_path=str(checkpoint_path),
                     model_name=self.model_name,
@@ -342,7 +357,6 @@ class ExtractTileSpecies(luigi.Task):
                     F.col("tile_output.top_species").alias("top_species"),
                 )
 
-                # --- Pack tiles per image ---
                 def _pack_tile_species(tile_rows):
                     import json as _json
 
@@ -350,18 +364,14 @@ class ExtractTileSpecies(luigi.Task):
                         return "[]"
                     tile_rows = sorted(tile_rows, key=lambda r: int(r["tile_index"]))
                     if len(tile_rows) != n_tiles:
-                        raise ValueError(
-                            f"Expected {n_tiles} tiles, got {len(tile_rows)}"
-                        )
+                        raise ValueError(f"Expected {n_tiles} tiles, got {len(tile_rows)}")
                     species_per_tile = [list(r["top_species"]) for r in tile_rows]
                     return _json.dumps(species_per_tile)
 
                 pack_udf = udf(_pack_tile_species, StringType())
 
                 grouped = per_tile.groupBy("image_name").agg(
-                    F.collect_list(
-                        F.struct("tile_index", "top_species")
-                    ).alias("tile_rows")
+                    F.collect_list(F.struct("tile_index", "top_species")).alias("tile_rows")
                 )
 
                 base_cols = [
@@ -374,7 +384,6 @@ class ExtractTileSpecies(luigi.Task):
 
                 final_df = grouped.select(*base_cols)
 
-                # --- Write parquet ---
                 write_mode = "overwrite" if self.overwrite else "errorifexists"
                 logger.info(f"Writing parquet ({write_mode}) to: {shard_out}")
 
@@ -382,9 +391,9 @@ class ExtractTileSpecies(luigi.Task):
                 if self.single_file:
                     writer_df = writer_df.coalesce(1)
                 else:
-                    writer_df = writer_df.repartition(
-                        self.num_partitions, "quadrat_id"
-                    ).sortWithinPartitions("quadrat_id")
+                    writer_df = writer_df.repartition(self.num_partitions, "quadrat_id").sortWithinPartitions(
+                        "quadrat_id"
+                    )
 
                 (
                     writer_df.write.mode(write_mode)
@@ -413,8 +422,8 @@ if __name__ == "__main__":
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step2_B_teacher_testing/extract_testdata_tile_species.py ExtractTileSpecies \
   --dataset-name plantclef_2026_test \
   --input-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/PlanCLEF_test_data/images \
-  --output-root /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/tile_species \
-  --output-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/tile_species/shard_0000 \
+  --output-root /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/tile_species_direct \
+  --output-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/tile_species_diret/shard_0000 \
   --checkpoint-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth \
   --manifest-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/manifests/plantclef_2026_test/sharded_4/test_manifest_shard_00.txt \
   --shard-id 0 \
@@ -435,8 +444,8 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_C
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step2_B_teacher_testing/extract_testdata_tile_species.py ExtractTileSpecies \
   --dataset-name plantclef_2026_test \
   --input-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/PlanCLEF_test_data/images \
-  --output-root /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/tile_species_JPEG \
-  --output-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/tile_species_JPEG/shard_0000 \
+  --output-root /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/tile_species_diect_JPEG \
+  --output-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/tile_species_direct_JPEG/shard_0000 \
   --checkpoint-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth \
   --manifest-path /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/manifests/plantclef_2026_test/sharded_4/test_manifest_shard_00.txt \
   --shard-id 0 \
