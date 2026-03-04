@@ -188,7 +188,13 @@ class TileSpeciesExtractor:
                 probs = torch.softmax(logits, dim=1)
                 _, topk_indices = torch.topk(probs, k=per_tile_topk, dim=1)
 
-            return [{"top_species": topk_indices[i].cpu().tolist()} for i in range(len(image_batch))]
+            # Convert to numpy once for the whole batch
+            topk_np = topk_indices.detach().cpu().to(torch.int32).numpy()
+
+            return [
+                {"top_species": topk_np[i]}  # 1D numpy array, has .shape
+                for i in range(topk_np.shape[0])
+            ]
 
         return predict
 
