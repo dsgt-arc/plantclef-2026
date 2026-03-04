@@ -131,23 +131,12 @@ if __name__ == "__main__":
 
 
 '''
-## Step 1: Run majority vote aggregation (NO geo mask — votes on full 7806 classes)
 
-python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step2_B_teacher_testing/run_step2_majority_vote_on_test_set.py \
-  --in-parquet-root /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/feature_bank_JPEG_compressed \
-  --pattern "shard_*/*.parquet" \
-  --out-parquet /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/teacher_majority_vote/majority_vote_ranked.parquet \
-  --logits-col teacher_logits_f16 \
-  --num-classes 7806 \
-  --n-tiles 16 \
-  --per-tile-topk 9
-
-
-## Step 2: Generate submission CSV (geo mask applied HERE, after aggregation)
+##  Generate submission CSV (geo mask applied HERE, after aggregation)
 
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-2-JPEG_Compression/step2_B_teacher_testing/step4_generate_test_submit_from_majority_vote.py \
   --in-parquet /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/parquet/plantclef_2026_test/teacher_majority_vote/majority_vote_ranked.parquet \
-  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260303_teacher_majority_vote_top10_masked_JPEG.csv \
+  --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/submissions/20260303_teacher_majority_vote_top10_masked.csv \
   --num-classes 7806 \
   --species-map /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_to_species_id.json \
   --class-mask-npy /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/species_masking/sw_europe_mask_bool.npy \
