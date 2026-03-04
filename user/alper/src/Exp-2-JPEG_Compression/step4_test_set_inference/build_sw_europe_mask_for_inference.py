@@ -217,7 +217,7 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/step4_test_s
   --species-col species_id \
   --lat-col latitude \
   --lon-col longitude \
-  --mode bbox_any \
+  --mode refpoint_nearest \
   --out-mask-npy /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/species_masking/sw_europe_mask_bool.npy \
   --out-stats-json /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/species_masking/sw_europe_mask_stats.json \
   --out-species-txt /storage/home/hcoda1/2/aerten3/ps-dsgt_clef2026-0/shared/plantclef_2026/species_masking/sw_europe_allowed_species_ids.txt
