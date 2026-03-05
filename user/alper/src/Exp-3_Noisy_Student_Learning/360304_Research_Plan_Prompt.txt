@@ -1,0 +1,36 @@
+I want you to use the attached plan to create the provided pipeline step by step. 
+
+I will be running this experiments on Georgia Tech's PACE computer clusters. I have code from previous attempts from a similar project plan in this folder : C:\Users\alper\Documents\PlantCLEF_2026_Local\_GitHub\plantclef-2026\user\alper\src\Exp-2-JPEG_Compression
+
+Please utilize the existing code blocks from this folder to build the new scripts. Especially use the parts that involve spark and Luigi that allow parallelization. However when it comes to the machine learning parts of the plan, make sure you strictly stick to the attached plan "360304_PlantCLEF_Revised_Research_Plan.md"
+
+Build the new scripts within this Exp-3 folder: C:\Users\alper\Documents\PlantCLEF_2026_Local\_GitHub\plantclef-2026\user\alper\src\Exp-3_Noisy_Student_Learning
+
+for the use of filtered LUCAS image set that will contain the filtered version with 77,000 images, use the filtered version of the metadata list saved here: 
+
+/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/metadata_lucas/LUCAS_metadata_SWE_Wide_lat35_50_lon-10_10_77k.csv
+
+and the full 212k image dataset is saved here:
+/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/lucas_212k_images
+
+
+I also moved around the input output storage directories. Here are some links to the parent directories that should be used:
+
+
+/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/PlanCLEF_test_data/images
+
+/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/metadata_lucas/LUCAS_metadata_SWE_Wide_lat35_50_lon-10_10_77k.csv
+
+/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_to_species_id.json
+
+/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth
+
+/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/parquet/lucas_sw77k
+
+/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/checkpoints
+
+/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/graphs
+
+/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/species_masking/sw_europe_mask_bool.npy
+
+/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/submissions
