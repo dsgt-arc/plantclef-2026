@@ -1,8 +1,10 @@
-I want you to use the attached plan to create the provided pipeline step by step. 
+I want you to use the attached plan to create the provided pipeline step by step. "C:\Users\alper\Documents\PlantCLEF_2026_Local\_GitHub\plantclef-2026\user\alper\src\Exp-3_Noisy_Student_Learning\PlantCLEF2026_Research_Pipeline_Revised.md"
+
+At this stage only create the codes for Phases 1 and 2. Create a subfolder for each phase and create the scripts in those phase subfolder
 
 I will be running this experiments on Georgia Tech's PACE computer clusters. I have code from previous attempts from a similar project plan in this folder : C:\Users\alper\Documents\PlantCLEF_2026_Local\_GitHub\plantclef-2026\user\alper\src\Exp-2-JPEG_Compression
 
-Please utilize the existing code blocks from this folder to build the new scripts. Especially use the parts that involve spark and Luigi that allow parallelization. However when it comes to the machine learning parts of the plan, make sure you strictly stick to the attached plan "360304_PlantCLEF_Revised_Research_Plan.md"
+Please utilize the existing code blocks from this folder to build the new scripts. Especially use the parts that involve spark and Luigi that allow parallelization. However when it comes to the machine learning parts of the plan, make sure you strictly stick to the attached plan "360304_PlantCLEF_Revised_Research_Plan.md" if the existing code diverges from the plan.
 
 Build the new scripts within this Exp-3 folder: C:\Users\alper\Documents\PlantCLEF_2026_Local\_GitHub\plantclef-2026\user\alper\src\Exp-3_Noisy_Student_Learning
 
