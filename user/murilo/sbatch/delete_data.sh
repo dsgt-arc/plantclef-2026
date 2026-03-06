@@ -43,13 +43,17 @@ if [ -d "$TARGET_DIR" ]; then
     echo ""
 
     echo "Step 2: Removing empty directories..."
-    find "$TARGET_DIR" -type d -empty -delete
+    find "$TARGET_DIR" -depth -type d -empty -delete
     echo "Empty directories removed."
     echo ""
 
-    echo "Step 3: Removing top-level directory..."
-    rmdir "$TARGET_DIR"
-    echo "Top-level directory removed."
+    echo "Step 3: Removing top-level directory (if still exists)..."
+    if [ -d "$TARGET_DIR" ]; then
+        rmdir "$TARGET_DIR"
+        echo "Top-level directory removed."
+    else
+        echo "Already removed in Step 2."
+    fi
 else
     echo "Directory does not exist: ${TARGET_DIR} (skipping)"
 fi
