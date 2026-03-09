@@ -211,10 +211,10 @@ class MultiViewDINOv2(
 
                 results.append(
                     {
-                        "embedding_orig": emb_orig.tolist(),
-                        "embedding_flip": emb_flip.tolist(),
-                        "embedding_rot90": emb_rot90.tolist(),
-                        "logits_orig": logits_orig.tolist(),
+                        "embedding_orig": emb_orig.astype(np.float32),
+                        "embedding_flip": emb_flip.astype(np.float32),
+                        "embedding_rot90": emb_rot90.astype(np.float32),
+                        "logits_orig": logits_orig.astype(np.float32),
                         "max_prob": max_prob,
                         "aug_consistency_overlap": int(overlap),
                         "passed_aug_consistency": bool(passed),
