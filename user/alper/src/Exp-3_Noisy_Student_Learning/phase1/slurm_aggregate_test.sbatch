@@ -9,7 +9,7 @@
 #SBATCH --output=logs/%x_%A.out
 #SBATCH --error=logs/%x_%A.err
 #SBATCH --mail-type=FAIL
-#SBATCH --mail-user=aerten3@gatech.edu
+#SBATCH --mail-user=[aerten3@gatech.edu](mailto:aerten3@gatech.edu)
 
 set -euo pipefail
 
@@ -20,16 +20,41 @@ export PYTHONPATH="/storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/
 
 mkdir -p logs
 
+# Activate environment
+
 source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
+
+# Spark driver memory
 
 export PYSPARK_SUBMIT_ARGS="--driver-memory 48g pyspark-shell"
 
-PARQUET_ROOT="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/phase1_tiles_test"
+echo "Running on host: $(hostname)"
+echo "Job: ${SLURM_JOB_NAME}  JobID: ${SLURM_JOB_ID}"
+
+# -----------------------------
+
+# Paths
+
+# -----------------------------
+
+PARQUET_BASE="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test"
+TILE_ROOT="${PARQUET_BASE}/phase1_tiles_test"
+AGG_ROOT="${PARQUET_BASE}/phase1_teacher_agg_test"
+
 GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
 
+echo "Tile parquet root: ${TILE_ROOT}"
+echo "Aggregation output: ${AGG_ROOT}"
+
+# -----------------------------
+
+# Run aggregation
+
+# -----------------------------
+
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-3_Noisy_Student_Learning/phase1/aggregate_teacher.py \
-  --in-parquet-root "${PARQUET_ROOT}/phase1_tiles_test" \
-  --out-parquet "${PARQUET_ROOT}/phase1_teacher_agg_test" \
+  --in-parquet-root "${TILE_ROOT}" \
+  --out-parquet "${AGG_ROOT}" \
   --image-col image_name \
   --aug-filter \
   --keep-top-tiles 8 \
@@ -38,6 +63,9 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-3_Noisy_
   --image-topk 64 \
   --geo-mask-npy "${GEO_MASK}"
 
-find "${PARQUET_ROOT}/phase1_teacher_agg_test" -name "*.crc" -type f -delete
+# Remove Spark CRC files
 
-echo "Done: test aggregation"
+find "${AGG_ROOT}" -name "*.crc" -type f -delete
+
+echo "Aggregation finished"
+echo "Output written to: ${AGG_ROOT}"

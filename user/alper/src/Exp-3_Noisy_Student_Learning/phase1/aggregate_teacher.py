@@ -67,7 +67,7 @@ def main() -> None:
     spark = SparkSession.builder.getOrCreate()
 
     # Load per-tile parquet
-    df = spark.read.parquet(args.in_parquet_root).where(
+    df = spark.read.option("recursiveFileLookup", "true").parquet(args.in_parquet_root).where(
         F.col(args.logits_col).isNotNull()
     )
 
