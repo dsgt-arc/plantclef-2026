@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=6
 #SBATCH --mem=64G
 #SBATCH --time=08:00:00
-#SBATCH --array=0-76%8
+#SBATCH --array=0-19%8
 #SBATCH --output=logs/%x_%A_%a.out
 #SBATCH --error=logs/%x_%A_%a.err
 #SBATCH --mail-type=FAIL
@@ -31,7 +31,7 @@ echo "Job: ${SLURM_JOB_NAME}  ArrayJobID: ${SLURM_ARRAY_JOB_ID:-}  TaskID: ${SLU
 python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 nvidia-smi || true
 
-MANIFEST_DIR="${PLANTCLEF_ROOT}/manifests/lucas_sw77k"
+MANIFEST_DIR="${PLANTCLEF_ROOT}/aerten3/manifests/lucas_77k"
 OUTPUT_ROOT="${PLANTCLEF_ROOT}/aerten3/parquet/lucas_sw77k/phase1_tiles_lucas"
 MODEL_PATH="${PLANTCLEF_ROOT}/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth"
 

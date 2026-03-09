@@ -122,6 +122,17 @@ if __name__ == "__main__":
 
 
 '''
+
+python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-3_Noisy_Student_Learning/phase1/create_manifest_shards.py \
+--mode lucas \
+--metadata-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/metadata_lucas/LUCAS_metadata_SWE_Wide_lat35_50_lon-10_10_77k.csv \
+--image-dir /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/lucas_212k_images \
+--output-dir /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/manifests/lucas_77k \
+--shard-size 4000
+
+
+
+#### THIS WAS FOR THE TEST IMAGE DATASET
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-3_Noisy_Student_Learning/phase1/create_manifest_shards.py \
 --mode test \
 --image-dir /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/PlanCLEF_test_data/images \
