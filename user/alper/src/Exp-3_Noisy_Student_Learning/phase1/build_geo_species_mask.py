@@ -327,17 +327,13 @@ if __name__ == "__main__":
 
 '''
 
- OUT_DIR="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/species_masking"
-
-  python phase1/build_geo_species_mask.py \
-    --metadata
-  "$PLANTCLEF_ROOT/data/raw/metadata_PlantCLEF_training_set/PlantCLEF2024singleplanttrainingdata.csv" \
+ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-3_Noisy_Student_Learning/phase1/build_geo_species_mask.py \
+    --metadata "/storage/project/ps-dsgt_clef2026-0/aerten3/shared/plantclef_2026/data/raw/metadata_PlantCLEF_training_set/PlantCLEF2024singleplanttrainingdata.csv" \
     --class-to-species "$PLANTCLEF_ROOT/data/raw/class_id_to_species_mapping/class_to_species_id.json" \
-    --countries France Spain Italy Switzerland \
-    --out-mask-npy "$OUT_DIR/sw_europe_mask_bool.npy" \
-    --out-species-txt "$OUT_DIR/sw_europe_allowed_species_ids.txt" \
-    --out-stats-json "$OUT_DIR/sw_europe_mask_stats.json"
-
+    --countries France \
+    --out-mask-npy "/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/species_masking/sw_europe_mask_bool.npy" \
+    --out-species-txt "/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/species_masking/sw_europe_allowed_species_ids.txt" \
+    --out-stats-json "/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/species_masking/sw_europe_mask_stats.json"
 
 
 '''

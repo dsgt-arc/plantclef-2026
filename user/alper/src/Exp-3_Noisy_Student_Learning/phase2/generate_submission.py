@@ -96,7 +96,7 @@ def generate_submission_csv(
     rows: List[Tuple[str, str]] = []
 
     for _, r in t.iterrows():
-        qid = str(r[id_col])
+        qid = os.path.splitext(str(r[id_col]))[0]
         p = f16_bytes_to_f32_vector(r[probs_col], num_classes)
 
         if class_mask is not None:
@@ -173,3 +173,19 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+'''
+##### For submission generation with the test data
+
+ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-3_Noisy_Student_Learning/phase2/generate_submission.py \
+    --in-parquet /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/parquet/plantclef_2026_test/phase1_teacher_agg_test/part-00000-067f1ecd-3015-4baa-8d86-358377e1592d-c000.snappy.parquet \
+    --out-csv /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/submissions/260306_ph1_test_dataset_01_top8_thr0_05.csv \
+    --id-col image_name \
+    --species-map /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_to_species_id.json \
+    --topk 8 \
+    --threshold 0.05 \
+    --min-k 1
+
+
+'''
