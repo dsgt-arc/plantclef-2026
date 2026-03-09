@@ -13,10 +13,13 @@ from torchvision import transforms as T
 
 from utils.serde import deserialize_image
 
+import pandas as pd
+from typing import Iterator
+
 from pyspark.sql import DataFrame
+from pyspark.sql.functions import pandas_udf
 from pyspark.ml import Transformer
 from pyspark.ml.param import Param, Params, TypeConverters
-from pyspark.ml.functions import predict_batch_udf
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol
 from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWritable
 from pyspark.sql.types import (
@@ -211,10 +214,10 @@ class MultiViewDINOv2(
 
                 results.append(
                     {
-                        "embedding_orig": emb_orig.astype(np.float32),
-                        "embedding_flip": emb_flip.astype(np.float32),
-                        "embedding_rot90": emb_rot90.astype(np.float32),
-                        "logits_orig": logits_orig.astype(np.float32),
+                        "embedding_orig": emb_orig.astype(np.float32).tolist(),
+                        "embedding_flip": emb_flip.astype(np.float32).tolist(),
+                        "embedding_rot90": emb_rot90.astype(np.float32).tolist(),
+                        "logits_orig": logits_orig.astype(np.float32).tolist(),
                         "max_prob": max_prob,
                         "aug_consistency_overlap": int(overlap),
                         "passed_aug_consistency": bool(passed),
@@ -226,11 +229,21 @@ class MultiViewDINOv2(
         return predict
 
     def _transform(self, df: DataFrame):
+        make_predict = self._make_predict_fn
+        batch_sz = self.getOrDefault(self.batchSize)
+
+        @pandas_udf(OUTPUT_SCHEMA)
+        def _embed(tile_iter: Iterator[pd.Series]) -> Iterator[pd.DataFrame]:
+            predict_fn = make_predict()
+            for tile_series in tile_iter:
+                raw_list = tile_series.tolist()
+                all_results: list[dict] = []
+                for start in range(0, len(raw_list), batch_sz):
+                    batch = raw_list[start : start + batch_sz]
+                    all_results.extend(predict_fn(np.asarray(batch, dtype=object)))
+                yield pd.DataFrame(all_results)
+
         return df.withColumn(
             self.getOutputCol(),
-            predict_batch_udf(
-                make_predict_fn=self._make_predict_fn,
-                return_type=OUTPUT_SCHEMA,
-                batch_size=self.getOrDefault(self.batchSize),
-            )(self.getInputCol()),
+            _embed(df[self.getInputCol()]),
         )
