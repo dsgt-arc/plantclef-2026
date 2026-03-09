@@ -31,8 +31,8 @@ echo "Job: ${SLURM_JOB_NAME}  ArrayJobID: ${SLURM_ARRAY_JOB_ID:-}  TaskID: ${SLU
 python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
 nvidia-smi || true
 
-MANIFEST_DIR="${PLANTCLEF_ROOT}/manifests/plantclef_2026_test"
-OUTPUT_ROOT="${PLANTCLEF_ROOT}/aerten3/parquet/lucas_sw77k/phase1_tiles_test"
+MANIFEST_DIR="${PLANTCLEF_ROOT}/aerten3/manifests/plantclef_2026_test/new_shards"
+OUTPUT_ROOT="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/phase1_tiles_test"
 MODEL_PATH="${PLANTCLEF_ROOT}/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth"
 
 OUT_SHARD="${OUTPUT_ROOT}/shard_$(printf '%04d' ${SLURM_ARRAY_TASK_ID})"

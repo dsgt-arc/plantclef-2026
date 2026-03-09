@@ -24,7 +24,7 @@ source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-
 
 export PYSPARK_SUBMIT_ARGS="--driver-memory 48g pyspark-shell"
 
-PARQUET_ROOT="${PLANTCLEF_ROOT}/aerten3/parquet/lucas_sw77k"
+PARQUET_ROOT="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/phase1_tiles_test"
 GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
 
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-3_Noisy_Student_Learning/phase1/aggregate_teacher.py \

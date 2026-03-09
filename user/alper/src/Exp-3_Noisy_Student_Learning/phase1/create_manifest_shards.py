@@ -118,3 +118,14 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
+'''
+python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-3_Noisy_Student_Learning/phase1/create_manifest_shards.py \
+--mode test \
+--image-dir /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/PlanCLEF_test_data/images \
+--output-dir /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/manifests/plantclef_2026_test/new_shards \
+--shard-size 550
+
+'''
