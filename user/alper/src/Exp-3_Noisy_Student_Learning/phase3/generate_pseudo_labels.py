@@ -35,7 +35,7 @@ from utils.io_bytes import f16_bytes_list_to_f32_matrix
 class PseudoLabelConfig:
     temperature: float = 2.0
     aug_filter: bool = True
-    tile_filter_k: int = 16       # for Noisy-OR aggregation; 16 = no filter
+    tile_filter_k: int = 6        # top-6 tiles for Noisy-OR (Phase 2 optimal); all tiles still stored
     threshold: float = 0.1        # absolute confidence threshold for pseudo-labels
     max_labels: int = 10          # cap pseudo-labels per image
     image_topk: int = 64          # top-K classes kept in Noisy-OR output
