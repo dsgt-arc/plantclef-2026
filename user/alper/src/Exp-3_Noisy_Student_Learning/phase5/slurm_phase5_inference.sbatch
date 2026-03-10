@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=p5-student-infer
 #SBATCH --account=paceship-dsgt_clef2026
-#SBATCH --partition=gpu-v100
-#SBATCH --qos=embers
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=16G
+#SBATCH --partition=gpu-rtx6000
+#SBATCH --qos=inferno
+#SBATCH --gres=gpu:rtx_6000:1
+#SBATCH --cpus-per-task=6
+#SBATCH --mem=64G
 #SBATCH --time=01:00:00
 #SBATCH --output=logs/%x_%A.out
 #SBATCH --error=logs/%x_%A.err

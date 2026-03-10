@@ -2,7 +2,7 @@
 #SBATCH --job-name=p1-test-emb
 #SBATCH --account=paceship-dsgt_clef2026
 #SBATCH --partition=gpu-rtx6000
-#SBATCH --qos=embers
+#SBATCH --qos=inferno
 #SBATCH --gres=gpu:rtx_6000:1
 #SBATCH --cpus-per-task=6
 #SBATCH --mem=64G
