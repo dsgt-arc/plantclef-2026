@@ -32,9 +32,10 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-3_Noisy_
   --out-dir "${OUT_DIR}" \
   --species-map "${SPECIES_MAP}" \
   --class-mask-npy "${GEO_MASK}" \
-  --temperatures 1.0,1.5,2.0,3.0 \
+  --temperatures 2.0,2.5,3.0 \
   --aug-filter \
-  --tile-filter-k 16 \
+  --tile-filter-ks 4,6,8,10,12,16 \
+  --thresholds 0.03,0.05,0.07 \
   --topk 10
 
-echo "Done: temperature sweep"
+echo "Done: hyperparameter sweep (3 temps x 6 tile-ks x 3 thresholds = 54 submissions)"
