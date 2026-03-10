@@ -23,8 +23,8 @@ mkdir -p logs
 
 source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
 
-DATASET="${PLANTCLEF_ROOT}/aerten3/phase3_student_dataset/lucas_pseudo_labels.parquet"
-OUT_DIR="${PLANTCLEF_ROOT}/aerten3/phase4_checkpoints/run_kl_default"
+DATASET="${PLANTCLEF_ROOT}/aerten3/parquet/lucas_sw77k/phase3_student_dataset/lucas_pseudo_labels.parquet"
+OUT_DIR="${PLANTCLEF_ROOT}/aerten3/checkpoints/phase4_checkpoints/run_kl_default"
 
 # UPDATE partition name if needed (check: scontrol show partition)
 # Common PACE GPU partitions: gpu-v100, gpu-a100, gpu-h100
