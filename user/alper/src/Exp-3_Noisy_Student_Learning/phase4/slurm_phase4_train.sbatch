@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=p4-student-train
 #SBATCH --account=paceship-dsgt_clef2026
-#SBATCH --partition=gpu-v100
+#SBATCH --partition=gpu-rtx6000
 #SBATCH --qos=embers
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=32G
+#SBATCH --gres=gpu:rtx_6000:1
+#SBATCH --cpus-per-task=6
+#SBATCH --mem=64G
 #SBATCH --time=08:00:00
 #SBATCH --output=logs/%x_%A.out
 #SBATCH --error=logs/%x_%A.err
