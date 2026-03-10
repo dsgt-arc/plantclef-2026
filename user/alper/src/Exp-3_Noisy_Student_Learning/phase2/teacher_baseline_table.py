@@ -133,7 +133,7 @@ def main() -> None:
             num_classes=args.num_classes,
             class_mask=submission_mask,
             topk=args.topk,
-            threshold=0.0,
+            threshold=0.03,
             min_k=1,
             id_col=args.id_col,
         )
