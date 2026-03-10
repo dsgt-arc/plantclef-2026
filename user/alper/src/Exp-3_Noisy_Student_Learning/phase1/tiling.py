@@ -6,10 +6,15 @@ Test (square images): 4x4 grid = 16 tiles
 from __future__ import annotations
 
 import hashlib
+import logging
 
 import numpy as np
 import pandas as pd
-from PIL import Image
+from PIL import Image, ImageFile
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+log = logging.getLogger(__name__)
 
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
@@ -130,14 +135,18 @@ def make_tiles_udf(dataset_type: str = "lucas"):
     def tiles_udf(data_series: pd.Series, id_series: pd.Series) -> pd.Series:
         all_tiles = []
         for raw_bytes, image_id in zip(data_series, id_series):
-            img = deserialize_image(raw_bytes)
-            if img.mode != "RGB":
-                img = img.convert("RGB")
+            try:
+                img = deserialize_image(raw_bytes)
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
 
-            if dataset_type == "lucas":
-                tile_structs = _tile_lucas(img, str(image_id))
-            else:
-                tile_structs = _tile_test(img)
+                if dataset_type == "lucas":
+                    tile_structs = _tile_lucas(img, str(image_id))
+                else:
+                    tile_structs = _tile_test(img)
+            except (OSError, Exception) as e:
+                log.warning("Skipping corrupted image %s: %s", image_id, e)
+                tile_structs = []
 
             all_tiles.append(tile_structs)
         return pd.Series(all_tiles)
@@ -146,10 +155,14 @@ def make_tiles_udf(dataset_type: str = "lucas"):
     def tiles_udf_test_only(data_series: pd.Series) -> pd.Series:
         all_tiles = []
         for raw_bytes in data_series:
-            img = deserialize_image(raw_bytes)
-            if img.mode != "RGB":
-                img = img.convert("RGB")
-            all_tiles.append(_tile_test(img))
+            try:
+                img = deserialize_image(raw_bytes)
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+                all_tiles.append(_tile_test(img))
+            except (OSError, Exception) as e:
+                log.warning("Skipping corrupted image: %s", e)
+                all_tiles.append([])
         return pd.Series(all_tiles)
 
     if dataset_type == "test":

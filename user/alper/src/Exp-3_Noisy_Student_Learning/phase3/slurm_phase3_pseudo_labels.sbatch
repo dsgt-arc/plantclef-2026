@@ -26,9 +26,12 @@ TILE_ROOT="${PLANTCLEF_ROOT}/aerten3/parquet/lucas_sw77k/phase1_tiles_lucas"
 GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
 OUT_PATH="${PLANTCLEF_ROOT}/aerten3/phase3_student_dataset/lucas_pseudo_labels.parquet"
 
-# Best config from Phase 2 sweep on TEST data: T=2.0, k=6, thr=0.03
-# LUCAS may behave differently — keep tile_filter_k=16 (no filter) so student
-# dataloader can sweep k at training time. Threshold kept at 0.03 (test-tuned).
+# Best config from Phase 2 sweep on TEST data: T=2.0, k=6, thr=0.03 (F1=0.281)
+# tile_filter_k=16 (no filter) for LUCAS pseudo-label generation because:
+#   1. k=6 was tuned on test data — LUCAS may behave differently
+#   2. All aug-passing tiles are stored regardless for student training
+#   3. Phase 4 TileFilterConfig sweeps tile selection at training time (ablations A4/A5)
+#   4. KL-div distillation uses full teacher_probs, not just hard pseudo-labels
 TEMPERATURE=2.0
 THRESHOLD=0.03
 TILE_FILTER_K=16
