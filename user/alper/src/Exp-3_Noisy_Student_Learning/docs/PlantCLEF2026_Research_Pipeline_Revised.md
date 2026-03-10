@@ -152,31 +152,35 @@ This shows the incremental value of each teacher improvement.
 
 Teacher aggregation (Noisy-OR → image-level predictions) is re-run from the raw tiles using the best config from Phase 2 (best temperature, aug filter, tile filter K). This produces per-image pseudo-labels while preserving access to all tile embeddings for the student.
 
-### 3.2 Pseudo-label Quality Filtering
+### 3.2 Pseudo-label Filtering
 
-**Step A**: Per image, keep species with aggregated probability above a threshold, capped at 10:
-```python
-keep = [s for s in species if P_species[s] > min_prob]  # default min_prob=0.05
-keep = keep[:10]  # safety ceiling
-# Sweep min_prob: {0.02, 0.05, 0.1}
-```
-This ensures images with 2 real species get 2 pseudo-labels, not 10 padded with noise.
+Single-stage absolute confidence filtering with geo species masking applied first:
 
-**Step B**: Per species across the full dataset:
 ```python
-for species in all_predicted_species:
-    thresh = np.percentile(all_probs_for_species, 99.5)
-    keep only predictions with prob > thresh
+# For each LUCAS image:
+teacher_probs = noisy_or_output                    # [7806] from Noisy-OR aggregation
+teacher_probs[~geo_species_mask] = 0.0             # zero out species outside SW Europe
+pseudo_labels = [s for s in range(7806) if teacher_probs[s] >= threshold]
+pseudo_labels = sorted(pseudo_labels, key=lambda s: teacher_probs[s], reverse=True)[:10]
+# Sweep threshold: {0.1, 0.15, 0.2, 0.3}
 ```
 
-Step A removes per-image noise (low-confidence guesses). Step B removes per-species noise (species the teacher is generally uncertain about).
+**Order**: Geo masking → threshold → cap at 10. Species outside the geographic region are eliminated before thresholding so they never become pseudo-labels, even if the teacher is falsely confident.
 
-### 3.3 Pseudo-label Statistics Check
+**Why absolute threshold, not per-species percentile**: Without ground-truth labels on LUCAS, we cannot distinguish a species the teacher correctly predicts often from one it systematically confuses. A per-species percentile filter (e.g., keep top 0.5%) would treat both cases identically, throwing away valid predictions for common species. An absolute threshold respects the teacher's confidence directly — a prediction of 0.4 is equally meaningful whether the species is common or rare.
+
+**Tightening across self-training rounds** (Phase 6): The threshold increases as the model generating pseudo-labels improves:
+- Round 0 (teacher → student): threshold = 0.1 (loose — student needs volume to learn)
+- Round 1 (student R0 → student R1): threshold = 0.15
+- Round 2 (student R1 → student R2): threshold = 0.2
+
+### 3.3 Pseudo-label Statistics Check  !!!!!!!!!
 
 Before proceeding, verify:
-- **Average labels per image**: target 2-5 (typical vegetation plots have 2-4 species, rarely 6+). If <1 → filtering too strict. If 8+ → too loose.
+- **Average labels per image**: target 2-5 (typical vegetation plots have 2-4 species, rarely 6+). If <1 → threshold too strict. If 8+ → too loose.
 - **Species coverage**: how many of 7806 species have any pseudo-labels? Target 2000+.
 - **Confidence distribution**: plot histogram of pseudo-label probabilities.
+- **Geo mask impact**: how many predictions were blocked by species masking?
 
 ### 3.4 Output Dataset
 
@@ -201,10 +205,22 @@ Each training example stores **all aug-passing tiles** (not pre-filtered by conf
 
 **Purpose**: Learn better aggregation than the heuristic teacher.
 
-### 4.1 Model: CrossRegionTransformer
+### 4.1 Model: CrossRegionTransformer (v4)
 
 **Input**: Tile embeddings [N x 768] (variable-length, with attention mask for padding)
 **Output**: Multi-label species probabilities [7806]
+
+Architecture: `Cross_Region_Transformer_v4.py` — adapted from Exp-2's v3 with key changes:
+
+| Design Choice | v3 (Exp-2) | v4 (Exp-3) | Rationale |
+|---------------|-----------|-----------|-----------|
+| Positional embeddings | Learnable per-tile position | **Removed** | Top-down vegetation has no spatial prior; 90° rotation consistency loss explicitly assumes position-invariance |
+| Metadata injection | Gated lat/lon/alt/year into CLS | **Removed** | Test dataset has no metadata |
+| Attention masking | None (fixed tile count) | **Padding mask** | Variable tile count after aug consistency filtering |
+| Input dropout | Dropout on projected sequence | **Embedding dropout** on raw 768-dim input | Regularization before projection |
+| Attention weights | Not returned | **Optional return** | Needed for attention heatmap visualization (Phase 7.2) |
+
+The model operates as a **set function** over tiles — fully order-invariant, content-only. This is the correct inductive bias for top-down vegetation plots where species can appear in any tile position.
 
 Tile count N varies per image after aug consistency filtering (typically 10-16 tiles pass). The dataloader applies an additional configurable tile filtering strategy before batching:
 
@@ -387,7 +403,7 @@ Track across rounds:
 | Noisy-OR temperature T | {1.0, 1.5, 2.0, 3.0} | Teacher |
 | Aug consistency threshold | {4, 8, 12} overlap out of 16 | Filtering |
 | Keep-top-tiles K | {4, 6, 8, 12, 16} | Filtering |
-| Percentile cutoff | {99.0, 99.5, 99.9} | Pseudo-labels |
+| Pseudo-label threshold | {0.1, 0.15, 0.2, 0.3} | Pseudo-labels |
 | Negative sample count | {32, 64, 128} | Student training |
 | Consistency lambda | {0.01, 0.05, 0.1, 0.5} | Student training |
 | Consistency warmup epochs | {3, 5, 8} | Student training |
@@ -439,7 +455,7 @@ Fits comfortably in 1-2 months with days between experiments for analysis.
 **Contributions**:
 1. CrossRegionTransformer: learned tile aggregation that outperforms heuristic Noisy-OR/majority vote
 2. Multi-view consistency regularization adapted from semi-supervised learning to embedding-space KD
-3. Quality-filtered pseudo-label pipeline: aug consistency + tile confidence + species percentile
+3. Quality-filtered pseudo-label pipeline: geo masking + absolute confidence threshold + progressive tightening
 4. Comparison of negative sampling vs soft distillation for positive-only multi-label KD
 5. Self-training loop that iteratively improves pseudo-labels
 6. All on frozen embeddings — 100x more efficient than end-to-end
@@ -470,7 +486,7 @@ Student R1 (self-training) — improves further
 - ~30-40% chance student ≈ teacher
 - Unlikely student is worse if pseudo-labels are filtered well
 
-**Biggest risk**: Pseudo-label precision too low → student learns noise. The species percentile filtering (Phase 3.2) and augmentation consistency (Phase 1.2) are the primary safeguards.
+**Biggest risk**: Pseudo-label precision too low → student learns noise. The absolute confidence threshold (Phase 3.2), geo species masking, and augmentation consistency (Phase 1.2) are the primary safeguards.
 
 **Early signals**:
 - Teacher F1 >= 0.24 after Phase 2 → pipeline is healthy
@@ -483,8 +499,8 @@ Student R1 (self-training) — improves further
 | Signal | Check After | Healthy Range | Action If Bad |
 |--------|-------------|---------------|---------------|
 | Teacher F1 | Phase 2 | >= 0.24 | Debug preprocessing |
-| Pseudo-labels/image | Phase 3 | 2-5 species avg | Adjust percentile |
-| Species coverage | Phase 3 | 2000+ species | Loosen filtering |
+| Pseudo-labels/image | Phase 3 | 2-5 species avg | Adjust threshold |
+| Species coverage | Phase 3 | 2000+ species | Lower threshold |
 | Student > Teacher | Phase 5 | +0.01 minimum | Check loss function, try other variant |
 | Self-training gain | Phase 6 | +0.005 per round | Stop if no gain |
 
@@ -500,4 +516,4 @@ Student R1 (self-training) — improves further
 | `train_student.py` | CREATE/MODIFY: BCE neg-sampling + KL distillation + consistency loss (two-component), variable tile handling |
 | `student_inference.py` | CREATE: test-time student pipeline |
 | `self_train.py` | CREATE: student → pseudo-labels → retrain loop |
-| `Cross_Region_Transformer_v3.py` | MODIFY: attention mask for variable tile count, embedding dropout, attention viz hook |
+| `Cross_Region_Transformer_v4.py` | CREATE: v4 model — no positional embeddings, no metadata, attention masking, embedding dropout, attention weight export |

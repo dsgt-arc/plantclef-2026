@@ -19,6 +19,22 @@ Phase 2: Teacher Benchmark
   2. generate_submission.py     - Aggregated probs -> Kaggle CSV (top-10 species)
   3. temperature_sweep.py       - Re-aggregate with T={1.0, 1.5, 2.0, 3.0}
   4. teacher_baseline_table.py  - 4 systematic config variations (T1-T4)
+
+Phase 3: Pseudo-Label Generation (LUCAS)
+  1. generate_pseudo_labels.py  - Shard-by-shard: Noisy-OR + geo mask + threshold -> per-image parquet
+     Output schema: image_name, num_tiles, 3x tile_embeddings (f16 packed),
+                    tile_max_probs, tile_indices, pseudo_labels, teacher_probs [7806]
+
+Phase 4: Student Training
+  1. dataset.py          - PseudoLabelDataset + TileFilterConfig + collate_fn
+  2. losses.py           - BCENegSamplingLoss (variant A), SoftDistillationLoss (variant B), ConsistencyLoss
+  3. train_student.py    - Training loop: pseudo-label loss + consistency warmup + checkpointing
+  Model: models/Cross_Region_Transformer_v4.py (CrossRegionTransformer)
+
+Phase 5: Student Inference
+  1. student_inference.py - Load test tiles + student checkpoint -> probs parquet + submission CSV
+     Reuses: phase2/generate_submission.py formatting, phase2/aggregate_tiles.py tile loading
+     Output: student_image_probs_f16 parquet (compatible with generate_submission.py --probs-col)
 ```
 
 ## Key Differences from Exp-2
@@ -39,6 +55,10 @@ Phase 2: Teacher Benchmark
 | Test images | `$PLANTCLEF_ROOT/data/raw/PlanCLEF_test_data/images` |
 | DINOv2 checkpoint | `$PLANTCLEF_ROOT/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth` |
 | Parquet output | `$PLANTCLEF_ROOT/aerten3/parquet/lucas_sw77k/` |
+| Test parquet | `$PLANTCLEF_ROOT/aerten3/parquet/plantclef_2026_test/` |
+| Phase 3 output | `$PLANTCLEF_ROOT/aerten3/phase3_student_dataset/` |
+| Phase 4 checkpoints | `$PLANTCLEF_ROOT/aerten3/phase4_checkpoints/` |
+| Geo species mask | `$PLANTCLEF_ROOT/aerten3/species_masking/sw_europe_mask_bool.npy` |
 | Manifests | `$PLANTCLEF_ROOT/manifests/` |
 
 ## PYTHONPATH
@@ -67,6 +87,18 @@ sbatch phase1/slurm_aggregate_lucas.sbatch
 # Phase 2: Benchmarks
 sbatch phase2/slurm_phase2_sweep.sbatch
 sbatch phase2/slurm_phase2_baselines.sbatch
+
+# Phase 3: Pseudo-labels (CPU-only, after Phase 1 LUCAS + Phase 2 sweep)
+# Update TEMPERATURE in sbatch to best from Phase 2 sweep
+sbatch phase3/slurm_phase3_pseudo_labels.sbatch
+
+# Phase 4: Student training (GPU, after Phase 3)
+# Update partition name if needed
+sbatch phase4/slurm_phase4_train.sbatch
+
+# Phase 5: Student inference (GPU, ~1 hr)
+sbatch phase5/slurm_phase5_inference.sbatch
+# Submit CSV to Kaggle. Compare Student F1 vs Teacher F1 (Phase 2).
 ```
 
 ## Code Style
