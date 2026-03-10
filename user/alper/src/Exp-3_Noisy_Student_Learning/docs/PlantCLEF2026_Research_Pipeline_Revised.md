@@ -66,14 +66,16 @@ For each **kept** tile (passed aug consistency in 1.2), run 3 forward passes and
 
 All 3 views are used during student training for consistency regularization (see Phase 4.2).
 
-### 1.4 Tile Confidence Filtering
+### 1.4 Tile Confidence Filtering (Teacher Aggregation Only)
 
 Per image, rank tiles by `max_prob`. Keep only the top-K most confident tiles:
 ```python
 --keep-top-tiles K  # default K=8, sweep {4, 6, 8, 12, 16} later
 ```
 
-This removes background/soil tiles that dilute the aggregation signal.
+This removes background/soil tiles that dilute the teacher's aggregation signal.
+
+**Important**: This filtering is applied only during teacher aggregation (Phase 1.5 / Phase 2). The raw per-tile parquet stores **all 16 tiles** with their `max_prob` and `passed_aug_consistency` metadata intact. Phase 3 reads from this raw output, allowing the student's tile filtering strategy to be a training-time hyperparameter (see Phase 4.1).
 
 ### 1.5 Noisy-OR Aggregation with Temperature
 
@@ -144,12 +146,11 @@ This shows the incremental value of each teacher improvement.
 
 **Purpose**: Create training labels for the student.
 
-### 3.1 Run Teacher Pipeline on LUCAS
+### 3.1 Build Student Dataset from Phase 1 Raw Tiles
 
-Same pipeline as Phase 2 best config, applied to LUCAS dataset:
-- Tiling → aug consistency → tile filtering → Noisy-OR → geo mask
+**No re-extraction needed.** Phase 1 already stored all 16 tiles per LUCAS image in the raw per-tile parquet (`phase1_tiles_lucas/`), including embeddings, logits, `max_prob`, and `passed_aug_consistency` for every tile. Phase 3 reads from this existing output.
 
-Also store **tile embeddings** (768-dim) for each kept tile — these are the student's input.
+Teacher aggregation (Noisy-OR → image-level predictions) is re-run from the raw tiles using the best config from Phase 2 (best temperature, aug filter, tile filter K). This produces per-image pseudo-labels while preserving access to all tile embeddings for the student.
 
 ### 3.2 Pseudo-label Quality Filtering
 
@@ -179,15 +180,20 @@ Before proceeding, verify:
 
 ### 3.4 Output Dataset
 
-Each training example:
+Each training example stores **all aug-passing tiles** (not pre-filtered by confidence):
 - `image_id`
-- `tile_embeddings_orig`: [N_kept_tiles x 768] (variable N per image)
-- `tile_embeddings_flip`: [N_kept_tiles x 768] (flipped view for consistency loss)
-- `tile_embeddings_rot90`: [N_kept_tiles x 768] (90°-rotated view for consistency loss)
-- `tile_mask`: boolean mask for padding (since N varies)
+- `tile_embeddings_orig`: [N_aug_passed x 768] (all tiles that passed aug consistency)
+- `tile_embeddings_flip`: [N_aug_passed x 768] (flipped view for consistency loss)
+- `tile_embeddings_rot90`: [N_aug_passed x 768] (90°-rotated view for consistency loss)
+- `tile_max_probs`: [N_aug_passed] (per-tile confidence — used by dataloader for filtering)
+- `tile_indices`: [N_aug_passed] (original tile positions 0-15)
+- `tile_mask`: boolean mask for padding (since N varies across images)
 - `pseudo_labels`: list of positive species IDs only
+- `teacher_probs`: [7806] full teacher probability vector (for KL-div distillation)
 
 **Key**: Pseudo-labels are **positive only**. All other species are **unknown, not negative**.
+
+**Key**: Tile confidence filtering is deferred to the student dataloader (Phase 4.1), making it a sweepable hyperparameter.
 
 ---
 
@@ -197,12 +203,21 @@ Each training example:
 
 ### 4.1 Model: CrossRegionTransformer
 
-**Input**: Tile embeddings [16 x 768] (fixed-length — both LUCAS and test produce 16 tiles)
+**Input**: Tile embeddings [N x 768] (variable-length, with attention mask for padding)
 **Output**: Multi-label species probabilities [7806]
 
-All images produce exactly 16 tiles, so no padding or attention masking is needed. For LUCAS images, the 16 embeddings come from two scales (12 grid tiles at 400x400 upscaled + 4 random crops at 518x518 native), providing a multi-scale representation that the transformer can learn to weight via attention.
+Tile count N varies per image after aug consistency filtering (typically 10-16 tiles pass). The dataloader applies an additional configurable tile filtering strategy before batching:
 
-### 4.2 Training Objective — Three Loss Components
+```
+--tile-strategy fixed_k --tile-k 8        # keep top-8 by max_prob (mirrors teacher default)
+--tile-strategy threshold --tile-min 0.05  # keep tiles with max_prob >= 0.05
+--tile-strategy relative --tile-alpha 0.3  # keep tiles within 30% of best tile's max_prob
+--tile-strategy none                       # keep all aug-passing tiles (let transformer decide)
+```
+
+Tiles are padded to the batch maximum and masked via attention mask. For LUCAS images, the tile set spans two scales (12 grid tiles at 400x400 upscaled + 4 random crops at 518x518 native), providing a multi-scale representation that the transformer can learn to weight via attention.
+
+### 4.2 Training Objective — Two Loss Components
 
 The student is trained with a composite loss where two complementary losses serve fundamentally different roles:
 
@@ -271,19 +286,19 @@ Free regularization — prevents overfitting to specific embedding features.
 ```python
 # Pseudo-label loss: fixed weight 1.0 throughout (anchor signal)
 # Consistency loss: linear ramp from 0 → lambda_cons over warmup epochs
-# Co-graph loss: fixed small lambda
 
 lambda_cons_t = min(1.0, epoch / warmup_epochs) * lambda_cons
 
-L_total = L_pseudo + lambda_cons_t * L_consistency + lambda_co * L_co_graph
+L_total = L_pseudo + lambda_cons_t * L_consistency
 ```
 
 **Why warmup**: In early epochs the student knows nothing — pseudo-label loss must dominate so it learns basic species recognition. As training progresses, consistency loss ramps up to push the student beyond the teacher's ceiling. This follows FixMatch/MeanTeacher convention.
 
+**Why no co-graph loss**: An explicit co-occurrence graph was considered but dropped. The soft KL-div distillation already transfers inter-species relationships (the teacher's full probability landscape encodes co-occurrence as "dark knowledge"). The transformer's self-attention also learns tile-interaction patterns that capture co-occurrence structurally. Adding a graph built from the same noisy pseudo-labels would be a lossy, redundant signal with confirmation bias risk. Co-occurrence is instead leveraged as post-hoc inference reranking (Phase 7.3).
+
 **Defaults:**
 - `lambda_cons`: 0.1 (sweep {0.01, 0.05, 0.1, 0.5})
 - `warmup_epochs`: 5 (sweep {3, 5, 8})
-- `lambda_co`: 0.01 (sweep {0.001, 0.01, 0.05})
 
 ### 4.3 Training Configuration
 
@@ -304,11 +319,10 @@ L_total = L_pseudo + lambda_cons_t * L_consistency + lambda_co * L_co_graph
 | A4 | A3 + aug consistency filtering (Phase 1.2) | Filtering unstable tiles helps | 5 |
 | A5 | A4 + top-K tile filtering (Phase 1.4) | Removing background tiles helps | 5 |
 | A6 | A5 + species percentile filtering (Phase 3.2) | Full filtering pipeline | 5 |
-| A7 | A6 + co-graph consistency loss | Ecological priors help | 5 |
-| A8 | A7 + 1 round self-training (Phase 6) | Self-training adds value | 7 |
-| A9 | A8 + 2nd round self-training | Diminishing returns | 7 |
+| A7 | A6 + 1 round self-training (Phase 6) | Self-training adds value | 7 |
+| A8 | A7 + 2nd round self-training | Diminishing returns | 7 |
 
-**Total ablation cost**: ~49 GPU-hrs (~6-7 days at 8 hrs/day)
+**Total ablation cost**: ~42 GPU-hrs
 
 **Ablation story for paper**: Each row adds one component → monotonically increasing F1 → proves every piece matters.
 
@@ -375,7 +389,6 @@ Track across rounds:
 | Keep-top-tiles K | {4, 6, 8, 12, 16} | Filtering |
 | Percentile cutoff | {99.0, 99.5, 99.9} | Pseudo-labels |
 | Negative sample count | {32, 64, 128} | Student training |
-| Co-graph lambda | {0.001, 0.01, 0.05} | Student training |
 | Consistency lambda | {0.01, 0.05, 0.1, 0.5} | Student training |
 | Consistency warmup epochs | {3, 5, 8} | Student training |
 | LUCAS tiling strategy | {4x3 grid + 4 random crops (default), 4x4 grid only} | Embedding extraction |
@@ -387,7 +400,6 @@ Track across rounds:
 |----------|-----|-------|
 | Attention heatmap | Extract pooling_attention weights, overlay on 4x4 grid | Student learns which tiles are informative |
 | Consistency improvement | Show cases where multi-view loss corrected predictions | Augmentation regularization works |
-| Co-graph case study | Diff predictions with/without co-graph | Ecological reasoning |
 | Self-training convergence | Plot F1 + pseudo-label stats per round | Iterative improvement |
 | Per-species P/R | Bin by frequency, compare teacher vs student | Where student helps most |
 | Efficiency table | Wall-clock times per stage | 100x cheaper than end-to-end |
@@ -395,6 +407,7 @@ Track across rounds:
 ### 7.3 Score Maximization (if time permits)
 
 - JPEG compression on test dataset tiles only (quality 85, 4:2:2 subsampling [Pillow value 1], Lanczos interpolation, tiles downscaled to 518×518) — expected +0.035-0.04 F1. LUCAS images are already JPEG-compressed (Eurostat 2006) so JPEG round-tripping is skipped for LUCAS.
+- **Co-occurrence reranking at inference** — build PMI-weighted co-occurrence graph from teacher predictions (same method as Exp-2: `build_cograph_ecology_from_step2_top8_pmi.py`), apply as post-hoc reranking on student test predictions. Boost species that co-occur with high-confidence seed species: `p' = clip(p + lambda * sum_seeds p_i * f(w_ij))`. Safer than training-time co-graph loss because it cannot contaminate learned representations.
 - Ensemble 3 student seeds
 - Teacher-student weighted average
 - Test-time augmentation (flip)
@@ -484,7 +497,7 @@ Student R1 (self-training) — improves further
 | `teacher_classify_tiles.py` | CREATE: standalone PyTorch, aug consistency, 3-view embedding extraction (orig/flip/rot90), tile filtering |
 | `teacher_aggregate.py` | CREATE: Noisy-OR with temperature, geo mask, submission CSV |
 | `generate_pseudolabels.py` | CREATE: percentile filtering, output dataset with 3-view embeddings |
-| `train_student.py` | CREATE/MODIFY: BCE neg-sampling + KL distillation + consistency loss, variable tile handling |
+| `train_student.py` | CREATE/MODIFY: BCE neg-sampling + KL distillation + consistency loss (two-component), variable tile handling |
 | `student_inference.py` | CREATE: test-time student pipeline |
 | `self_train.py` | CREATE: student → pseudo-labels → retrain loop |
 | `Cross_Region_Transformer_v3.py` | MODIFY: attention mask for variable tile count, embedding dropout, attention viz hook |

@@ -37,6 +37,11 @@ def main() -> None:
     ap.add_argument("--no-aug-filter", action="store_false", dest="aug_filter")
     ap.add_argument("--tile-filter-k", type=int, default=16, help="Keep top-K tiles (16=all)")
     ap.add_argument("--topk", type=int, default=10, help="Top-K species per image in submission")
+    ap.add_argument(
+        "--thresholds",
+        default="0.0,0.01,0.03,0.05",
+        help="Comma-separated probability thresholds (default: 0.0,0.01,0.03,0.05)",
+    )
 
     ap.add_argument("--num-classes", type=int, default=7806)
     ap.add_argument("--image-topk", type=int, default=64)
@@ -45,6 +50,7 @@ def main() -> None:
     args = ap.parse_args()
 
     temps = [float(t.strip()) for t in args.temperatures.split(",")]
+    thresholds = [float(t.strip()) for t in args.thresholds.split(",")]
     os.makedirs(args.out_dir, exist_ok=True)
 
     # Load tile data once
@@ -75,34 +81,37 @@ def main() -> None:
 
         image_probs = run_aggregation(tile_data, config, image_col=args.id_col)
 
-        # Save aggregated parquet
+        # Save aggregated parquet (once per temperature)
         parquet_path = os.path.join(args.out_dir, f"sweep_T{temp:.1f}.parquet")
         save_aggregated(image_probs, parquet_path, id_col=args.id_col)
 
-        # Generate submission CSV
-        csv_path = os.path.join(args.out_dir, f"sweep_T{temp:.1f}_top{args.topk}.csv")
-        n_rows = generate_submission_csv(
-            in_parquet=parquet_path,
-            out_csv=csv_path,
-            species_map=species_map,
-            num_classes=args.num_classes,
-            class_mask=class_mask,
-            topk=args.topk,
-            threshold=0.0,
-            min_k=1,
-            id_col=args.id_col,
-        )
+        # Generate submission CSV for each threshold (instant, no re-aggregation)
+        for thr in thresholds:
+            csv_path = os.path.join(
+                args.out_dir, f"sweep_T{temp:.1f}_thr{thr:.2f}_top{args.topk}.csv"
+            )
+            n_rows = generate_submission_csv(
+                in_parquet=parquet_path,
+                out_csv=csv_path,
+                species_map=species_map,
+                num_classes=args.num_classes,
+                class_mask=class_mask,
+                topk=args.topk,
+                threshold=thr,
+                min_k=1,
+                id_col=args.id_col,
+            )
 
-        results_summary.append((temp, n_rows, csv_path))
+            results_summary.append((temp, thr, n_rows, csv_path))
 
     # Print summary
     print(f"\n{'='*60}")
     print("SWEEP SUMMARY")
     print(f"{'='*60}")
-    print(f"{'Temperature':>12} {'Images':>8} {'CSV Path'}")
-    print(f"{'-'*12:>12} {'-'*8:>8} {'-'*40}")
-    for temp, n, path in results_summary:
-        print(f"{temp:>12.1f} {n:>8d} {path}")
+    print(f"{'Temperature':>12} {'Threshold':>10} {'Images':>8} {'CSV Path'}")
+    print(f"{'-'*12:>12} {'-'*10:>10} {'-'*8:>8} {'-'*40}")
+    for temp, thr, n, path in results_summary:
+        print(f"{temp:>12.1f} {thr:>10.2f} {n:>8d} {path}")
     print(f"{'='*60}")
 
 
