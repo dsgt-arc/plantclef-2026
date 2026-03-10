@@ -75,7 +75,7 @@ def load_shard_parquet(shard_path: str) -> pd.DataFrame:
 
     files = sorted(glob.glob(os.path.join(shard_path, "*.parquet")))
     if not files:
-        raise FileNotFoundError(f"No parquet files in {shard_path}")
+        return pd.DataFrame()
 
     tables = [pq.read_table(f) for f in files]
     return pa.concat_tables(tables).to_pandas()
@@ -371,6 +371,9 @@ def main() -> None:
         print(f"\nShard {i + 1}/{len(shard_dirs)}: {shard_name}")
 
         shard_df = load_shard_parquet(shard_path)
+        if shard_df.empty:
+            print(f"  SKIPPED (no parquet files)")
+            continue
         print(f"  {len(shard_df)} tile rows")
 
         shard_records = []

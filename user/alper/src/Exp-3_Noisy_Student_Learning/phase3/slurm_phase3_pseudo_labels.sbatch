@@ -24,7 +24,7 @@ source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-
 
 TILE_ROOT="${PLANTCLEF_ROOT}/aerten3/parquet/lucas_sw77k/phase1_tiles_lucas"
 GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
-OUT_PATH="${PLANTCLEF_ROOT}/aerten3/phase3_student_dataset/lucas_pseudo_labels.parquet"
+OUT_PATH="${PLANTCLEF_ROOT}/aerten3/parquet/lucas_sw77k/phase3_student_dataset/lucas_pseudo_labels.parquet"
 
 # Best config from Phase 2 sweep: T=2.0, k=6, thr=0.03 (F1=0.281 vs 0.247 with k=16)
 # tile_filter_k=6 for cleaner pseudo-labels and teacher_probs (KL-div targets).
