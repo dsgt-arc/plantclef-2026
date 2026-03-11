@@ -33,7 +33,7 @@ GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
 
 OUT_DIR="${PLANTCLEF_ROOT}/aerten3/submissions/phase5_bce_eval"
 OUT_PARQUET="${OUT_DIR}/student_probs.parquet"
-OUT_CSV="${OUT_DIR}/student_submission.csv"
+OUT_CSV="${OUT_DIR}/student_submission_bce_neg64.csv"
 
 echo "Evaluating: bce_neg64"
 echo "Checkpoint: ${CHECKPOINT}"

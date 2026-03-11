@@ -43,7 +43,7 @@ GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
 
 OUT_DIR="${PLANTCLEF_ROOT}/aerten3/submissions/phase5_loss_focus_eval/${RUN_NAME}"
 OUT_PARQUET="${OUT_DIR}/student_probs.parquet"
-OUT_CSV="${OUT_DIR}/student_submission.csv"
+OUT_CSV="${OUT_DIR}/student_submission_${RUN_NAME}.csv"
 
 echo "Evaluating: ${RUN_NAME}"
 echo "Checkpoint: ${CHECKPOINT}"
