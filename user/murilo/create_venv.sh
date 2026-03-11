@@ -4,10 +4,13 @@
 # Run this in an interactive session to set up the environment
 #
 # This script:
-#   1. Sets up environment variables
-#   2. Installs uv package manager
-#   3. Creates virtual environment in /tmp (fast local I/O)
-#   4. Installs dependencies from the target directory's pyproject.toml
+#   1. Checks GPU availability
+#   2. Sets up environment variables
+#   3. Installs uv package manager
+#   4. Creates virtual environment in /tmp (fast local I/O)
+#   5. Installs dependencies from the target directory's pyproject.toml
+#   6. Installs PyTorch with CUDA support
+#   7. Verifies PyTorch CUDA support
 #
 # Usage:
 #   salloc -p gpu-rtx6000 --gres=gpu:1 -c 4 --mem=32G -t 2:00:00
@@ -228,6 +231,23 @@ uv pip install -e "$TARGET_DIR"
 print_status "Dependencies installed"
 echo ""
 
+# Step 6b: Install PyTorch with CUDA support
+if $REQUIRE_GPU; then
+    echo "Step 6b: Installing PyTorch with CUDA 12.1 support..."
+    uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+    print_status "PyTorch with CUDA installed"
+    echo ""
+
+    # Step 7: Verify PyTorch and CUDA
+    echo "Step 7: Verifying PyTorch CUDA support..."
+    python -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda if torch.cuda.is_available() else None}'); print(f'GPU count: {torch.cuda.device_count()}'); print(f'GPU name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else None}')"
+    print_status "PyTorch CUDA verified"
+    echo ""
+else
+    echo "Step 6b: Skipping PyTorch CUDA install (--no-gpu)"
+    echo ""
+fi
+
 # Summary
 echo "=========================================="
 echo -e "${GREEN}[OK] ENVIRONMENT SETUP COMPLETE${NC}"
@@ -236,6 +256,11 @@ echo ""
 echo "Target: $TARGET_DIR_NAME"
 echo "Python: $(which python)"
 echo "Virtual env: $JOB_VENV"
+if $REQUIRE_GPU; then
+    echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader)"
+    echo "PyTorch: $(python -c 'import torch; print(torch.__version__)')"
+    echo "CUDA: $(python -c "import torch; print(torch.version.cuda if torch.cuda.is_available() else 'N/A')")"
+fi
 echo ""
 echo "To use this environment:"
 echo "  source $JOB_VENV/bin/activate"
