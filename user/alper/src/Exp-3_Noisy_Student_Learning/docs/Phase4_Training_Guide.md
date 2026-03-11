@@ -88,7 +88,7 @@ sbatch phase5/slurm_phase5_inference.sbatch
 | min_image_conf   | 0.0        |
 | lr               | 1e-4       |
 | batch_size       | 32         |
-| epochs           | 15         |
+| epochs           | 20         |
 | hidden_dim       | 512        |
 | num_heads        | 8          |
 | num_layers       | 4          |

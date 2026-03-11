@@ -24,7 +24,7 @@ mkdir -p logs
 source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
 
 TILE_ROOT="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/phase1_tiles_test"
-CHECKPOINT="${PLANTCLEF_ROOT}/aerten3/phase4_checkpoints/run_kl_default/best_model.pt"
+CHECKPOINT="${PLANTCLEF_ROOT}/aerten3/checkpoints/phase4_checkpoints/run_kl_default/best_model.pt"
 SPECIES_MAP="${PLANTCLEF_ROOT}/data/raw/class_id_to_species_mapping/class_to_species_id.json"
 GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
 

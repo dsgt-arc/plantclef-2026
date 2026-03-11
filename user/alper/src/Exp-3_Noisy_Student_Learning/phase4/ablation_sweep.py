@@ -30,7 +30,7 @@ BASELINE = {
     "lr": 1e-4,
     "weight_decay": 0.01,
     "batch_size": 32,
-    "epochs": 15,
+    "epochs": 20,
     "hidden_dim": 512,
     "num_heads": 8,
     "num_layers": 4,
