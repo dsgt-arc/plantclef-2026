@@ -18,8 +18,8 @@ import sys
 
 # ── Baseline config (anchor point for all ablations) ────────────────────
 BASELINE = {
-    "loss_type": "kl",
-    "num_negatives": 64,
+    "loss_type": "bce",
+    "num_negatives": 256,
     "cons_mode": "logit_mse",
     "lambda_cons": 0.01,
     "warmup_epochs": 5,
@@ -50,8 +50,10 @@ BASELINE = {
 # Index 0 in each category is the baseline for self-contained comparison.
 ABLATIONS: dict[str, list[tuple[str, dict]]] = {
     "loss": [
-        ("kl_baseline", {}),
-        ("bce_neg64", {"loss_type": "bce"}),
+        ("bce_neg256_baseline", {}),
+        ("bce_neg64", {"num_negatives": 64}),
+        ("bce_neg128", {"num_negatives": 128}),
+        ("bce_neg512", {"num_negatives": 512}),
     ],
     "tiles": [
         ("tile_none_baseline", {}),

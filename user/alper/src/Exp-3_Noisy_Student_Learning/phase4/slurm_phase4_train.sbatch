@@ -32,7 +32,8 @@ OUT_DIR="${PLANTCLEF_ROOT}/aerten3/checkpoints/phase4_checkpoints/run_kl_default
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-3_Noisy_Student_Learning/phase4/train_student.py \
   --dataset "${DATASET}" \
   --out-dir "${OUT_DIR}" \
-  --loss-type kl \
+  --loss-type bce \
+  --num-negatives 256 \
   --cons-mode logit_mse \
   --lambda-cons 0.01 \
   --warmup-epochs 5 \

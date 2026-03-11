@@ -7,13 +7,13 @@
 
 ## Execution Order
 
-### Step 1: Re-run baseline with fixed consistency loss
+### Step 1: Run baseline (BCE with soft targets + neg sampling)
 ```bash
 sbatch phase4/slurm_phase4_train.sbatch
 ```
-- Uses `logit_mse` consistency mode (was broken `prob_mse` → cons=0.000000)
-- New default: `lambda_cons=0.01` (was 0.1, reduced because logit MSE is ~100x larger)
-- **VERIFY**: `cons` column in logs should no longer be `0.000000`
+- Uses BCE loss with soft teacher targets + 256 random negatives (proven by Exp-1, F1≈0.14)
+- KL loss over all 7806 classes caused mode collapse (F1=0) — do NOT use
+- `logit_mse` consistency with `lambda_cons=0.01`
 - Output: `${PLANTCLEF_ROOT}/aerten3/checkpoints/phase4_checkpoints/run_kl_default/`
 - ~30 min on RTX 6000
 
@@ -21,14 +21,15 @@ sbatch phase4/slurm_phase4_train.sbatch
 All are independent — can submit simultaneously, but if GPU budget is limited, prioritize:
 
 ```bash
-# Priority 1 — Loss focus (top-K class focusing — fixes noisy all-class losses)
-sbatch phase4/slurm_ablation_loss_focus.sbatch     # 4 runs (array 0-3)
-#   0: all 7806 classes (baseline)
-#   1: top 32 classes
-#   2: top 64 classes
-#   3: top 128 classes
+# Priority 1 — Tile filtering (Phase 2 showed this is the biggest lever)
+sbatch phase4/slurm_ablation_tiles.sbatch          # 5 runs (array 0-4)
+#   0: none (baseline)
+#   1: fixed_k, k=6
+#   2: fixed_k, k=8
+#   3: threshold, min_prob=0.05
+#   4: relative, alpha=0.3
 
-# Priority 2 — Consistency (validates logit_mse fix, finds right lambda)
+# Priority 2 — Consistency (find the right lambda for BCE baseline)
 sbatch phase4/slurm_ablation_consistency.sbatch    # 5 runs (array 0-4)
 #   0: off (lambda=0)
 #   1: logit_mse, lambda=0.001
@@ -36,18 +37,19 @@ sbatch phase4/slurm_ablation_consistency.sbatch    # 5 runs (array 0-4)
 #   3: logit_mse, lambda=0.1
 #   4: cosine, lambda=0.01
 
-# Priority 3 — Loss type (core design: soft distillation vs hard pseudo-labels)
-sbatch phase4/slurm_ablation_loss.sbatch           # 2 runs (array 0-1)
-#   0: kl (baseline)
-#   1: bce with negative sampling
+# Priority 3 — Negative sampling count (BCE hyperparameter)
+sbatch phase4/slurm_ablation_loss.sbatch           # 4 runs (array 0-3)
+#   0: neg=256 (baseline)
+#   1: neg=64
+#   2: neg=128
+#   3: neg=512
 
-# Priority 4 — Tile filtering (Phase 2 showed this is the biggest lever)
-sbatch phase4/slurm_ablation_tiles.sbatch          # 5 runs (array 0-4)
-#   0: none (baseline)
-#   1: fixed_k, k=6
-#   2: fixed_k, k=8
-#   3: threshold, min_prob=0.05
-#   4: relative, alpha=0.3
+# Priority 4 — Loss focus (top-K class focusing for consistency loss)
+sbatch phase4/slurm_ablation_loss_focus.sbatch     # 4 runs (array 0-3)
+#   0: all 7806 classes (baseline)
+#   1: top 32 classes
+#   2: top 64 classes
+#   3: top 128 classes
 
 # Priority 5 — Data quality (image confidence filter)
 sbatch phase4/slurm_ablation_data_quality.sbatch   # 4 runs (array 0-3)
@@ -63,7 +65,7 @@ sbatch phase4/slurm_ablation_lr.sbatch             # 3 runs (array 0-2)
 #   2: lr=3e-4
 ```
 
-Total: 23 ablation runs + 1 baseline = 24 training runs
+Total: 25 ablation runs + 1 baseline = 26 training runs
 
 ### Step 3: Analyze results
 - Each run saves `training_history.json` + `best_model.pt`
@@ -79,7 +81,7 @@ sbatch phase5/slurm_phase5_inference.sbatch
 ## Baseline Config (anchor for all ablations)
 | Parameter        | Value      |
 |------------------|------------|
-| loss_type        | kl         |
+| loss_type        | bce        |
 | cons_mode        | logit_mse  |
 | lambda_cons      | 0.01       |
 | warmup_epochs    | 5          |
@@ -99,8 +101,10 @@ sbatch phase5/slurm_phase5_inference.sbatch
 phase4_checkpoints/
 ├── run_kl_default/              # baseline
 ├── ablation_loss/
-│   ├── kl_baseline/
-│   └── bce_neg64/
+│   ├── bce_neg256_baseline/
+│   ├── bce_neg64/
+│   ├── bce_neg128/
+│   └── bce_neg512/
 ├── ablation_tiles/
 │   ├── tile_none_baseline/
 │   ├── tile_fixedk6/
@@ -133,14 +137,14 @@ phase4_checkpoints/
 
 | Priority | Category | Runs | Why |
 |----------|----------|------|-----|
-| 1 | **Loss focus** | 4 | Top-K class focusing. Baseline trains on all 7806 classes but only ~2-10 have signal — the rest is noise. Baseline showed consistency loss GROWING (views diverge) because MSE is dominated by irrelevant classes. Top-K should fix this and change interpretation of all other ablations. |
-| 2 | **Consistency** | 5 | Validates the `logit_mse` fix works and finds the right lambda. Baseline showed lambda=0.01 is too weak (cons grows unchecked). Lambda=0.1 may balance pseudo_loss vs cons_loss. |
-| 3 | **Loss type** | 2 | Only 2 runs (fast). KL vs BCE is a fundamental design choice — soft distillation preserves teacher uncertainty, BCE uses hard labels. Note: BCE already focuses on positive labels + 64 negatives (inherently top-K). |
-| 4 | **Tile filtering** | 5 | Phase 2 proved tile filtering is the biggest lever for teacher predictions (+0.034 F1). Need to know if filtering at student training time also helps. |
-| 5 | **Data quality** | 4 | Tests whether removing low-confidence images (teacher says "I don't know") helps training. The histogram printed at load time reveals the image confidence distribution — useful info even if optimal threshold = 0. |
-| 6 | **Learning rate** | 3 | Lowest priority. Standard hyperparameter tuning, least likely to produce a surprising result. |
+| 1 | **Tile filtering** | 5 | Phase 2 proved tile filtering is the biggest lever for teacher predictions (+0.034 F1). Need to know if filtering at student training time also helps. |
+| 2 | **Consistency** | 5 | Finds the right lambda for BCE baseline. Previous KL-based results are invalid. Lambda=0.1 may help; lambda=0 tells us if consistency hurts. |
+| 3 | **Neg sampling** | 4 | BCE hyperparameter: how many random negatives per sample? Exp-1 used 256. Sweep 64/128/256/512. |
+| 4 | **Loss focus** | 4 | Top-K class focusing now only affects consistency loss (BCE already focuses on positives+negatives). Tests if narrowing consistency to top-K classes helps. |
+| 5 | **Data quality** | 4 | Tests whether removing low-confidence images helps training. Previous results (conf_0.04=0.017, conf_0.07=0.015) were with KL loss — re-run with BCE. |
+| 6 | **Learning rate** | 3 | Standard hyperparameter tuning. |
 
-**If GPU budget is tight**: Run loss_focus + consistency first (9 runs). These fix the two biggest issues — noisy all-class losses and finding the right consistency lambda.
+**If GPU budget is tight**: Run tiles + consistency first (10 runs). These are the biggest levers now that loss is fixed.
 
 ## Key Files
 - `phase4/train_student.py` — training script (all CLI args)

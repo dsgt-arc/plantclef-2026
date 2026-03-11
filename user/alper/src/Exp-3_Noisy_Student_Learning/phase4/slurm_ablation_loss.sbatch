@@ -7,15 +7,17 @@
 #SBATCH --cpus-per-task=6
 #SBATCH --mem=64G
 #SBATCH --time=08:00:00
-#SBATCH --array=0-1
+#SBATCH --array=0-3
 #SBATCH --output=logs/%x_%A_%a.out
 #SBATCH --error=logs/%x_%A_%a.err
 #SBATCH --mail-type=FAIL
 #SBATCH --mail-user=aerten3@gatech.edu
 
-# Ablation: Loss type (2 runs)
-#   0: kl (baseline)
-#   1: bce with negative sampling
+# Ablation: BCE negative sampling count (4 runs)
+#   0: neg=256 (baseline)
+#   1: neg=64
+#   2: neg=128
+#   3: neg=512
 
 set -euo pipefail
 

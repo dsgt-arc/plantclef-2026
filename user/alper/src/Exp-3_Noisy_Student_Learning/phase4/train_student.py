@@ -144,7 +144,7 @@ def train_one_epoch(
         # Pseudo-label loss
         with autocast(enabled=use_amp):
             if args.loss_type == "bce":
-                l_pseudo = pseudo_loss_fn(logits_orig, pseudo_labels)
+                l_pseudo = pseudo_loss_fn(logits_orig, teacher_probs)
             else:
                 l_pseudo = pseudo_loss_fn(logits_orig, teacher_probs, topk_idx)
 
@@ -190,7 +190,7 @@ def main() -> None:
         "--loss-type", default="kl", choices=["bce", "kl"],
         help="Pseudo-label loss variant (default: kl)",
     )
-    ap.add_argument("--num-negatives", type=int, default=64, help="BCE neg samples")
+    ap.add_argument("--num-negatives", type=int, default=256, help="BCE neg samples")
     ap.add_argument("--lambda-cons", type=float, default=0.01, help="Consistency weight")
     ap.add_argument("--warmup-epochs", type=int, default=5, help="Consistency warmup")
     ap.add_argument(

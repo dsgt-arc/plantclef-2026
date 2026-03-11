@@ -10,64 +10,74 @@ import torch.nn.functional as F
 
 
 class BCENegSamplingLoss(nn.Module):
-    """Variant A: BCE with explicit positive/negative sampling.
+    """BCE with soft teacher targets and explicit negative sampling.
 
-    Positives come from pseudo-labels (target=1). Negatives are randomly
-    sampled from the complement (target=0). This avoids assuming all
-    non-pseudo-label species are truly absent.
+    Mirrors Exp-1's proven ``masked_distill_loss``:
+      - Positives: classes where teacher_probs > 0 → trained with **soft**
+        teacher probabilities (not hard 1.0)
+      - Negatives: randomly sampled from the complement → target = 0
+      - Zero-teacher entries are treated as *unknown*, not true negatives
+
+    This avoids the mode-collapse caused by training on all 7806 classes
+    (most of which are near-zero targets that overwhelm the positive signal).
     """
 
-    def __init__(self, num_classes: int = 7806, num_negatives: int = 64):
+    def __init__(self, num_classes: int = 7806, num_negatives: int = 256):
         super().__init__()
         self.num_classes = num_classes
         self.num_negatives = num_negatives
 
     def forward(
         self,
-        logits: torch.Tensor,              # [B, C]
-        pseudo_labels: list[torch.Tensor],  # list of [L_i] int tensors
+        logits: torch.Tensor,         # [B, C]
+        teacher_probs: torch.Tensor,   # [B, C] in [0, 1], sparse (mostly zeros)
     ) -> torch.Tensor:
         B, C = logits.shape
         device = logits.device
 
-        target = torch.zeros(B, C, device=device)
-        weight = torch.zeros(B, C, device=device)
+        pos_mask = teacher_probs > 0  # [B, C]
+        pos_count = pos_mask.sum().item()
 
-        for i, labels in enumerate(pseudo_labels):
-            pos = labels.to(device, dtype=torch.long)
-            if len(pos) == 0:
-                continue
+        # BCE on positives with soft teacher targets
+        if pos_count > 0:
+            pos_loss = F.binary_cross_entropy_with_logits(
+                logits[pos_mask], teacher_probs[pos_mask], reduction="mean",
+            )
+        else:
+            pos_loss = logits.sum() * 0.0
 
-            # Mark positives
-            target[i, pos] = 1.0
-            weight[i, pos] = 1.0
+        # Random negative sampling from teacher == 0
+        if self.num_negatives > 0:
+            neg_mask = ~pos_mask
+            neg_losses = []
+            for i in range(B):
+                zero_idx = neg_mask[i].nonzero(as_tuple=True)[0]
+                if zero_idx.numel() == 0:
+                    continue
+                k = min(self.num_negatives, zero_idx.numel())
+                sel = zero_idx[torch.randint(0, zero_idx.numel(), (k,), device=device)]
+                neg_logits = logits[i, sel]
+                neg_targets = torch.zeros_like(neg_logits)
+                neg_losses.append(
+                    F.binary_cross_entropy_with_logits(
+                        neg_logits, neg_targets, reduction="mean",
+                    )
+                )
+            neg_loss = torch.stack(neg_losses).mean() if neg_losses else logits.sum() * 0.0
+        else:
+            neg_loss = logits.sum() * 0.0
 
-            # Sample negatives (excluding positives)
-            neg_mask = torch.ones(C, dtype=torch.bool, device=device)
-            neg_mask[pos] = False
-            neg_pool = neg_mask.nonzero(as_tuple=True)[0]
-            n_neg = min(self.num_negatives, len(neg_pool))
-            perm = torch.randperm(len(neg_pool), device=device)[:n_neg]
-            weight[i, neg_pool[perm]] = 1.0
-
-        if weight.sum() == 0:
-            return torch.tensor(0.0, device=device, requires_grad=True)
-
-        loss = F.binary_cross_entropy_with_logits(
-            logits, target, weight=weight, reduction="sum"
-        )
-        return loss / weight.sum()
+        return pos_loss + neg_loss
 
 
 class SoftDistillationLoss(nn.Module):
-    """Variant B (recommended): KL-divergence via BCE with soft teacher targets.
+    """KL-divergence via BCE with soft teacher targets.
 
-    For independent Bernoulli outputs, KL(teacher || student) equals
-    BCE(student_logits, teacher_probs) up to a constant (teacher entropy).
-    Minimizing BCE with soft targets is equivalent to minimizing KL-divergence.
+    WARNING: This loss causes mode collapse (F1=0) because it trains on all
+    7806 classes — the ~7742 near-zero targets overwhelm the ~64 positive
+    signals. Use BCENegSamplingLoss instead.
 
-    This preserves the teacher's uncertainty across all 7806 classes —
-    the student learns the full probability landscape, not just hard 0/1.
+    Kept for reference / ablation comparison only.
     """
 
     def forward(
