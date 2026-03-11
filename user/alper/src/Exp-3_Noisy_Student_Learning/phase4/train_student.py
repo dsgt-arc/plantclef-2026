@@ -31,6 +31,24 @@ from phase4.dataset import PseudoLabelDataset, TileFilterConfig, collate_fn
 from phase4.losses import BCENegSamplingLoss, ConsistencyLoss, SoftDistillationLoss
 
 
+def create_tile_drop_mask(
+    mask: torch.Tensor, drop_rate: float = 0.3, min_tiles: int = 1,
+) -> torch.Tensor:
+    """Create a tile-drop augmentation mask by randomly hiding valid tiles.
+
+    For each sample in the batch, randomly drops a fraction of valid tiles.
+    Always keeps at least ``min_tiles`` tiles visible.
+    """
+    mask_drop = torch.zeros_like(mask)
+    for b in range(mask.shape[0]):
+        valid = mask[b].nonzero(as_tuple=True)[0]
+        n_valid = len(valid)
+        n_keep = max(min_tiles, int(n_valid * (1.0 - drop_rate)))
+        keep = valid[torch.randperm(n_valid, device=mask.device)[:n_keep]]
+        mask_drop[b, keep] = True
+    return mask_drop
+
+
 def set_seed(seed: int) -> None:
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -85,6 +103,8 @@ def save_checkpoint(
                 "lambda_cons": args.lambda_cons,
                 "min_image_conf": args.min_image_conf,
                 "loss_topk": args.loss_topk,
+                "cons_augment": args.cons_augment,
+                "tile_drop_rate": args.tile_drop_rate,
             },
         },
         path,
@@ -116,10 +136,11 @@ def train_one_epoch(
     total_cons = 0.0
     num_batches = 0
 
+    cons_augment = getattr(args, "cons_augment", "dropout")
+    drop_rate = getattr(args, "tile_drop_rate", 0.3)
+
     for batch in dataloader:
         tile_orig = batch["tile_embeddings_orig"].to(device)
-        tile_flip = batch["tile_embeddings_flip"].to(device)
-        tile_rot90 = batch["tile_embeddings_rot90"].to(device)
         mask = batch["attention_mask"].to(device)
         teacher_probs = batch["teacher_probs"].to(device)
         pseudo_labels = batch["pseudo_labels"]
@@ -130,11 +151,28 @@ def train_one_epoch(
         with autocast(enabled=use_amp):
             logits_orig = model(tile_orig, mask)
 
-        # Forward: flip + rot90 (no gradients — consistency targets only)
+        # Forward: consistency views (no gradients, but model stays in
+        # train mode so dropout is stochastic)
         with torch.no_grad():
             with autocast(enabled=use_amp):
-                logits_flip = model(tile_flip, mask)
-                logits_rot90 = model(tile_rot90, mask)
+                if cons_augment == "dropout":
+                    # R-Drop: two forward passes with different dropout masks
+                    # Model is in train mode → embed_dropout + transformer
+                    # dropout produce different activations each pass
+                    logits_view1 = model(tile_orig, mask)
+                    logits_view2 = model(tile_orig, mask)
+                elif cons_augment == "tile_drop":
+                    # Tile-drop: same embeddings, different random tile masks
+                    mask_drop1 = create_tile_drop_mask(mask, drop_rate)
+                    mask_drop2 = create_tile_drop_mask(mask, drop_rate)
+                    logits_view1 = model(tile_orig, mask_drop1)
+                    logits_view2 = model(tile_orig, mask_drop2)
+                else:
+                    # Legacy: separate flip/rot90 embedding views
+                    tile_flip = batch["tile_embeddings_flip"].to(device)
+                    tile_rot90 = batch["tile_embeddings_rot90"].to(device)
+                    logits_view1 = model(tile_flip, mask)
+                    logits_view2 = model(tile_rot90, mask)
 
         # Top-K class focusing
         topk_idx = None
@@ -148,9 +186,9 @@ def train_one_epoch(
             else:
                 l_pseudo = pseudo_loss_fn(logits_orig, teacher_probs, topk_idx)
 
-            # Consistency loss (detach is redundant since no_grad, but explicit)
+            # Consistency loss
             l_cons = cons_loss_fn(
-                logits_orig, logits_flip.detach(), logits_rot90.detach(), topk_idx
+                logits_orig, logits_view1.detach(), logits_view2.detach(), topk_idx
             )
 
             loss = l_pseudo + lambda_cons_t * l_cons
@@ -197,6 +235,17 @@ def main() -> None:
         "--cons-mode", default="logit_mse",
         choices=["logit_mse", "cosine", "prob_mse"],
         help="Consistency loss mode (default: logit_mse)",
+    )
+    ap.add_argument(
+        "--cons-augment", default="dropout",
+        choices=["dropout", "tile_drop", "views"],
+        help="Consistency augmentation: 'dropout' (R-Drop, stochastic forward passes), "
+             "'tile_drop' (random tile masking), or 'views' (flip/rot90 embeddings) "
+             "(default: dropout)",
+    )
+    ap.add_argument(
+        "--tile-drop-rate", type=float, default=0.3,
+        help="Fraction of tiles to drop per consistency view (default: 0.3)",
     )
 
     # Training
@@ -303,6 +352,8 @@ def main() -> None:
     print(f"  Warmup epochs:   {args.warmup_epochs}")
     print(f"  Min image conf:  {args.min_image_conf}")
     print(f"  Loss top-K:      {args.loss_topk}")
+    print(f"  Cons augment:    {args.cons_augment}")
+    print(f"  Tile drop rate:  {args.tile_drop_rate}")
     print(f"  Tile strategy:   {args.tile_strategy}")
     print(f"  Batch size:      {args.batch_size}")
     print(f"  LR:              {args.lr}")

@@ -24,18 +24,16 @@ mkdir -p logs
 source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
 
 DATASET="${PLANTCLEF_ROOT}/aerten3/parquet/lucas_sw77k/phase3_student_dataset/lucas_pseudo_labels.parquet"
-OUT_DIR="${PLANTCLEF_ROOT}/aerten3/checkpoints/phase4_checkpoints/run_kl_default"
-
-# UPDATE partition name if needed (check: scontrol show partition)
-# Common PACE GPU partitions: gpu-v100, gpu-a100, gpu-h100
+OUT_DIR="${PLANTCLEF_ROOT}/aerten3/checkpoints/phase4_checkpoints/run_combined_baseline"
 
 python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-3_Noisy_Student_Learning/phase4/train_student.py \
   --dataset "${DATASET}" \
   --out-dir "${OUT_DIR}" \
   --loss-type bce \
-  --num-negatives 256 \
+  --num-negatives 128 \
   --cons-mode logit_mse \
-  --lambda-cons 0.01 \
+  --cons-augment dropout \
+  --lambda-cons 0.0 \
   --warmup-epochs 5 \
   --min-image-conf 0.0 \
   --loss-topk 0 \
@@ -43,7 +41,8 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-3_Noisy_
   --batch-size 32 \
   --lr 1e-4 \
   --weight-decay 0.01 \
-  --tile-strategy none \
+  --tile-strategy threshold \
+  --tile-min-prob 0.05 \
   --hidden-dim 512 \
   --num-heads 8 \
   --num-layers 4 \

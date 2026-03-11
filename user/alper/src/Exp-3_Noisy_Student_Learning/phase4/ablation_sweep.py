@@ -19,11 +19,13 @@ import sys
 # ── Baseline config (anchor point for all ablations) ────────────────────
 BASELINE = {
     "loss_type": "bce",
-    "num_negatives": 256,
+    "num_negatives": 128,
     "cons_mode": "logit_mse",
+    "cons_augment": "dropout",
+    "tile_drop_rate": 0.3,
     "lambda_cons": 0.01,
     "warmup_epochs": 5,
-    "tile_strategy": "none",
+    "tile_strategy": "threshold",
     "tile_k": 8,
     "tile_min_prob": 0.05,
     "tile_alpha": 0.3,
@@ -86,6 +88,14 @@ ABLATIONS: dict[str, list[tuple[str, dict]]] = {
         ("topk_64", {"loss_topk": 64}),
         ("topk_128", {"loss_topk": 128}),
     ],
+    "consistency_v2": [
+        ("rdrop_cons_off", {"lambda_cons": 0.0}),
+        ("rdrop_cons_lam0.001", {"lambda_cons": 0.001}),
+        ("rdrop_cons_lam0.01_baseline", {}),
+        ("rdrop_cons_lam0.1", {"lambda_cons": 0.1}),
+        ("tdrop0.3_lam0.01", {"cons_augment": "tile_drop", "tile_drop_rate": 0.3}),
+        ("tdrop0.5_lam0.01", {"cons_augment": "tile_drop", "tile_drop_rate": 0.5}),
+    ],
 }
 
 
@@ -122,6 +132,8 @@ def build_command(
         "--loss-type", config["loss_type"],
         "--num-negatives", str(config["num_negatives"]),
         "--cons-mode", config["cons_mode"],
+        "--cons-augment", config["cons_augment"],
+        "--tile-drop-rate", str(config["tile_drop_rate"]),
         "--lambda-cons", str(config["lambda_cons"]),
         "--warmup-epochs", str(config["warmup_epochs"]),
         "--epochs", str(config["epochs"]),

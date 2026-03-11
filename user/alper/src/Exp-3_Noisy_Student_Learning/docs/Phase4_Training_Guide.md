@@ -82,11 +82,14 @@ sbatch phase5/slurm_phase5_inference.sbatch
 | Parameter        | Value      |
 |------------------|------------|
 | loss_type        | bce        |
+| num_negatives    | 128        |
 | cons_mode        | logit_mse  |
+| cons_augment     | dropout    |
 | lambda_cons      | 0.01       |
 | warmup_epochs    | 5          |
 | loss_topk        | 0 (all)    |
-| tile_strategy    | none       |
+| tile_strategy    | threshold  |
+| tile_min_prob    | 0.05       |
 | min_image_conf   | 0.0        |
 | lr               | 1e-4       |
 | batch_size       | 32         |
@@ -99,7 +102,7 @@ sbatch phase5/slurm_phase5_inference.sbatch
 ## Output Directory Structure
 ```
 phase4_checkpoints/
-├── run_kl_default/              # baseline
+├── run_combined_baseline/        # combined OVAT winners + tile-drop consistency
 ├── ablation_loss/
 │   ├── bce_neg256_baseline/
 │   ├── bce_neg64/
@@ -146,8 +149,56 @@ phase4_checkpoints/
 
 **If GPU budget is tight**: Run tiles + consistency first (10 runs). These are the biggest levers now that loss is fixed.
 
+## Post-Ablation: Combined Baseline + Ensemble + Sharpening
+
+### OVAT Results Summary
+| Category | Winner | F1 |
+|---|---|---|
+| Tiles | tile_thr005 | 0.21634 |
+| Consistency | cons_off | 0.20316 |
+| Neg sampling | bce_neg128 | 0.20299 |
+| Loss focus | topk_0 (baseline) | 0.20061 |
+| Data quality | conf_0.00 (baseline) | 0.20061 |
+| LR | 1e-4 (baseline) | 0.20061 |
+| **Teacher baseline** | — | **0.28093** |
+
+### Step A: Combined OVAT Baseline
+Winners merged: tile_thr005 + cons_off + neg128.
+```bash
+sbatch phase4/slurm_phase4_train.sbatch    # combined baseline (lambda_cons=0.0)
+# After training:
+sbatch phase5/slurm_phase5_inference.sbatch
+```
+
+### Step B: Ensemble Student + Teacher
+Blends student and teacher predictions: `ensemble = alpha * teacher + (1-alpha) * student`.
+```bash
+# After Step A completes:
+sbatch phase5/slurm_phase5_ensemble.sbatch  # sweeps alpha=0.3,0.5,0.7,0.9
+```
+Output: `${PLANTCLEF_ROOT}/aerten3/submissions/phase5_ensemble/`
+
+### Step C: Pseudo-Label Sharpening
+Re-generate Phase 3 with stricter thresholds / fewer retained classes.
+```bash
+# Step C.1: Generate sharpened pseudo-labels (CPU, 4 configs)
+sbatch phase3/slurm_phase3_sharpened.sbatch
+#   0: thr=0.05, image_topk=64
+#   1: thr=0.07, image_topk=64
+#   2: thr=0.03, image_topk=30
+#   3: thr=0.05, image_topk=30
+
+# Step C.2: Train on each (GPU, after C.1)
+sbatch phase4/slurm_phase4_sharpened.sbatch
+
+# Step C.3: Evaluate (GPU, after C.2)
+sbatch phase5/slurm_phase5_sharpened_eval.sbatch
+```
+
 ## Key Files
 - `phase4/train_student.py` — training script (all CLI args)
 - `phase4/ablation_sweep.py` — OVAT config definitions + launcher
 - `phase4/dataset.py` — dataset with tile filtering + image confidence filtering
 - `phase4/losses.py` — KL, BCE, and consistency loss (logit_mse/cosine/prob_mse modes)
+- `phase5/ensemble_inference.py` — student + teacher ensemble blending
+- `phase3/generate_pseudo_labels.py` — pseudo-label generation with configurable sharpness
