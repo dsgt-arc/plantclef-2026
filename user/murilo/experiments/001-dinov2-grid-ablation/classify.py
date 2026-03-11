@@ -12,6 +12,9 @@ Usage:
     # 3x3 grid with majority vote
     python classify.py --grid-size 3
 
+    # 3x3 grid with top-5 per tile, capped at 10 species per image
+    python classify.py --grid-size 3 --top-k 5 --max-species 10
+
     # Pipeline validation (5 images)
     python classify.py --grid-size 3 --fast-dev-run
 
@@ -62,8 +65,14 @@ def parse_args():
     parser.add_argument(
         "--top-k",
         type=int,
-        default=1,
+        default=5,
         help="Top-K predictions per tile for voting",
+    )
+    parser.add_argument(
+        "--max-species",
+        type=int,
+        default=10,
+        help="Max species to predict per image (caps the aggregated list)",
     )
     parser.add_argument(
         "--batch-size",
@@ -121,27 +130,31 @@ def parse_args():
 
 
 def aggregate_majority_vote(
-    tile_probs: torch.Tensor, top_k: int, cid_to_spid: dict[int, int]
+    tile_probs: torch.Tensor,
+    top_k: int,
+    max_species: int,
+    cid_to_spid: dict[int, int],
 ) -> list[int]:
     """Aggregate tile predictions via majority vote.
 
-    Each tile votes for its top-k predicted species. Species are returned
-    sorted by vote count (descending).
+    Each tile votes for its top-k predicted species. The final list is capped
+    at max_species, sorted by vote count (descending).
 
     Args:
         tile_probs: Tensor of shape (num_tiles, num_classes) with softmax probs.
         top_k: Number of top predictions per tile.
+        max_species: Maximum number of species to return per image.
         cid_to_spid: Class index -> species ID mapping.
 
     Returns:
-        List of species IDs sorted by vote count.
+        List of species IDs sorted by vote count, capped at max_species.
     """
     _, top_k_ids = tile_probs.topk(top_k, dim=1)
     votes = Counter()
     for tile_top_k in top_k_ids:
         for class_idx in tile_top_k.cpu().numpy():
             votes[cid_to_spid[int(class_idx)]] += 1
-    return [sp for sp, _ in votes.most_common()]
+    return [sp for sp, _ in votes.most_common(max_species)]
 
 
 def main():
@@ -158,6 +171,7 @@ def main():
     print(f"Grid size:    {grid_label}")
     print(f"Aggregation:  {args.aggregation}")
     print(f"Top-K:        {args.top_k}")
+    print(f"Max species:  {args.max_species}")
     print(f"Batch size:   {args.batch_size}")
     print(f"Model:        {args.model_path}")
     print(f"Data dir:     {args.data_dir}")
@@ -260,7 +274,9 @@ def main():
     for img_idx in range(num_images):
         tile_probs = image_probs[img_idx]  # (tiles_per_image, num_classes)
         if args.aggregation == "majority_vote":
-            species_ids = aggregate_majority_vote(tile_probs, args.top_k, cid_to_spid)
+            species_ids = aggregate_majority_vote(
+                tile_probs, args.top_k, args.max_species, cid_to_spid
+            )
         results.append({"quadrat_id": image_names[img_idx], "species_ids": species_ids})
 
     # ---- Report ----
@@ -289,7 +305,7 @@ def main():
     # ---- Save submission CSV ----
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_file = output_dir / f"submission_{grid_label}_{args.aggregation}.csv"
+    output_file = output_dir / f"submission_{grid_label}_{args.aggregation}_topk{args.top_k}_max{args.max_species}.csv"
 
     df = pd.DataFrame(
         [

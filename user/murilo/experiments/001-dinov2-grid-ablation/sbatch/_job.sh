@@ -24,7 +24,8 @@ set -eu
 # Environment variables passed from run.sh
 GRID_SIZE="${GRID_SIZE:-0}"
 AGGREGATION="${AGGREGATION:-majority_vote}"
-TOP_K="${TOP_K:-1}"
+TOP_K="${TOP_K:-5}"
+MAX_SPECIES="${MAX_SPECIES:-10}"
 PROJECT_NAME="${PROJECT_NAME:-ps-clef2026_plantclef-0}"
 FAST_DEV_RUN="${FAST_DEV_RUN:-false}"
 GPU_CHECK="${GPU_CHECK:-0}"
@@ -53,6 +54,7 @@ echo "Date:         $(date)"
 echo "Grid size:    ${GRID_SIZE}"
 echo "Aggregation:  ${AGGREGATION}"
 echo "Top-K:        ${TOP_K}"
+echo "Max species:  ${MAX_SPECIES}"
 echo "Project:      ${PROJECT_NAME}"
 echo "Experiment:   ${EXPERIMENT_DIR}"
 echo ""
@@ -118,7 +120,7 @@ mkdir -p artifacts logs
 echo "Starting classification..."
 echo ""
 
-CLASSIFY_CMD="python classify.py --grid-size ${GRID_SIZE} --aggregation ${AGGREGATION} --top-k ${TOP_K}"
+CLASSIFY_CMD="python classify.py --grid-size ${GRID_SIZE} --aggregation ${AGGREGATION} --top-k ${TOP_K} --max-species ${MAX_SPECIES}"
 
 if [[ "${FAST_DEV_RUN}" == "true" ]]; then
     CLASSIFY_CMD="${CLASSIFY_CMD} --fast-dev-run"

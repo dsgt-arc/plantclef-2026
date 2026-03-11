@@ -32,7 +32,8 @@ FAST_DEV_RUN=false
 GPU_CHECK=0
 GRID_SIZE=0
 AGGREGATION="majority_vote"
-TOP_K=1
+TOP_K=5
+MAX_SPECIES=10
 ALL=false
 PROJECT_NAME="ps-clef2026_plantclef-0"
 
@@ -52,6 +53,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --top-k)
             TOP_K="$2"
+            shift 2
+            ;;
+        --max-species)
+            MAX_SPECIES="$2"
             shift 2
             ;;
         --dry-run)
@@ -76,7 +81,8 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --grid-size N       Grid size for NxN tiling (default: 0 = no grid)"
             echo "  --aggregation NAME  Aggregation method (default: majority_vote)"
-            echo "  --top-k N           Top-K predictions per tile (default: 1)"
+            echo "  --top-k N           Top-K predictions per tile (default: 5)"
+            echo "  --max-species N     Max species per image (default: 10)"
             echo "  --all               Submit jobs for all grid sizes (0, 2, 3, ..., 10)"
             echo "  --fast-dev-run      Process 5 images only (pipeline validation)"
             echo "  --gpu-check N       Process N images for GPU profiling"
@@ -102,7 +108,8 @@ if [[ "${ALL}" == "true" ]]; then
     [[ "${FAST_DEV_RUN}" == "true" ]] && EXTRA_ARGS+=(--fast-dev-run)
     [[ "${GPU_CHECK}" -gt 0 ]] && EXTRA_ARGS+=(--gpu-check "${GPU_CHECK}")
     [[ "${AGGREGATION}" != "majority_vote" ]] && EXTRA_ARGS+=(--aggregation "${AGGREGATION}")
-    [[ "${TOP_K}" -ne 1 ]] && EXTRA_ARGS+=(--top-k "${TOP_K}")
+    [[ "${TOP_K}" -ne 5 ]] && EXTRA_ARGS+=(--top-k "${TOP_K}")
+    [[ "${MAX_SPECIES}" -ne 10 ]] && EXTRA_ARGS+=(--max-species "${MAX_SPECIES}")
     [[ "${PROJECT_NAME}" != "ps-clef2026_plantclef-0" ]] && EXTRA_ARGS+=(--project-name "${PROJECT_NAME}")
 
     # Grid sizes: 0 (no grid), 2, 3, 4, 5, 6, 7, 8, 9, 10
@@ -138,6 +145,7 @@ echo "Experiment dir: ${EXPERIMENT_DIR}"
 echo "Grid size:      ${GRID_LABEL}"
 echo "Aggregation:    ${AGGREGATION}"
 echo "Top-K:          ${TOP_K}"
+echo "Max species:    ${MAX_SPECIES}"
 echo "Project:        ${PROJECT_NAME}"
 echo "Fast dev run:   ${FAST_DEV_RUN}"
 echo "GPU check:      ${GPU_CHECK}"
@@ -155,7 +163,7 @@ JOB_SCRIPT="${SCRIPT_DIR}/_job.sh"
 
 CMD="sbatch \
     --output=${LOG_DIR}/slurm_${GRID_LABEL}_%j.log \
-    --export=ALL,GRID_SIZE=${GRID_SIZE},AGGREGATION=${AGGREGATION},TOP_K=${TOP_K},PROJECT_NAME=${PROJECT_NAME},FAST_DEV_RUN=${FAST_DEV_RUN},GPU_CHECK=${GPU_CHECK} \
+    --export=ALL,GRID_SIZE=${GRID_SIZE},AGGREGATION=${AGGREGATION},TOP_K=${TOP_K},MAX_SPECIES=${MAX_SPECIES},PROJECT_NAME=${PROJECT_NAME},FAST_DEV_RUN=${FAST_DEV_RUN},GPU_CHECK=${GPU_CHECK} \
     --job-name=exp001-${GRID_LABEL} \
     ${JOB_SCRIPT}"
 
