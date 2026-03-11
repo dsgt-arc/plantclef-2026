@@ -74,7 +74,11 @@ class SoftDistillationLoss(nn.Module):
         self,
         logits: torch.Tensor,         # [B, C]
         teacher_probs: torch.Tensor,  # [B, C] in [0, 1]
+        topk_idx: torch.Tensor | None = None,  # [B, K] — focus on top-K classes
     ) -> torch.Tensor:
+        if topk_idx is not None:
+            logits = logits.gather(1, topk_idx)
+            teacher_probs = teacher_probs.gather(1, topk_idx)
         return F.binary_cross_entropy_with_logits(
             logits, teacher_probs, reduction="mean"
         )
@@ -116,7 +120,12 @@ class ConsistencyLoss(nn.Module):
         logits_orig: torch.Tensor,   # [B, C]
         logits_flip: torch.Tensor,   # [B, C] — detached
         logits_rot90: torch.Tensor,  # [B, C] — detached
+        topk_idx: torch.Tensor | None = None,  # [B, K] — focus on top-K classes
     ) -> torch.Tensor:
+        if topk_idx is not None:
+            logits_orig = logits_orig.gather(1, topk_idx)
+            logits_flip = logits_flip.gather(1, topk_idx)
+            logits_rot90 = logits_rot90.gather(1, topk_idx)
         loss_flip = self._pairwise(logits_orig, logits_flip)
         loss_rot90 = self._pairwise(logits_orig, logits_rot90)
         return (loss_flip + loss_rot90) / 2.0

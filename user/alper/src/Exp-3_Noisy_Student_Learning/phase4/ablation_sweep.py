@@ -43,6 +43,7 @@ BASELINE = {
     "min_delta": 1e-4,
     "num_classes": 7806,
     "min_image_conf": 0.0,
+    "loss_topk": 0,
 }
 
 # ── Per-category configs: list of (run_name, overrides_dict) ────────────
@@ -76,6 +77,12 @@ ABLATIONS: dict[str, list[tuple[str, dict]]] = {
         ("conf_0.04", {"min_image_conf": 0.04}),
         ("conf_0.05", {"min_image_conf": 0.05}),
         ("conf_0.07", {"min_image_conf": 0.07}),
+    ],
+    "loss_focus": [
+        ("topk_0_baseline", {}),
+        ("topk_32", {"loss_topk": 32}),
+        ("topk_64", {"loss_topk": 64}),
+        ("topk_128", {"loss_topk": 128}),
     ],
 }
 
@@ -122,6 +129,7 @@ def build_command(
         "--patience", str(config["patience"]),
         "--min-delta", str(config["min_delta"]),
         "--min-image-conf", str(config["min_image_conf"]),
+        "--loss-topk", str(config["loss_topk"]),
         "--tile-strategy", config["tile_strategy"],
         "--tile-k", str(config["tile_k"]),
         "--tile-min-prob", str(config["tile_min_prob"]),

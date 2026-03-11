@@ -84,6 +84,7 @@ def save_checkpoint(
                 "cons_mode": args.cons_mode,
                 "lambda_cons": args.lambda_cons,
                 "min_image_conf": args.min_image_conf,
+                "loss_topk": args.loss_topk,
             },
         },
         path,
@@ -135,16 +136,21 @@ def train_one_epoch(
                 logits_flip = model(tile_flip, mask)
                 logits_rot90 = model(tile_rot90, mask)
 
+        # Top-K class focusing
+        topk_idx = None
+        if args.loss_topk > 0:
+            _, topk_idx = teacher_probs.topk(args.loss_topk, dim=1)
+
         # Pseudo-label loss
         with autocast(enabled=use_amp):
             if args.loss_type == "bce":
                 l_pseudo = pseudo_loss_fn(logits_orig, pseudo_labels)
             else:
-                l_pseudo = pseudo_loss_fn(logits_orig, teacher_probs)
+                l_pseudo = pseudo_loss_fn(logits_orig, teacher_probs, topk_idx)
 
             # Consistency loss (detach is redundant since no_grad, but explicit)
             l_cons = cons_loss_fn(
-                logits_orig, logits_flip.detach(), logits_rot90.detach()
+                logits_orig, logits_flip.detach(), logits_rot90.detach(), topk_idx
             )
 
             loss = l_pseudo + lambda_cons_t * l_cons
@@ -205,6 +211,10 @@ def main() -> None:
     ap.add_argument(
         "--min-image-conf", type=float, default=0.0,
         help="Min max(teacher_probs) to keep an image (0=no filter)",
+    )
+    ap.add_argument(
+        "--loss-topk", type=int, default=0,
+        help="Focus losses on top-K teacher classes per image (0=all classes)",
     )
 
     # Tile filtering
@@ -292,6 +302,7 @@ def main() -> None:
     print(f"  Lambda cons:     {args.lambda_cons}")
     print(f"  Warmup epochs:   {args.warmup_epochs}")
     print(f"  Min image conf:  {args.min_image_conf}")
+    print(f"  Loss top-K:      {args.loss_topk}")
     print(f"  Tile strategy:   {args.tile_strategy}")
     print(f"  Batch size:      {args.batch_size}")
     print(f"  LR:              {args.lr}")
