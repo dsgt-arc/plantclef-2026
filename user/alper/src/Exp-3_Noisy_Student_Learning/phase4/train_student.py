@@ -81,7 +81,9 @@ def save_checkpoint(
                 "dropout": args.dropout,
                 "embed_dropout": args.embed_dropout,
                 "loss_type": args.loss_type,
+                "cons_mode": args.cons_mode,
                 "lambda_cons": args.lambda_cons,
+                "min_image_conf": args.min_image_conf,
             },
         },
         path,
@@ -183,8 +185,13 @@ def main() -> None:
         help="Pseudo-label loss variant (default: kl)",
     )
     ap.add_argument("--num-negatives", type=int, default=64, help="BCE neg samples")
-    ap.add_argument("--lambda-cons", type=float, default=0.1, help="Consistency weight")
+    ap.add_argument("--lambda-cons", type=float, default=0.01, help="Consistency weight")
     ap.add_argument("--warmup-epochs", type=int, default=5, help="Consistency warmup")
+    ap.add_argument(
+        "--cons-mode", default="logit_mse",
+        choices=["logit_mse", "cosine", "prob_mse"],
+        help="Consistency loss mode (default: logit_mse)",
+    )
 
     # Training
     ap.add_argument("--epochs", type=int, default=15)
@@ -193,6 +200,12 @@ def main() -> None:
     ap.add_argument("--weight-decay", type=float, default=0.01)
     ap.add_argument("--patience", type=int, default=0, help="Early stop patience (0=disabled)")
     ap.add_argument("--min-delta", type=float, default=1e-4, help="Early stop min improvement")
+
+    # Data quality
+    ap.add_argument(
+        "--min-image-conf", type=float, default=0.0,
+        help="Min max(teacher_probs) to keep an image (0=no filter)",
+    )
 
     # Tile filtering
     ap.add_argument(
@@ -240,7 +253,8 @@ def main() -> None:
 
     print(f"Loading dataset from {args.dataset} ...")
     dataset = PseudoLabelDataset(
-        args.dataset, tile_filter=tile_filter, num_classes=args.num_classes
+        args.dataset, tile_filter=tile_filter, num_classes=args.num_classes,
+        min_image_conf=args.min_image_conf,
     )
     print(f"Dataset: {len(dataset)} images")
 
@@ -261,7 +275,7 @@ def main() -> None:
 
     # --- Loss ---
     pseudo_loss_fn = build_pseudo_label_loss(args)
-    cons_loss_fn = ConsistencyLoss()
+    cons_loss_fn = ConsistencyLoss(mode=args.cons_mode)
 
     # --- Optimizer ---
     optimizer = torch.optim.AdamW(
@@ -274,8 +288,10 @@ def main() -> None:
     # --- Training loop ---
     print(f"\nTraining config:")
     print(f"  Loss type:       {args.loss_type}")
+    print(f"  Cons mode:       {args.cons_mode}")
     print(f"  Lambda cons:     {args.lambda_cons}")
     print(f"  Warmup epochs:   {args.warmup_epochs}")
+    print(f"  Min image conf:  {args.min_image_conf}")
     print(f"  Tile strategy:   {args.tile_strategy}")
     print(f"  Batch size:      {args.batch_size}")
     print(f"  LR:              {args.lr}")

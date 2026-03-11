@@ -81,14 +81,35 @@ class SoftDistillationLoss(nn.Module):
 
 
 class ConsistencyLoss(nn.Module):
-    """Multi-view consistency loss in probability space.
+    """Multi-view consistency loss.
 
     Forces the student to predict the same species regardless of which
     geometric view (orig / flip / rot90) of the tiles it receives.
 
     Flip and rot90 predictions are stop-gradiented (MeanTeacher style):
     only the original view's logits receive gradients from this loss.
+
+    Modes:
+      logit_mse — MSE on raw logits (avoids sigmoid saturation)
+      cosine    — 1 - cosine_similarity on logit vectors (scale-invariant)
+      prob_mse  — MSE on sigmoid outputs (original; broken when logits saturate)
     """
+
+    def __init__(self, mode: str = "logit_mse"):
+        super().__init__()
+        if mode not in ("logit_mse", "cosine", "prob_mse"):
+            raise ValueError(f"Unknown consistency mode: {mode}")
+        self.mode = mode
+
+    def _pairwise(
+        self, a: torch.Tensor, b: torch.Tensor,
+    ) -> torch.Tensor:
+        if self.mode == "logit_mse":
+            return F.mse_loss(a, b)
+        if self.mode == "cosine":
+            return (1.0 - F.cosine_similarity(a, b, dim=1)).mean()
+        # prob_mse (original formulation)
+        return F.mse_loss(torch.sigmoid(a), torch.sigmoid(b))
 
     def forward(
         self,
@@ -96,11 +117,6 @@ class ConsistencyLoss(nn.Module):
         logits_flip: torch.Tensor,   # [B, C] — detached
         logits_rot90: torch.Tensor,  # [B, C] — detached
     ) -> torch.Tensor:
-        p_orig = torch.sigmoid(logits_orig)
-        p_flip = torch.sigmoid(logits_flip)
-        p_rot90 = torch.sigmoid(logits_rot90)
-
-        loss_flip = F.mse_loss(p_orig, p_flip)
-        loss_rot90 = F.mse_loss(p_orig, p_rot90)
-
+        loss_flip = self._pairwise(logits_orig, logits_flip)
+        loss_rot90 = self._pairwise(logits_orig, logits_rot90)
         return (loss_flip + loss_rot90) / 2.0

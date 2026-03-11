@@ -74,6 +74,27 @@ def filter_tiles(max_probs: np.ndarray, config: TileFilterConfig) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
+# Image confidence filtering (applied at load time)
+# ---------------------------------------------------------------------------
+
+def _print_conf_histogram(max_confs: np.ndarray, threshold: float, mask: np.ndarray) -> None:
+    """Print histogram of max image confidence and retention stats."""
+    edges = [0.03, 0.04, 0.05, 0.07, 0.10, 0.20, 1.01]
+    labels = ["[0.03,0.04)", "[0.04,0.05)", "[0.05,0.07)",
+              "[0.07,0.10)", "[0.10,0.20)", "[0.20+)"]
+    total = len(max_confs)
+    print(f"\nImage confidence distribution (max Noisy-OR prob per image):")
+    for i, label in enumerate(labels):
+        count = int(((max_confs >= edges[i]) & (max_confs < edges[i + 1])).sum())
+        pct = 100.0 * count / total
+        marker = " <-- cutoff" if edges[i] <= threshold < edges[i + 1] else ""
+        print(f"  {label}: {count:6d} ({pct:5.1f}%){marker}")
+    kept = int(mask.sum())
+    print(f"  Filter: min_image_conf={threshold:.3f} -> kept {kept}/{total} "
+          f"({100.0 * kept / total:.1f}%)\n")
+
+
+# ---------------------------------------------------------------------------
 # Dataset
 # ---------------------------------------------------------------------------
 
@@ -90,12 +111,24 @@ class PseudoLabelDataset(Dataset):
         parquet_path: str,
         tile_filter: TileFilterConfig | None = None,
         num_classes: int = 7806,
+        min_image_conf: float = 0.0,
     ):
         self.num_classes = num_classes
         self.tile_filter = tile_filter or TileFilterConfig()
 
         table = pq.read_table(parquet_path)
         self.df = table.to_pandas()
+
+        # Filter out low-confidence images based on max teacher probability
+        if min_image_conf > 0:
+            max_confs = np.array([
+                float(np.frombuffer(buf, dtype=np.float16).max())
+                for buf in self.df["teacher_probs_f16"]
+            ], dtype=np.float32)
+            mask = max_confs >= min_image_conf
+            _print_conf_histogram(max_confs, min_image_conf, mask)
+            self.df = self.df[mask].reset_index(drop=True)
+
         self.length = len(self.df)
 
     def __len__(self) -> int:

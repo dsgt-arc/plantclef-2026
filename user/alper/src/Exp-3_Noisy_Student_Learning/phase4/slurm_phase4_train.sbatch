@@ -33,8 +33,10 @@ python /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-3_Noisy_
   --dataset "${DATASET}" \
   --out-dir "${OUT_DIR}" \
   --loss-type kl \
-  --lambda-cons 0.1 \
+  --cons-mode logit_mse \
+  --lambda-cons 0.01 \
   --warmup-epochs 5 \
+  --min-image-conf 0.0 \
   --epochs 15 \
   --batch-size 32 \
   --lr 1e-4 \
