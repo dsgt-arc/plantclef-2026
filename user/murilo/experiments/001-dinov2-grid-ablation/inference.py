@@ -102,29 +102,27 @@ def save_probs_to_parquet(
     tiles_per_image: int,
     output_path: Path,
 ):
-    """Save probability tensors to parquet with float16 binary encoding.
+    """Save probability tensors to parquet with one row per tile.
 
-    Each row contains one image's full probability matrix as raw bytes.
-    Reconstruct with: np.frombuffer(row["probs"], dtype=np.float16).reshape(T, 7806)
+    Schema: image_name (str), tile_idx (int), probs (binary float16 vector of 7806).
+    Reconstruct with: np.frombuffer(row["probs"], dtype=np.float16)
     """
     rows = {
         "image_name": [],
-        "grid_size": [],
-        "tiles_per_image": [],
+        "tile_idx": [],
         "probs": [],
     }
     for idx, name in enumerate(image_names):
-        probs_f16 = image_probs[idx].numpy().astype(np.float16)
-        rows["image_name"].append(name)
-        rows["grid_size"].append(grid_size)
-        rows["tiles_per_image"].append(tiles_per_image)
-        rows["probs"].append(probs_f16.tobytes())
+        probs_f16 = image_probs[idx].numpy().astype(np.float16)  # (T, 7806)
+        for t in range(tiles_per_image):
+            rows["image_name"].append(name)
+            rows["tile_idx"].append(t)
+            rows["probs"].append(probs_f16[t].tobytes())
 
     table = pa.table(
         {
             "image_name": pa.array(rows["image_name"], type=pa.string()),
-            "grid_size": pa.array(rows["grid_size"], type=pa.int32()),
-            "tiles_per_image": pa.array(rows["tiles_per_image"], type=pa.int32()),
+            "tile_idx": pa.array(rows["tile_idx"], type=pa.int32()),
             "probs": pa.array(rows["probs"], type=pa.binary()),
         }
     )
