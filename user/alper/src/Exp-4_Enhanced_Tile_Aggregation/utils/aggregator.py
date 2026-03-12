@@ -177,6 +177,36 @@ class MaxProbabilityAggregator(_BaseAggregator):
         return self._postprocess(p_image)
 
 
+class TopMProbabilityAggregator(_BaseAggregator):
+    """P(c) = mean of top-m tile probabilities for class c.
+
+    Generalizes max_prob (m=1) and mean_prob (m=T).
+    m=2 or m=3 uses the strongest evidence while getting confirmation
+    from additional tiles, without diluting with noise from all tiles.
+    """
+
+    def __init__(self, m: int = 2, **kwargs) -> None:
+        super().__init__(**kwargs)
+        if m < 1:
+            raise ValueError("m must be >= 1")
+        self.m = int(m)
+
+    def aggregate(self, tile_logits_2d: np.ndarray) -> np.ndarray:
+        probs = self._softmax(tile_logits_2d)  # [T, C]
+        t = probs.shape[0]
+        m = min(self.m, t)
+        if m == 1:
+            p_image = probs.max(axis=0).astype(np.float32)
+        elif m >= t:
+            p_image = probs.mean(axis=0).astype(np.float32)
+        else:
+            # Partition to find top-m per class, then average them
+            # np.partition along axis=0: for each class, get top-m tile probs
+            partitioned = np.partition(probs, -m, axis=0)[-m:]  # [m, C]
+            p_image = partitioned.mean(axis=0).astype(np.float32)
+        return self._postprocess(p_image)
+
+
 class WeightedNoisyORAggregator(_BaseAggregator):
     """P(c) = 1 - prod_t(1 - w_t * p_{t,c}) where w_t = max_prob_t / sum(max_prob)."""
 
@@ -204,8 +234,13 @@ def create_aggregator(
     denoise_eps: float = 1e-6,
     image_topk: Optional[int] = None,
     output_dtype: np.dtype = np.float16,
+    agg_m: int = 2,
 ) -> object:
-    """Factory for aggregator by name."""
+    """Factory for aggregator by name.
+
+    Args:
+        agg_m: For top_m_prob method, the number of top tiles to average per class.
+    """
     common = dict(
         num_classes=num_classes,
         temperature=temperature,
@@ -223,5 +258,7 @@ def create_aggregator(
         return MeanProbabilityAggregator(**common)
     elif method == "max_prob":
         return MaxProbabilityAggregator(**common)
+    elif method == "top_m_prob":
+        return TopMProbabilityAggregator(m=agg_m, **common)
     else:
         raise ValueError(f"Unknown aggregation method: {method}")

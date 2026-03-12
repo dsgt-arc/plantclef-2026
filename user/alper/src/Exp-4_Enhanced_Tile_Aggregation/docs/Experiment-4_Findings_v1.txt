@@ -1,0 +1,36 @@
+ Step 1: View Strategies (T=2.0, k=6, noisy_or)
+
+  Strategy       F1        vs baseline
+  ───────────────────────────────────────
+  orig_only      0.28093   ← baseline
+  per_view_or    0.28010   -0.00083
+  avg_logits     0.26857   -0.01236
+  all_tiles      0.22688   -0.05405  ✗ terrible
+
+  Step 1c: Temperature Sweep (winners only)
+
+  Config                              F1        vs baseline
+  ──────────────────────────────────────────────────────────
+  per_view_or  T1.5  k4              0.28514   +0.00421  ★ BEST
+  avg_logits   T1.5  k4              0.28273   +0.00180  ★
+  per_view_or  T2.0  k6              0.28010   -0.00083
+  avg_logits   T2.0  k4              0.26789   -0.01304
+
+  Step 3: Aggregation Methods (key results)
+
+  Strategy     Method             k    F1        vs baseline
+  ─────────────────────────────────────────────────────────────
+  orig_only    noisy_or           6    0.28093   baseline
+  orig_only    max_prob          10    0.27841   -0.00252  (barely degrades at k=10,16!)
+  orig_only    max_prob          16    0.27834   -0.00259
+  orig_only    max_prob           6    0.27595   -0.00498
+  avg_logits   noisy_or          10    0.27109   -0.00984
+  avg_logits   max_prob          16    0.27076   -0.01017
+
+  Key Findings
+
+  1. per_view_or T=1.5 k=4 beats the baseline — F1=0.28514 (+0.004). TTA works, but only with sharper temperatures and
+  fewer tiles.
+  2. all_tiles is a dead strategy — tripling tile count overwhelms all aggregators.
+  3. max_prob is uniquely k-tolerant — orig_only max_prob at k=10 (0.27841) and k=16 (0.27834) barely degrade, while
+  noisy_or drops from 0.28093→0.24730. This confirms the hypothesis.
