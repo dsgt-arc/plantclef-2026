@@ -108,14 +108,30 @@ def multiview_aggregate(
     image_col: str = "image_name",
 ):
     """Run multi-view aggregation. Returns {image_name: probs_f16}."""
+    image_topk = config.image_topk if config.image_topk > 0 else None
+
     aggregator = create_aggregator(
         method=agg_method,
         num_classes=config.num_classes,
         temperature=config.temperature,
         denoise_eps=config.denoise_eps,
-        image_topk=config.image_topk if config.image_topk > 0 else None,
+        image_topk=image_topk,
         output_dtype=np.float16,
     )
+
+    # For per_view_or: aggregate each view WITHOUT image_topk (to avoid
+    # zeroing species that appear in one view's top-K but not others),
+    # then average, then apply image_topk to the combined result.
+    aggregator_no_topk = None
+    if strategy == "per_view_or" and image_topk is not None:
+        aggregator_no_topk = create_aggregator(
+            method=agg_method,
+            num_classes=config.num_classes,
+            temperature=config.temperature,
+            denoise_eps=config.denoise_eps,
+            image_topk=None,
+            output_dtype=np.float32,
+        )
 
     geo_mask = None
     if config.geo_mask_path:
@@ -152,10 +168,20 @@ def multiview_aggregate(
                 )
                 p_image = aggregator.aggregate(tile_logits)
             elif strategy == "per_view_or":
-                p_orig = aggregator.aggregate(logits_orig).astype(np.float32)
-                p_flip = aggregator.aggregate(logits_flip).astype(np.float32)
-                p_rot90 = aggregator.aggregate(logits_rot90).astype(np.float32)
-                p_image = ((p_orig + p_flip + p_rot90) / 3.0).astype(np.float16)
+                agg = aggregator_no_topk if aggregator_no_topk is not None else aggregator
+                p_orig = agg.aggregate(logits_orig).astype(np.float32)
+                p_flip = agg.aggregate(logits_flip).astype(np.float32)
+                p_rot90 = agg.aggregate(logits_rot90).astype(np.float32)
+                p_avg = (p_orig + p_flip + p_rot90) / 3.0
+                # Apply image_topk after averaging to preserve cross-view signal
+                if image_topk is not None:
+                    k = min(image_topk, p_avg.shape[0])
+                    if k < p_avg.shape[0]:
+                        idx = np.argpartition(p_avg, -k)[-k:]
+                        mask = np.zeros(p_avg.shape[0], dtype=np.bool_)
+                        mask[idx] = True
+                        p_avg[~mask] = 0.0
+                p_image = p_avg.astype(np.float16)
             else:
                 raise ValueError(f"Unknown strategy: {strategy}")
 

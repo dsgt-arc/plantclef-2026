@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"/c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-3_Noisy_Student_Learning\" -name \"*.py\" -type f | xargs grep -l \"class\\\\|def \" | wc -l)"
+    ]
+  }
+}

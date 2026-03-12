@@ -137,7 +137,7 @@ def main() -> None:
     ap.add_argument("--in-parquet", required=True)
     ap.add_argument("--out-csv", required=True)
 
-    ap.add_argument("--id-col", default="quadrat_id")
+    ap.add_argument("--id-col", default="image_name")
     ap.add_argument("--probs-col", default="image_probs_f16")
 
     ap.add_argument("--num-classes", type=int, default=7806)
