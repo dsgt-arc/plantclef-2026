@@ -293,13 +293,26 @@ def get_sweep_configs(tier: str = "all") -> List[Tuple[str, str, dict]]:
          {"alpha": 0.7, "beta": 0.2, "tau": 0.005}),
     ]
 
+    # Tier 4: push lower alpha — α=0.5 was best (F1=0.33403), still improving
+    # 5 submissions max (daily limit)
+    tier4 = [
+        ("A_blend_a0.4", "prior_blend", {"alpha": 0.4}),
+        ("A_blend_a0.3", "prior_blend", {"alpha": 0.3}),
+        ("A_blend_a0.45", "prior_blend", {"alpha": 0.45}),
+        ("A_blend_a0.2", "prior_blend", {"alpha": 0.2}),
+        ("AB_blend_a0.5_boost_b0.2_tau0.005", "blend_boost",
+         {"alpha": 0.5, "beta": 0.2, "tau": 0.005}),
+    ]
+
     if tier == "tier1":
         return tier1
     elif tier == "tier2":
         return tier2
     elif tier == "tier3":
         return tier3
-    return tier1 + tier2 + tier3
+    elif tier == "tier4":
+        return tier4
+    return tier1 + tier2 + tier3 + tier4
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +336,7 @@ def main() -> None:
     ap.add_argument("--id-col", default="image_name")
     ap.add_argument("--probs-col", default="image_probs_f16")
     ap.add_argument(
-        "--tier", default="all", choices=["tier1", "tier2", "tier3", "all"],
+        "--tier", default="all", choices=["tier1", "tier2", "tier3", "tier4", "all"],
         help="Which sweep tier to run (default: all)",
     )
 

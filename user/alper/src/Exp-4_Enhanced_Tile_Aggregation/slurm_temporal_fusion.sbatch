@@ -41,11 +41,11 @@ python "${SRC_ROOT}/temporal_fusion.py" \
   --class-mask-npy "${GEO_MASK}" \
   --topk 10 \
   --threshold 0.03 \
-  --tier tier3
+  --tier tier4
 
 echo ""
 echo "=== Temporal fusion sweep complete ==="
 echo "Submissions in: ${OUT_DIR}/"
-echo "Tier 3 follow-up: blend alpha={0.5,0.6,0.7,0.75} + blend+boost composites"
-echo "Best so far: A_blend alpha=0.8 = F1 0.32393 (baseline 0.31487)"
+echo "Tier 4: blend alpha={0.2,0.3,0.4,0.45} + blend+boost at alpha={0.4,0.5}"
+echo "Best so far: A_blend alpha=0.5 = F1 0.33403 (baseline 0.31487)"
 echo "Submit CSVs to Kaggle to find optimal alpha"
