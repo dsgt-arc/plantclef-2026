@@ -11,7 +11,7 @@
 #SBATCH --mail-user=mgustineli3@gatech.edu
 #
 # Experiment 001: DINOv2 Grid-Size Ablation on PlantCLEF 2026
-# Purpose: Inference with varying grid sizes (no-grid, 2x2, ..., 10x10)
+# Stage 1: GPU inference → parquet (see inference.py)
 #
 # Usage (via run.sh):
 #   bash sbatch/run.sh --grid-size 3
@@ -23,9 +23,6 @@ set -eu
 
 # Environment variables passed from run.sh
 GRID_SIZE="${GRID_SIZE:-0}"
-AGGREGATION="${AGGREGATION:-union}"
-TOP_K="${TOP_K:-5}"
-MAX_SPECIES="${MAX_SPECIES:-}"
 PROJECT_NAME="${PROJECT_NAME:-ps-clef2026_plantclef-0}"
 FAST_DEV_RUN="${FAST_DEV_RUN:-false}"
 GPU_CHECK="${GPU_CHECK:-0}"
@@ -47,14 +44,12 @@ fi
 
 echo "=============================================="
 echo "Job: Experiment 001 - DINOv2 Grid Ablation"
+echo "  Stage 1: GPU Inference → Parquet"
 echo "=============================================="
 echo "Job ID:       ${SLURM_JOB_ID:-local}"
 echo "Node:         $(hostname)"
 echo "Date:         $(date)"
 echo "Grid size:    ${GRID_SIZE}"
-echo "Aggregation:  ${AGGREGATION}"
-echo "Top-K:        ${TOP_K}"
-echo "Max species:  ${MAX_SPECIES}"
 echo "Project:      ${PROJECT_NAME}"
 echo "Experiment:   ${EXPERIMENT_DIR}"
 echo ""
@@ -111,28 +106,27 @@ export TORCH_HOME="/storage/project/${PROJECT_NAME}/mgustineli3/cache/torch"
 mkdir -p "$TORCH_HOME"
 
 # ============================================================================
-# Run classification
+# Run inference (Stage 1)
 # ============================================================================
 
 cd "$EXPERIMENT_DIR"
-mkdir -p artifacts logs
+mkdir -p logits logs
 
-echo "Starting classification..."
+echo "Starting inference..."
 echo ""
 
-CLASSIFY_CMD="python classify.py --grid-size ${GRID_SIZE} --aggregation ${AGGREGATION} --top-k ${TOP_K}"
-[[ -n "${MAX_SPECIES}" ]] && CLASSIFY_CMD="${CLASSIFY_CMD} --max-species ${MAX_SPECIES}"
+INFERENCE_CMD="python inference.py --grid-size ${GRID_SIZE}"
 
 if [[ "${FAST_DEV_RUN}" == "true" ]]; then
-    CLASSIFY_CMD="${CLASSIFY_CMD} --fast-dev-run"
-    echo "  (fast-dev-run: 5 images, no CSV output)"
+    INFERENCE_CMD="${INFERENCE_CMD} --fast-dev-run"
+    echo "  (fast-dev-run: 5 images, no parquet output)"
 fi
 if [[ "${GPU_CHECK}" -gt 0 ]]; then
-    CLASSIFY_CMD="${CLASSIFY_CMD} --gpu-check ${GPU_CHECK}"
+    INFERENCE_CMD="${INFERENCE_CMD} --gpu-check ${GPU_CHECK}"
     echo "  (gpu-check: ${GPU_CHECK} images, profiling mode)"
 fi
 
-srun ${CLASSIFY_CMD}
+srun ${INFERENCE_CMD}
 
 echo ""
 echo "=============================================="
