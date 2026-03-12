@@ -26,11 +26,13 @@
 - [x] 5.4 Split aggregation into Experiment 002
 - [x] 5.5 Validate: `inference.py --grid-size 4 --fast-dev-run` → parquet written with correct shape
 - [x] 5.6 Move parquet output to shared storage (`shared/inference/dinov2-vit-base/`)
+- [x] 5.7 Switch parquet format to per-tile rows `(image_name, tile_idx, probs)` + conversion script
 
 ## 6. Execution (grid sweep)
 - [x] 6.1 Run no-grid baseline (grid_size=0) → F1 = 0.14506
-- [~] 6.2 Run all grid sizes (--all) with Stage 1 — jobs submitted, awaiting completion
-- [ ] 6.3 Record Kaggle scores in results.md (aggregate with exp 002)
+- [x] 6.2 Run all grid sizes (--all) with Stage 1 — all 10 parquets written to shared storage
+- [x] 6.3 Convert all parquets to per-tile format via `convert_parquet.py`
+- [ ] 6.4 Record Kaggle scores in results.md (aggregate with exp 002)
 
 ## 7. Checkpoint verification
 - [ ] 7.1 Confirm `vit_base_patch14_reg4_dinov2.pth` (2026) is the same weights as `model_best.pth.tar` (2025)
