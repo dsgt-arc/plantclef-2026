@@ -31,9 +31,9 @@ DRY_RUN=false
 FAST_DEV_RUN=false
 GPU_CHECK=0
 GRID_SIZE=0
-AGGREGATION="majority_vote"
+AGGREGATION="union"
 TOP_K=5
-MAX_SPECIES=10
+MAX_SPECIES=""
 ALL=false
 PROJECT_NAME="ps-clef2026_plantclef-0"
 
@@ -107,9 +107,9 @@ if [[ "${ALL}" == "true" ]]; then
     [[ "${DRY_RUN}" == "true" ]] && EXTRA_ARGS+=(--dry-run)
     [[ "${FAST_DEV_RUN}" == "true" ]] && EXTRA_ARGS+=(--fast-dev-run)
     [[ "${GPU_CHECK}" -gt 0 ]] && EXTRA_ARGS+=(--gpu-check "${GPU_CHECK}")
-    [[ "${AGGREGATION}" != "majority_vote" ]] && EXTRA_ARGS+=(--aggregation "${AGGREGATION}")
+    [[ "${AGGREGATION}" != "union" ]] && EXTRA_ARGS+=(--aggregation "${AGGREGATION}")
     [[ "${TOP_K}" -ne 5 ]] && EXTRA_ARGS+=(--top-k "${TOP_K}")
-    [[ "${MAX_SPECIES}" -ne 10 ]] && EXTRA_ARGS+=(--max-species "${MAX_SPECIES}")
+    [[ -n "${MAX_SPECIES}" ]] && EXTRA_ARGS+=(--max-species "${MAX_SPECIES}")
     [[ "${PROJECT_NAME}" != "ps-clef2026_plantclef-0" ]] && EXTRA_ARGS+=(--project-name "${PROJECT_NAME}")
 
     # Grid sizes: 0 (no grid), 2, 3, 4, 5, 6, 7, 8, 9, 10
@@ -161,9 +161,12 @@ JOB_SCRIPT="${SCRIPT_DIR}/_job.sh"
 # Submit job
 # ============================================================================
 
+EXPORT_VARS="ALL,GRID_SIZE=${GRID_SIZE},AGGREGATION=${AGGREGATION},TOP_K=${TOP_K},PROJECT_NAME=${PROJECT_NAME},FAST_DEV_RUN=${FAST_DEV_RUN},GPU_CHECK=${GPU_CHECK}"
+[[ -n "${MAX_SPECIES}" ]] && EXPORT_VARS="${EXPORT_VARS},MAX_SPECIES=${MAX_SPECIES}"
+
 CMD="sbatch \
     --output=${LOG_DIR}/slurm_${GRID_LABEL}_%j.log \
-    --export=ALL,GRID_SIZE=${GRID_SIZE},AGGREGATION=${AGGREGATION},TOP_K=${TOP_K},MAX_SPECIES=${MAX_SPECIES},PROJECT_NAME=${PROJECT_NAME},FAST_DEV_RUN=${FAST_DEV_RUN},GPU_CHECK=${GPU_CHECK} \
+    --export=${EXPORT_VARS} \
     --job-name=exp001-${GRID_LABEL} \
     ${JOB_SCRIPT}"
 

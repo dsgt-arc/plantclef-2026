@@ -9,11 +9,14 @@ Usage:
     # Full image (no grid)
     python classify.py --grid-size 0
 
-    # 3x3 grid with majority vote
-    python classify.py --grid-size 3
+    # 4x4 grid with union aggregation, no cap (default)
+    python classify.py --grid-size 4
 
-    # 3x3 grid with top-5 per tile, capped at 10 species per image
-    python classify.py --grid-size 3 --top-k 5 --max-species 10
+    # 4x4 grid with top-3 per tile instead of default top-5
+    python classify.py --grid-size 4 --top-k 3
+
+    # 4x4 grid capped at 20 species per image
+    python classify.py --grid-size 4 --max-species 20
 
     # Pipeline validation (5 images)
     python classify.py --grid-size 3 --fast-dev-run
@@ -58,21 +61,21 @@ def parse_args():
     parser.add_argument(
         "--aggregation",
         type=str,
-        default="majority_vote",
-        choices=["majority_vote"],
-        help="Aggregation method for tile predictions",
+        default="union",
+        choices=["union"],
+        help="Aggregation method for tile predictions (default: union)",
     )
     parser.add_argument(
         "--top-k",
         type=int,
         default=5,
-        help="Top-K predictions per tile for voting",
+        help="Top-K predictions per tile",
     )
     parser.add_argument(
         "--max-species",
         type=int,
-        default=10,
-        help="Max species to predict per image (caps the aggregated list)",
+        default=None,
+        help="Max species per image (default: no cap)",
     )
     parser.add_argument(
         "--batch-size",
@@ -129,32 +132,57 @@ def parse_args():
     return parser.parse_args()
 
 
-def aggregate_majority_vote(
+def aggregate_union(
     tile_probs: torch.Tensor,
     top_k: int,
-    max_species: int,
     cid_to_spid: dict[int, int],
+    max_species: int | None = None,
 ) -> list[int]:
-    """Aggregate tile predictions via majority vote.
+    """Aggregate tile predictions via union of top-k species.
 
-    Each tile votes for its top-k predicted species. The final list is capped
-    at max_species, sorted by vote count (descending).
+    Each tile contributes its top-k predicted species. Species are sorted by
+    frequency (how many tiles predicted each), then the expanded list (with
+    repeats) is capped at max_species before deduplicating. This means
+    high-frequency species consume more slots, naturally filtering out rare
+    species that appeared in only 1-2 tiles.
+
+    Example with 9 tiles, top-k=1, max_species=10:
+        Expanded: [111]*8 + [222]*5 + [333]*3 + [444] + [555] + [666]
+        After cap at 10: [111]*8 + [222]*2
+        After dedup: [111, 222]
 
     Args:
         tile_probs: Tensor of shape (num_tiles, num_classes) with softmax probs.
         top_k: Number of top predictions per tile.
-        max_species: Maximum number of species to return per image.
         cid_to_spid: Class index -> species ID mapping.
+        max_species: Max entries in expanded frequency list before dedup,
+            or None for no cap (returns all unique species).
 
     Returns:
-        List of species IDs sorted by vote count, capped at max_species.
+        List of unique species IDs sorted by frequency (descending).
     """
     _, top_k_ids = tile_probs.topk(top_k, dim=1)
-    votes = Counter()
+    species_counts = Counter()
     for tile_top_k in top_k_ids:
         for class_idx in tile_top_k.cpu().numpy():
-            votes[cid_to_spid[int(class_idx)]] += 1
-    return [sp for sp, _ in votes.most_common(max_species)]
+            species_counts[cid_to_spid[int(class_idx)]] += 1
+
+    if max_species is None:
+        return [sp for sp, _ in species_counts.most_common()]
+
+    # Build expanded list sorted by frequency, cap it, then deduplicate
+    expanded = []
+    for sp, count in species_counts.most_common():
+        expanded.extend([sp] * count)
+    expanded = expanded[:max_species]
+    # Deduplicate preserving order (most frequent first)
+    seen = set()
+    result = []
+    for sp in expanded:
+        if sp not in seen:
+            seen.add(sp)
+            result.append(sp)
+    return result
 
 
 def main():
@@ -171,7 +199,7 @@ def main():
     print(f"Grid size:    {grid_label}")
     print(f"Aggregation:  {args.aggregation}")
     print(f"Top-K:        {args.top_k}")
-    print(f"Max species:  {args.max_species}")
+    print(f"Max species:  {args.max_species or 'no cap'}")
     print(f"Batch size:   {args.batch_size}")
     print(f"Model:        {args.model_path}")
     print(f"Data dir:     {args.data_dir}")
@@ -273,10 +301,9 @@ def main():
     results = []
     for img_idx in range(num_images):
         tile_probs = image_probs[img_idx]  # (tiles_per_image, num_classes)
-        if args.aggregation == "majority_vote":
-            species_ids = aggregate_majority_vote(
-                tile_probs, args.top_k, args.max_species, cid_to_spid
-            )
+        species_ids = aggregate_union(
+            tile_probs, args.top_k, cid_to_spid, args.max_species
+        )
         results.append({"quadrat_id": image_names[img_idx], "species_ids": species_ids})
 
     # ---- Report ----
@@ -305,7 +332,8 @@ def main():
     # ---- Save submission CSV ----
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_file = output_dir / f"submission_{grid_label}_{args.aggregation}_topk{args.top_k}_max{args.max_species}.csv"
+    max_label = f"_max{args.max_species}" if args.max_species else ""
+    output_file = output_dir / f"{grid_label}_{args.aggregation}_topk{args.top_k}{max_label}.csv"
 
     df = pd.DataFrame(
         [
