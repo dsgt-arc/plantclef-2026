@@ -14,6 +14,7 @@ Strategies:
   prior_blend    — P = alpha * P_Q + (1-alpha) * P_loc  (recall boost)
   blend_mask     — prior_blend then location_mask        (balanced)
   boost_mask     — cond_boost then location_mask         (conservative)
+  blend_boost    — prior_blend then cond_boost           (max recall)
 """
 from __future__ import annotations
 
@@ -184,6 +185,11 @@ def fuse_all(
         elif strategy == "blend_mask":
             p = apply_prior_blend(p_q, p_loc, params["alpha"])
             refined[qid] = apply_location_mask(p, p_loc, params["tau_loc"])
+        elif strategy == "blend_boost":
+            p = apply_prior_blend(p_q, p_loc, params["alpha"])
+            refined[qid] = apply_cond_boost(
+                p, p_loc, params["beta"], params["tau"]
+            )
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
 
@@ -273,12 +279,27 @@ def get_sweep_configs(tier: str = "all") -> List[Tuple[str, str, dict]]:
         ("AC_blend_a0.9_mask0.01", "blend_mask",
          {"alpha": 0.9, "tau_loc": 0.01}),
     ]
+    # Tier 3: follow-up sweep based on Kaggle results
+    # - Blend alpha=0.8 was best (F1=0.32393), trend not plateaued → try lower alpha
+    # - Also try blend + boost composite (combine two best strategies)
+    tier3 = [
+        ("A_blend_a0.5", "prior_blend", {"alpha": 0.5}),
+        ("A_blend_a0.6", "prior_blend", {"alpha": 0.6}),
+        ("A_blend_a0.7", "prior_blend", {"alpha": 0.7}),
+        ("A_blend_a0.75", "prior_blend", {"alpha": 0.75}),
+        ("AB_blend_a0.8_boost_b0.2_tau0.005", "blend_boost",
+         {"alpha": 0.8, "beta": 0.2, "tau": 0.005}),
+        ("AB_blend_a0.7_boost_b0.2_tau0.005", "blend_boost",
+         {"alpha": 0.7, "beta": 0.2, "tau": 0.005}),
+    ]
 
     if tier == "tier1":
         return tier1
     elif tier == "tier2":
         return tier2
-    return tier1 + tier2
+    elif tier == "tier3":
+        return tier3
+    return tier1 + tier2 + tier3
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +323,7 @@ def main() -> None:
     ap.add_argument("--id-col", default="image_name")
     ap.add_argument("--probs-col", default="image_probs_f16")
     ap.add_argument(
-        "--tier", default="all", choices=["tier1", "tier2", "all"],
+        "--tier", default="all", choices=["tier1", "tier2", "tier3", "all"],
         help="Which sweep tier to run (default: all)",
     )
 
