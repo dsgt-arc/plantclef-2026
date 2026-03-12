@@ -67,6 +67,30 @@ def group_by_location(
     return dict(groups)
 
 
+def parse_site(location: str) -> str:
+    """Strip plot identifier from location to get site.
+
+    'CBN-PdlC-E3' -> 'CBN-PdlC'
+    """
+    parts = location.rsplit("-", 1)
+    return parts[0] if len(parts) == 2 else location
+
+
+def group_by_site(
+    quadrat_ids: List[str],
+) -> Dict[str, List[str]]:
+    """Group quadrat IDs by site (location with plot suffix stripped).
+
+    Returns {site: [qid1, qid2, ...]}.
+    """
+    groups: Dict[str, List[str]] = defaultdict(list)
+    for qid in quadrat_ids:
+        loc = parse_location(qid)
+        site = parse_site(loc)
+        groups[site].append(qid)
+    return dict(groups)
+
+
 # ---------------------------------------------------------------------------
 # Load + profile
 # ---------------------------------------------------------------------------
@@ -105,6 +129,25 @@ def build_location_profiles(
             continue
         stacked = np.stack(vecs, axis=0)  # [N_visits, C]
         profiles[loc] = np.max(stacked, axis=0)  # [C]
+    return profiles
+
+
+def build_site_profiles(
+    quadrat_probs: Dict[str, np.ndarray],
+    site_groups: Dict[str, List[str]],
+    num_classes: int = NUM_CLASSES,
+) -> Dict[str, np.ndarray]:
+    """Build P_site(s) = element-wise max over all quadrats at a site.
+
+    Returns {site: [C] f32 vector}.
+    """
+    profiles = {}
+    for site, qids in site_groups.items():
+        vecs = [quadrat_probs[q] for q in qids if q in quadrat_probs]
+        if not vecs:
+            continue
+        stacked = np.stack(vecs, axis=0)
+        profiles[site] = np.max(stacked, axis=0)
     return profiles
 
 
@@ -151,10 +194,16 @@ def fuse_all(
     location_profiles: Dict[str, np.ndarray],
     strategy: str,
     params: dict,
+    site_groups: Optional[Dict[str, List[str]]] = None,
+    site_profiles: Optional[Dict[str, np.ndarray]] = None,
+    site_mode: str = "off",
 ) -> Dict[str, np.ndarray]:
     """Apply a fusion strategy to all quadrats. Returns refined probs dict.
 
-    Single-visit quadrats are passed through unchanged.
+    site_mode controls how site-level profiles are used:
+      "off"      — single-visit quadrats pass through unchanged (default)
+      "fallback" — single-visit quadrats use site profile if available
+      "always"   — all quadrats use site profile instead of location profile
     """
     refined = {}
     loc_for_qid = {}
@@ -162,33 +211,57 @@ def fuse_all(
         for qid in qids:
             loc_for_qid[qid] = loc
 
+    site_for_qid = {}
+    if site_groups:
+        for site, qids in site_groups.items():
+            for qid in qids:
+                site_for_qid[qid] = site
+
     for qid, p_q in quadrat_probs.items():
         loc = loc_for_qid.get(qid)
-        p_loc = location_profiles.get(loc) if loc else None
+        loc_visit_count = len(location_groups.get(loc, []))
+        p_profile = location_profiles.get(loc) if loc else None
 
-        # Single-visit or missing profile: pass through
-        if p_loc is None or len(location_groups.get(loc, [])) < 2:
+        # Determine which profile to use based on site_mode
+        if site_mode == "always" and site_profiles:
+            site = site_for_qid.get(qid)
+            p_site = site_profiles.get(site) if site else None
+            if p_site is not None:
+                p_profile = p_site
+        elif site_mode == "fallback" and site_profiles:
+            if p_profile is None or loc_visit_count < 2:
+                site = site_for_qid.get(qid)
+                p_site = site_profiles.get(site) if site else None
+                if p_site is not None:
+                    p_profile = p_site
+
+        # No usable profile: pass through
+        if p_profile is None:
+            refined[qid] = p_q.copy()
+            continue
+        # In "off" mode, single-visit locations still pass through
+        if site_mode == "off" and loc_visit_count < 2:
             refined[qid] = p_q.copy()
             continue
 
         if strategy == "location_mask":
-            refined[qid] = apply_location_mask(p_q, p_loc, params["tau_loc"])
+            refined[qid] = apply_location_mask(p_q, p_profile, params["tau_loc"])
         elif strategy == "cond_boost":
             refined[qid] = apply_cond_boost(
-                p_q, p_loc, params["beta"], params["tau"]
+                p_q, p_profile, params["beta"], params["tau"]
             )
         elif strategy == "prior_blend":
-            refined[qid] = apply_prior_blend(p_q, p_loc, params["alpha"])
+            refined[qid] = apply_prior_blend(p_q, p_profile, params["alpha"])
         elif strategy == "boost_mask":
-            p = apply_cond_boost(p_q, p_loc, params["beta"], params["tau"])
-            refined[qid] = apply_location_mask(p, p_loc, params["tau_loc"])
+            p = apply_cond_boost(p_q, p_profile, params["beta"], params["tau"])
+            refined[qid] = apply_location_mask(p, p_profile, params["tau_loc"])
         elif strategy == "blend_mask":
-            p = apply_prior_blend(p_q, p_loc, params["alpha"])
-            refined[qid] = apply_location_mask(p, p_loc, params["tau_loc"])
+            p = apply_prior_blend(p_q, p_profile, params["alpha"])
+            refined[qid] = apply_location_mask(p, p_profile, params["tau_loc"])
         elif strategy == "blend_boost":
-            p = apply_prior_blend(p_q, p_loc, params["alpha"])
+            p = apply_prior_blend(p_q, p_profile, params["alpha"])
             refined[qid] = apply_cond_boost(
-                p, p_loc, params["beta"], params["tau"]
+                p, p_profile, params["beta"], params["tau"]
             )
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
@@ -304,6 +377,19 @@ def get_sweep_configs(tier: str = "all") -> List[Tuple[str, str, dict]]:
          {"alpha": 0.5, "beta": 0.2, "tau": 0.005}),
     ]
 
+    # Tier 5: final alpha + site-level profiles
+    # α=0.2 is current best (F1=0.33817). Test α=0.1/0.0 + site-level fusion.
+    tier5 = [
+        ("A_blend_a0.1", "prior_blend", {"alpha": 0.1}),
+        ("A_blend_a0.0", "prior_blend", {"alpha": 0.0}),
+        ("A_blend_a0.2_site_fallback", "prior_blend",
+         {"alpha": 0.2, "site_mode": "fallback"}),
+        ("A_blend_a0.2_site_always", "prior_blend",
+         {"alpha": 0.2, "site_mode": "always"}),
+        ("A_blend_a0.3_site_always", "prior_blend",
+         {"alpha": 0.3, "site_mode": "always"}),
+    ]
+
     if tier == "tier1":
         return tier1
     elif tier == "tier2":
@@ -312,7 +398,9 @@ def get_sweep_configs(tier: str = "all") -> List[Tuple[str, str, dict]]:
         return tier3
     elif tier == "tier4":
         return tier4
-    return tier1 + tier2 + tier3 + tier4
+    elif tier == "tier5":
+        return tier5
+    return tier1 + tier2 + tier3 + tier4 + tier5
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +424,7 @@ def main() -> None:
     ap.add_argument("--id-col", default="image_name")
     ap.add_argument("--probs-col", default="image_probs_f16")
     ap.add_argument(
-        "--tier", default="all", choices=["tier1", "tier2", "tier3", "tier4", "all"],
+        "--tier", default="all", choices=["tier1", "tier2", "tier3", "tier4", "tier5", "all"],
         help="Which sweep tier to run (default: all)",
     )
 
@@ -370,6 +458,25 @@ def main() -> None:
         np.count_nonzero(p > 0.01) for p in location_profiles.values()
     ])
     print(f"  Avg species per location (>0.01): {avg_nonzero:.1f}")
+
+    # --- Group by site + build site profiles ---
+    site_groups = group_by_site(list(quadrat_probs.keys()))
+    multi_site = {k: v for k, v in site_groups.items() if len(v) >= 2}
+    print(f"\nSite grouping:")
+    print(f"  Unique sites: {len(site_groups)}")
+    print(f"  Sites with 2+ quadrats: {len(multi_site)}")
+
+    print("\nBuilding site profiles (element-wise max)...")
+    site_profiles = build_site_profiles(
+        quadrat_probs, site_groups, args.num_classes
+    )
+    # Count single-visit locations that gain site context
+    single_with_site = sum(
+        1 for loc, qids in location_groups.items()
+        if len(qids) < 2
+        and parse_site(loc) in multi_site
+    )
+    print(f"  Single-visit locations gaining site context: {single_with_site}")
 
     # --- Load submission helpers ---
     species_map = load_species_map(args.species_map, args.num_classes)
@@ -412,10 +519,17 @@ def main() -> None:
         print(f"  Strategy: {strategy}  Params: {params}")
         print(f"{'='*70}")
 
+        # Extract site_mode from params (not passed to strategy functions)
+        cfg_site_mode = params.get("site_mode", "off")
+        strategy_params = {k: v for k, v in params.items() if k != "site_mode"}
+
         t0 = time.time()
         refined = fuse_all(
             quadrat_probs, location_groups, location_profiles,
-            strategy, params,
+            strategy, strategy_params,
+            site_groups=site_groups,
+            site_profiles=site_profiles,
+            site_mode=cfg_site_mode,
         )
         elapsed = time.time() - t0
         print(f"  Fused {len(refined)} quadrats in {elapsed:.2f}s")
