@@ -340,9 +340,33 @@ All 65 configurations tested, sorted by F1 score:
 | Method | Best F1 | k-sensitive? | When it works |
 |--------|---------|-------------|---------------|
 | noisy_or | 0.28093 | Very (must tune k) | Low k, single view |
-| max_prob | **0.31487** | No (robust to k) | With TTA, sharp T |
+| max_prob (=top1) | **0.31487** | No (robust to k) | With TTA, sharp T |
+| top2_prob | 0.30073 | Moderate | Higher k only |
+| top3_prob | 0.30577 | Moderate | Higher k only |
 | weighted_noisy_or | 0.26851 | Yes | Never outperforms alternatives |
 | mean_prob | 0.25626 | Yes | Never outperforms alternatives |
+
+---
+
+## Step 5: Top-m Probability Aggregation
+
+Testing whether averaging the top-m most confident tiles per species (instead of just the max) improves over max_prob.
+
+**Config**: per_view_or + top_m_prob + T=1.5 + thr=0.03 + topk=10
+
+| m | k=3 | k=4 | k=5 | k=6 |
+|---|-----|-----|-----|-----|
+| 1 (=max_prob) | **0.31487** | 0.31097 | 0.30864 | 0.30970 |
+| 2 | 0.28703 | 0.28719 | 0.29325 | 0.30073 |
+| 3 | 0.28314 | 0.29599 | 0.30577 | 0.29834 |
+
+### Explanation: Why Top-m Doesn't Beat Max
+
+Averaging the top-2 or top-3 tiles dilutes the strongest signal with weaker, noisier tiles. At k=3 with m=2, the second tile is the 2nd-most-confident out of only 3 — likely noisy. The advantage of max_prob is precisely that it isolates the single most informative tile per species and ignores everything else.
+
+As k increases, m=2 and m=3 improve (the 2nd and 3rd best tiles among more candidates are more likely to be genuinely informative), but they never catch max_prob. This confirms that for vegetation plot species detection, the single-tile signal is decisive — additional tiles add more noise than confirmation.
+
+**Conclusion**: Top-m averaging does not improve over max_prob (m=1). The aggregation method is optimized; further gains must come from the feature level (better embeddings, more augmentation views, or larger models).
 
 ---
 
@@ -354,8 +378,9 @@ All experiments ran on CPU only (no GPU). The DINOv2 classifier head was extract
 |------|----------|------|
 | Steps 1 + 1b + 1c + 3 | CPU-medium, 48 GB RAM | ~4 hours |
 | Step 4 (combined) | CPU, interactive | ~30 minutes |
+| Step 5 (top-m sweep) | CPU, interactive | ~30 minutes |
 | topk sweep | CPU | ~1 minute |
-| **Total** | | **~4.5 hours** |
+| **Total** | | **~5 hours** |
 
 ---
 

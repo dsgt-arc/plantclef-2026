@@ -1,0 +1,37 @@
+  Most promising directions (ordered by effort/impact)
+
+  1. Top-m average aggregation (low effort, high potential)
+
+  A natural middle ground between max_prob (top-1) and mean_prob (all tiles):
+
+  P(c) = mean of top-m tile probabilities for class c
+
+  - m=1 is max_prob (current best, 0.315)
+  - m=k is mean_prob (0.256 — too diluted)
+  - m=2 or m=3 could be the sweet spot: uses the strongest evidence while getting confirmation from a second tile
+
+  This is trivial to implement — one new aggregator class. Test m={1,2,3} × per_view_or × T=1.5 × k={3,4,5,6}.
+
+  2. Temperature fine-tuning (low effort, moderate potential)
+
+  Only T={1.5, 2.0, 2.5} were tested. With max_prob + per_view_or, sharper T helped. Try T={1.0, 1.2, 1.5, 1.8} to find
+  the true optimum. But be cautious — this is the kind of fine-tuning that overfits to the test set.
+
+  3. Additional augmentation views (medium effort, moderate potential)
+
+  Currently 3 views: orig, hflip, rot90. Phase 1 only stored these 3 embeddings. If you re-run Phase 1 extraction with
+  additional augmentations (rot180, rot270, vflip), per_view_or gets more views to average, further reducing variance.
+  The per_view_or framework already generalizes to N views.
+
+  The cost is re-running DINOv2 inference on all test tiles with new augmentations (~2-3 hours GPU).
+
+  4. Larger DINOv2 backbone (high effort, high potential)
+
+  You're using ViT-B (86M params). DINOv2 ViT-L (300M) and ViT-G (1.1B) exist and are likely more accurate per-tile. The
+   entire pipeline (extraction → aggregation) works identically — just swap the model. This is probably the single
+  highest-ceiling improvement but requires re-extracting all embeddings.
+
+  5. Ensemble max_prob + noisy_or (low effort, uncertain)
+
+  Average the image-level probabilities from max_prob (good precision) and noisy_or (good recall) at k=3, T=1.5,
+  per_view_or. Could combine their strengths.
