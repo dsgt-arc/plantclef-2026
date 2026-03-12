@@ -114,7 +114,7 @@ Run on the current best baseline parquet AND on the best multi-view parquet afte
 ```bash
 # On the existing Exp-3 best baseline (can run immediately)
 bash topk_sweep.sh \
-  $PLANTCLEF_ROOT/aerten3/submissions/phase2_sweep/sweep_T2.0_k6.parquet
+  $PLANTCLEF_ROOT/aerten3/submissions/Submitted_Ph1_2/phase2_sweep/sweep_T2.0_k6.parquet
 
 # On the best multi-view result (after Step 1 completes)
 bash topk_sweep.sh \
@@ -168,6 +168,6 @@ All results should be compared against the Exp-3 Phase 2 optimal config:
 
 - **Configuration**: T=2.0, k=6, thr=0.03, topk=10, Noisy-OR, orig_only
 - **F1 Score**: 0.28093
-- **Parquet**: `$PLANTCLEF_ROOT/aerten3/submissions/phase2_sweep/sweep_T2.0_k6.parquet`
+- **Parquet**: `$PLANTCLEF_ROOT/aerten3/submissions/Submitted_Ph1_2/phase2_sweep/sweep_T2.0_k6.parquet`
 
 The `orig_only` strategy in Step 1 serves as a sanity check — it should reproduce this baseline exactly.
