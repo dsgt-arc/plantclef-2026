@@ -38,6 +38,7 @@ from plantclef.model import load_model
 # Default paths on PACE shared storage
 DEFAULT_MODEL_PATH = "/storage/project/ps-clef2026_plantclef-0/shared/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth"
 DEFAULT_DATA_DIR = "/storage/project/ps-clef2026_plantclef-0/shared/data/raw/PlanCLEF_test_data/images"
+DEFAULT_OUTPUT_DIR = "/storage/project/ps-clef2026_plantclef-0/shared/inference/dinov2-vit-base"
 
 
 def parse_args():
@@ -77,7 +78,7 @@ def parse_args():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="logits",
+        default=DEFAULT_OUTPUT_DIR,
         help="Directory to save parquet output",
     )
     parser.add_argument(

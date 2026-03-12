@@ -24,11 +24,12 @@
 - [x] 5.2 Update sbatch scripts for Stage 1 only (aggregation runs separately on CPU)
 - [x] 5.3 Add pyarrow dependency
 - [x] 5.4 Split aggregation into Experiment 002
-- [ ] 5.5 Validate: `inference.py --grid-size 4 --fast-dev-run` → parquet written with correct shape
+- [x] 5.5 Validate: `inference.py --grid-size 4 --fast-dev-run` → parquet written with correct shape
+- [x] 5.6 Move parquet output to shared storage (`shared/inference/dinov2-vit-base/`)
 
 ## 6. Execution (grid sweep)
 - [x] 6.1 Run no-grid baseline (grid_size=0) → F1 = 0.14506
-- [ ] 6.2 Run all grid sizes (--all) with Stage 1
+- [~] 6.2 Run all grid sizes (--all) with Stage 1 — jobs submitted, awaiting completion
 - [ ] 6.3 Record Kaggle scores in results.md (aggregate with exp 002)
 
 ## 7. Checkpoint verification
