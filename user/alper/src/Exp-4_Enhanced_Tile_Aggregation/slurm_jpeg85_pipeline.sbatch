@@ -52,27 +52,29 @@ python "${SRC_ROOT}/view_ablation_sweep.py" \
   --topk 10
 
 # ─── Step B: Temporal fusion on 1v JPEG85 results ───
-# Run temporal fusion on k=3 and k=4 (known best k values from non-JPEG experiments)
+# Run tier6 (alpha 0.1-0.5) + tier7 (alpha 0.6-0.9) on k=3 and k=4
 echo ""
 echo "=== Step B: Temporal fusion on JPEG85 1v results ==="
 
 for K in 3 4; do
-  IN_PARQUET="${AGG_DIR}/mv_1v_max_prob_T1.5_k${K}.parquet"
-  OUT_FUSE="${FUSE_DIR}/k${K}"
+  for TIER in tier6 tier7; do
+    IN_PARQUET="${AGG_DIR}/mv_1v_max_prob_T1.5_k${K}.parquet"
+    OUT_FUSE="${FUSE_DIR}/k${K}"
 
-  echo ""
-  echo "--- Temporal fusion: 1v k=${K} ---"
-  echo "Input: ${IN_PARQUET}"
-  echo "Output: ${OUT_FUSE}"
+    echo ""
+    echo "--- Temporal fusion: 1v k=${K} ${TIER} ---"
+    echo "Input: ${IN_PARQUET}"
+    echo "Output: ${OUT_FUSE}"
 
-  python "${SRC_ROOT}/temporal_fusion.py" \
-    --in-parquet "${IN_PARQUET}" \
-    --out-dir "${OUT_FUSE}" \
-    --species-map "${SPECIES_MAP}" \
-    --class-mask-npy "${GEO_MASK}" \
-    --topk 10 \
-    --threshold 0.03 \
-    --tier tier6
+    python "${SRC_ROOT}/temporal_fusion.py" \
+      --in-parquet "${IN_PARQUET}" \
+      --out-dir "${OUT_FUSE}" \
+      --species-map "${SPECIES_MAP}" \
+      --class-mask-npy "${GEO_MASK}" \
+      --topk 10 \
+      --threshold 0.03 \
+      --tier "${TIER}"
+  done
 done
 
 echo ""
@@ -80,11 +82,14 @@ echo "=== JPEG85 pipeline complete ==="
 echo "Aggregation results: ${AGG_DIR}/"
 echo "Temporal fusion results: ${FUSE_DIR}/"
 echo ""
-echo "Key CSVs to submit (compare with non-JPEG baselines):"
-echo "  1v k4 no-fusion:    ${AGG_DIR}/mv_1v_max_prob_T1.5_k4_thr0.03_top10.csv"
-echo "  1v k4 + alpha=0.1:  ${FUSE_DIR}/k4/A_blend_a0.1_1v_thr0.03_top10.csv"
-echo "  1v k3 + alpha=0.1:  ${FUSE_DIR}/k3/A_blend_a0.1_1v_thr0.03_top10.csv"
+echo "Key CSVs (alpha 0.1-0.9 for both k=3 and k=4):"
+echo "  ${FUSE_DIR}/k3/tf_A_blend_a*_1v_thr0.03_top10.csv"
+echo "  ${FUSE_DIR}/k4/tf_A_blend_a*_1v_thr0.03_top10.csv"
+echo ""
+echo "JPEG85 baselines (no fusion):"
+echo "  1v k3: ${AGG_DIR}/mv_1v_max_prob_T1.5_k3_thr0.03_top10.csv (F1 0.33073)"
+echo "  1v k4: ${AGG_DIR}/mv_1v_max_prob_T1.5_k4_thr0.03_top10.csv (F1 0.32717)"
 echo ""
 echo "Non-JPEG baselines:"
-echo "  1v k4 no-fusion:   F1 0.31950"
-echo "  1v k4 + alpha=0.1: F1 0.33946 (current best)"
+echo "  1v k4 + alpha=0.1: F1 0.33946 (previous best)"
+echo "  JPEG85 1v k3 + alpha=0.5: F1 0.35486 (current best)"
