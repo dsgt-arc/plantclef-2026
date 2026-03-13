@@ -29,7 +29,7 @@ Flags:
     --grid-size N       Required. Selects grid_NxN.parquet (0 for no_grid).
     --method M          Classification method (default: sorted-prob).
     --top-k K           For sorted-prob: total entries to take before dedup
-                        (default: 9). For union/expanded-list: species
+                        (default: 10). For union/expanded-list: species
                         extracted per tile before aggregation.
     --max-species N     Cap on species per image. Required for expanded-list.
                         For union, caps the unique species count.
@@ -40,7 +40,7 @@ Flags:
     --quadrat-top-k K   Cap species per quadrat group (only with --quadrat-agg).
 
 Examples:
-    # Default (2025 approach): sorted-prob with top-k=9, 4x4 grid
+    # Default: sorted-prob with top-k=10, 4x4 grid
     python classify.py --grid-size 4
 
     # Same with different top-k
@@ -324,8 +324,8 @@ def parse_args():
     parser.add_argument(
         "--top-k",
         type=int,
-        default=9,
-        help="For sorted-prob: total top entries before dedup (default: 9). "
+        default=10,
+        help="For sorted-prob: total top entries before dedup (default: 10). "
         "For union/expanded-list: species per tile before aggregation.",
     )
     parser.add_argument(

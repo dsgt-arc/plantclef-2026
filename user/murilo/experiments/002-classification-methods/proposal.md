@@ -39,19 +39,45 @@ method combines these into a per-image species list.
 
 ### 1. Sorted-prob (default) — F1 = 0.30810
 
-Pool all per-tile predictions, sort by probability descending, take top-k
-entries, deduplicate. Produces variable-length species lists: confident species
-consume multiple top-k slots, so images with strong agreement get fewer unique
-species.
+The input is a single image split into an NxN grid of tiles. Each tile is
+passed through the DINOv2 classifier independently, producing a softmax
+probability vector over 7,806 species. For a 4x4 grid, this gives 16 vectors
+of 7,806 probabilities each.
+
+**Step 1 — Pool.** Flatten all tile probability vectors into a single array.
+For a 4x4 grid: 16 x 7,806 = 124,896 (probability, class_index) pairs. Every
+tile contributes every species — most with near-zero probability.
+
+**Step 2 — Sort and take top-k.** Pick the k highest probabilities from this
+pool of 124,896 entries. With top-k=10, you get the 10 highest-confidence
+individual predictions across all tiles, regardless of which tile or species
+they came from.
+
+**Step 3 — Map and deduplicate.** Convert each class index to its species ID
+via `class_mapping.txt`, then deduplicate keeping first occurrence (= highest
+probability). The same species can appear multiple times in the top-k if
+multiple tiles predicted it with high confidence — each duplicate consumes a
+slot.
+
+**Why this produces variable-length species lists:**
 
 ```
-4 tiles, top-k=6:
-  (0.55, A)  (0.28, B)  (0.13, A)  (0.13, C)  (0.06, B)  (0.05, D)
-  → dedup → [A, B, C, D]  (4 species, not 6 — A and B consumed extra slots)
+Image A — tiles strongly agree (one dominant species):
+  top-10: [X, X, X, X, Y, X, Y, Z, X, Y]
+  after dedup: [X, Y, Z] → 3 species
+
+Image B — tiles disagree (diverse scene):
+  top-10: [A, B, C, D, E, F, G, A, H, I]
+  after dedup: [A, B, C, D, E, F, G, H, I] → 9 species
 ```
 
-Key insight: **probability magnitude > tile frequency**. A species at 0.55 in
-one tile is more informative than a species at 0.02 in six tiles.
+The top-k acts as a **budget**. Confident repeated predictions "spend" budget
+on species the model is sure about, leaving less room for uncertain ones.
+
+Key insight: **probability magnitude > tile frequency**. A species predicted
+at 0.55 in one tile is more informative than a species predicted at 0.02 in
+six tiles. This is why sorted-prob (F1=0.31) vastly outperforms union
+(F1=0.21), which ranks by tile count and discards probability magnitude.
 
 ### 2. Union — F1 = 0.19–0.21
 
