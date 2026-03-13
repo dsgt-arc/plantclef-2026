@@ -401,6 +401,16 @@ def get_sweep_configs(tier: str = "all") -> List[Tuple[str, str, dict]]:
         ("A_blend_a0.5_1v", "prior_blend", {"alpha": 0.5}),
     ]
 
+    # Tier 7: JPEG85 higher alpha sweep
+    # JPEG85 + 1v shifted optimal alpha higher (0.5 best so far, still climbing)
+    # Sweep alpha 0.6-0.9 to find the peak
+    tier7 = [
+        ("A_blend_a0.6_1v", "prior_blend", {"alpha": 0.6}),
+        ("A_blend_a0.7_1v", "prior_blend", {"alpha": 0.7}),
+        ("A_blend_a0.8_1v", "prior_blend", {"alpha": 0.8}),
+        ("A_blend_a0.9_1v", "prior_blend", {"alpha": 0.9}),
+    ]
+
     if tier == "tier1":
         return tier1
     elif tier == "tier2":
@@ -413,7 +423,9 @@ def get_sweep_configs(tier: str = "all") -> List[Tuple[str, str, dict]]:
         return tier5
     elif tier == "tier6":
         return tier6
-    return tier1 + tier2 + tier3 + tier4 + tier5 + tier6
+    elif tier == "tier7":
+        return tier7
+    return tier1 + tier2 + tier3 + tier4 + tier5 + tier6 + tier7
 
 
 # ---------------------------------------------------------------------------
@@ -437,7 +449,7 @@ def main() -> None:
     ap.add_argument("--id-col", default="image_name")
     ap.add_argument("--probs-col", default="image_probs_f16")
     ap.add_argument(
-        "--tier", default="all", choices=["tier1", "tier2", "tier3", "tier4", "tier5", "tier6", "all"],
+        "--tier", default="all", choices=["tier1", "tier2", "tier3", "tier4", "tier5", "tier6", "tier7", "all"],
         help="Which sweep tier to run (default: all)",
     )
 
