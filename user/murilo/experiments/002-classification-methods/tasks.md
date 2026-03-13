@@ -1,10 +1,10 @@
 # Tasks
 
 ## 1. Setup
-- [x] 1.1 Copy aggregate.py from exp 001 (self-contained, no plantclef imports)
+- [x] 1.1 Copy classify.py from exp 001 (self-contained, no plantclef imports)
 - [x] 1.2 Create CPU-only pyproject.toml (pandas, pyarrow, numpy)
-- [ ] 1.3 Validate: `python aggregate.py --help` parses correctly
-- [ ] 1.4 Validate: `aggregate.py --input ../001-dinov2-grid-ablation/logits/grid_4x4.parquet --method expanded-list --top-k 5 --max-species 20` reproduces existing CSV
+- [ ] 1.3 Validate: `python classify.py --help` parses correctly
+- [ ] 1.4 Validate: `classify.py --input ../001-dinov2-grid-ablation/logits/grid_4x4.parquet --method expanded-list --top-k 5 --max-species 20` reproduces existing CSV
 
 ## 2. Aggregation experiments (grid 4x4, top-k=5 per tile)
 - [x] 2.1 Union, no cap → avg 37.2 species/image → F1 = 0.21313

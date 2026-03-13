@@ -28,7 +28,7 @@ frozen DINOv2 ViT-Base classifier on PlantCLEF vegetation plot images.
 | 10×10     | 100         |                    |           |                    |            |
 
 > For aggregation method scores, see
-> [Experiment 002: Results](../002-aggregation-methods/results.md).
+> [Experiment 002: Results](../002-classification-methods/results.md).
 
 ## GPU Profiling
 

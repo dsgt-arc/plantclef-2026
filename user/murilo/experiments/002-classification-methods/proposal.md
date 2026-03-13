@@ -1,4 +1,4 @@
-# Proposal: Aggregation Methods for PlantCLEF 2026
+# Proposal: Classification Methods for PlantCLEF 2026
 
 **Status**: proposed
 **Created**: 2026-03-12
@@ -6,21 +6,25 @@
 
 ## Hypothesis
 
-Aggregation method is the primary driver of F1 variation given fixed inference
-outputs. Finding the right approach to combine per-tile softmax predictions into
-per-image species lists can close the gap from our current best (F1=0.23) toward
-the 2025 reference score (F1=0.31).
+The classification method — how per-tile softmax predictions are combined into
+per-image species lists — is the primary driver of F1 variation given fixed
+inference outputs. Finding the right approach can close the gap from our current
+best (F1=0.23) toward the 2025 reference score (F1=0.31).
 
 ## Background
 
-In Experiment 001 (DINOv2 grid ablation), we split the pipeline into two stages:
-GPU inference (parquet) and CPU aggregation (CSV). Initial aggregation experiments
-showed that the method matters significantly — union aggregation scored F1=0.21
-regardless of species cap, while expanded-list aggregation reached F1=0.23.
+Experiment 001 (DINOv2 grid inference) produces per-tile softmax vectors saved
+to parquet. This experiment takes those outputs and explores different
+classification strategies: how to aggregate tile predictions, threshold
+confidence, and select species per image.
+
+Initial experiments showed that method choice matters significantly — union
+aggregation scored F1=0.21 regardless of species cap, while expanded-list
+aggregation reached F1=0.23.
 
 The 2025 pipeline achieved F1=0.30810, but how its reference CSV was generated
 remains unknown (the `SubmissionTask` was commented out in `workflow.py`). The
-gap between 0.23 and 0.31 likely comes from aggregation/post-processing
+gap between 0.23 and 0.31 likely comes from classification/post-processing
 differences rather than model differences (per-image species overlap is 85-92%).
 
 ## Method
@@ -28,8 +32,9 @@ differences rather than model differences (per-image species overlap is 85-92%).
 ### Approach
 
 Read parquet files produced by Experiment 001 (GPU inference), apply different
-aggregation methods, and upload submission CSVs to Kaggle. Iterate quickly on
-CPU without re-running expensive GPU inference.
+classification strategies (aggregation, thresholding, species selection), and
+upload submission CSVs to Kaggle. Iterate quickly on CPU without re-running
+expensive GPU inference.
 
 ### Setup
 
@@ -37,14 +42,14 @@ CPU without re-running expensive GPU inference.
 |-----------|---------|
 | Data | Parquet files from `../001-dinov2-grid-ablation/logits/` |
 | Compute | CPU only (no GPU needed) |
-| Code | `aggregate.py` (self-contained, no `plantclef` imports) |
+| Code | `classify.py` (self-contained, no `plantclef` imports) |
 | Dependencies | pandas, pyarrow, numpy |
 | Class mapping | 7,806 species via `class_mapping.txt` |
 
 ### Procedure
 
 1. Read parquet from exp 001: `../001-dinov2-grid-ablation/logits/grid_NxN.parquet`
-2. Apply aggregation method via `aggregate.py`
+2. Apply aggregation method via `classify.py`
 3. Upload submission CSV to Kaggle
 4. Record score in results.md
 
@@ -53,12 +58,13 @@ CPU without re-running expensive GPU inference.
 - **Union no cap** (F1=0.21313): All unique species from top-k per tile, no filtering
 - **Expanded-list max20** (F1=0.23): Frequency-expanded list, cap at 20, dedup — best so far
 
-## Aggregation Methods
+## Classification Methods
 
-Each tile produces a softmax probability vector over 7,806 species. The top-k
-species per tile are extracted, then aggregated across all tiles for an image.
+Each tile produces a softmax probability vector over 7,806 species. The
+classification task is to combine these per-tile predictions into a final
+per-image species list.
 
-### Per-image aggregation (tiles → image prediction)
+### Per-image classification (tiles → species list)
 
 #### 1. Union (default, `--method union`, no `--max-species`)
 
@@ -66,7 +72,7 @@ Collect all unique species from every tile's top-k predictions. Return all of
 them, sorted by frequency (how many tiles predicted each species). With 4x4
 grid and top-k=5, produces avg ~37 unique species per image. **F1 = 0.21313**.
 
-**CLI**: `python aggregate.py --input logits/grid_4x4.parquet --method union --top-k 5`
+**CLI**: `python classify.py --input logits/grid_4x4.parquet --method union --top-k 5`
 
 #### 2. Union with max-species cap (cap on unique species)
 
@@ -75,7 +81,7 @@ unique species returned. Produces uniform-length lists. **F1 ~0.21** regardless
 of cap value (5, 8, 10, 20). This is also what the 2025 `aggregation.py`
 functions (`union_agg_topk`) implement.
 
-**CLI**: `python aggregate.py --input logits/grid_4x4.parquet --method union --top-k 5 --max-species 10`
+**CLI**: `python classify.py --input logits/grid_4x4.parquet --method union --top-k 5 --max-species 10`
 
 #### 3. Expanded-list aggregation (best method, F1=0.23)
 
@@ -93,16 +99,16 @@ uses `Counter.most_common(top_k)` (cap on unique). However, expanded-list
 produces output distributions similar to the 2025 reference CSV and scores
 better empirically.
 
-**CLI**: `python aggregate.py --input logits/grid_4x4.parquet --method expanded-list --top-k 5 --max-species 20`
+**CLI**: `python classify.py --input logits/grid_4x4.parquet --method expanded-list --top-k 5 --max-species 20`
 
 #### 4. Max probability (organizers' approach)
 
 Keep highest probability per species across all tiles, filter by threshold.
 Scored 0.23 in organizers' notebook.
 
-**CLI**: `python aggregate.py --input logits/grid_4x4.parquet --method max-prob --min-score 0.01`
+**CLI**: `python classify.py --input logits/grid_4x4.parquet --method max-prob --min-score 0.01`
 
-### Quadrat-level aggregation (post-processing in `aggregate.py`)
+### Quadrat-level post-processing (in `classify.py`)
 
 Groups images by base quadrat ID (strips date suffixes) and unions species
 across all images of the same quadrat. 2105 images → 425 unique quadrats
@@ -118,7 +124,7 @@ Pattern matching for quadrat grouping:
 achieved 0.30810 with quadrat aggregation, but the per-image inputs were
 different. Our per-image species lists may be too noisy for aggregation to help.
 
-**CLI**: `python aggregate.py --input logits/grid_4x4.parquet --method expanded-list --top-k 5 --max-species 20 --quadrat-agg --quadrat-top-k 10`
+**CLI**: `python classify.py --input logits/grid_4x4.parquet --method expanded-list --top-k 5 --max-species 20 --quadrat-agg --quadrat-top-k 10`
 
 ### Not yet implemented
 
@@ -158,11 +164,11 @@ any observed CLI parameters.
 
 ### Success Criteria
 
-- **Confirm if**: An aggregation method closes the gap to F1 ≥ 0.28
+- **Confirm if**: A classification method closes the gap to F1 ≥ 0.28
 - **Reject if**: No method improves beyond expanded-list's F1=0.23
 
 ## Limitations
 
 - No ground truth labels available locally; evaluation requires Kaggle upload
-- Quality of aggregation is bounded by quality of per-tile predictions from exp 001
+- Quality of classification is bounded by quality of per-tile predictions from exp 001
 - The 2025 reference pipeline remains partially unknown

@@ -20,7 +20,7 @@
 - [ ] 4.2 If different, locate and use the correct 2025 checkpoint
 
 ## 5. Pipeline refactor: 2-stage pipeline
-- [x] 5.1 Refactor classify.py into inference.py (Stage 1: GPU → parquet) + aggregate.py (Stage 2: CPU → CSV)
+- [x] 5.1 Refactor classify.py into inference.py (Stage 1: GPU → parquet) + classify.py (Stage 2: CPU → CSV)
 - [x] 5.2 Update sbatch scripts for Stage 1 only (aggregation runs separately on CPU)
 - [x] 5.3 Add pyarrow dependency
 - [x] 5.4 Split aggregation into Experiment 002

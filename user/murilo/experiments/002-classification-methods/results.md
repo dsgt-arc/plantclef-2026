@@ -1,16 +1,16 @@
-# Results: Aggregation Methods
+# Results: Classification Methods
 
 **Date Started**: 2026-03-12
 **Author**: Murilo Gustineli
 
 ## Summary
 
-Testing different aggregation methods to combine per-tile DINOv2 softmax
+Testing different classification methods to combine per-tile DINOv2 softmax
 predictions into per-image species lists for PlantCLEF 2026 submission.
 
 **Verdict**: in progress
 
-## Kaggle Scores — Aggregation Methods (Grid 4x4, top-k=5 per tile)
+## Kaggle Scores — Classification Methods (Grid 4x4, top-k=5 per tile)
 
 | Method | max_species | Avg Species/Image | Kaggle F1 | Notes |
 |--------|-------------|-------------------|-----------|-------|

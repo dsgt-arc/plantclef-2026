@@ -3,7 +3,7 @@
 
 Runs a frozen fine-tuned DINOv2 classifier with configurable grid tiling on
 vegetation plot images. Saves full softmax probability vectors to parquet for
-downstream aggregation (see aggregate.py).
+downstream classification (see classify.py in exp 002).
 
 Usage:
     # Full image (no grid)
@@ -258,7 +258,7 @@ def main():
     save_probs_to_parquet(image_names, image_probs, grid_size, tiles_per_image, output_path)
 
     print(f"\nStage 1 complete. Run stage 2 (exp 002):")
-    print(f"  python ../002-aggregation-methods/aggregate.py --input {output_path} --method expanded-list --top-k 5 --max-species 20")
+    print(f"  python ../002-classification-methods/classify.py --input {output_path} --method expanded-list --top-k 5 --max-species 20")
 
 
 if __name__ == "__main__":

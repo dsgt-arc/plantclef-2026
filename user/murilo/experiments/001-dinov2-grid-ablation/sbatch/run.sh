@@ -65,7 +65,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Submit Stage 1 (GPU inference → parquet) jobs."
-            echo "Run Stage 2 (aggregation) separately with aggregate.py."
+            echo "Run Stage 2 (classification) separately with classify.py."
             echo ""
             echo "Options:"
             echo "  --grid-size N       Grid size for NxN tiling (default: 0 = no grid)"
@@ -165,5 +165,5 @@ else
     echo "View logs in: ${LOG_DIR}/"
     echo ""
     echo "After job completes, run Stage 2 (exp 002):"
-    echo "  python ../002-aggregation-methods/aggregate.py --input logits/${GRID_LABEL}.parquet --method expanded-list --top-k 5 --max-species 20"
+    echo "  python ../002-classification-methods/classify.py --input logits/${GRID_LABEL}.parquet --method expanded-list --top-k 5 --max-species 20"
 fi

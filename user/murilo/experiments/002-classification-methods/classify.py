@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""Stage 2: CPU aggregation for PlantCLEF 2026 grid ablation.
+"""Stage 2: CPU classification for PlantCLEF 2026 grid ablation.
 
-Reads parquet files produced by inference.py (Stage 1) and applies aggregation
+Reads parquet files produced by inference.py (Stage 1) and applies classification
 methods to produce submission CSVs. No GPU required.
 
 Usage:
     # Expanded-list aggregation (best method, F1=0.23)
-    python aggregate.py --input logits/grid_4x4.parquet \
+    python classify.py --input logits/grid_4x4.parquet \
         --method expanded-list --top-k 5 --max-species 20
 
     # Union aggregation (all unique species, no cap)
-    python aggregate.py --input logits/grid_4x4.parquet \
+    python classify.py --input logits/grid_4x4.parquet \
         --method union --top-k 5
 
     # Max-probability aggregation (organizers' approach)
-    python aggregate.py --input logits/grid_4x4.parquet \
+    python classify.py --input logits/grid_4x4.parquet \
         --method max-prob --min-score 0.01
 
     # With quadrat-level post-processing
-    python aggregate.py --input logits/grid_4x4.parquet \
+    python classify.py --input logits/grid_4x4.parquet \
         --method expanded-list --top-k 5 --max-species 20 \
         --quadrat-agg --quadrat-top-k 10
 """

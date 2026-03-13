@@ -1,7 +1,7 @@
 [project]
-name = "002-aggregation-methods"
+name = "002-classification-methods"
 version = "0.1.0"
-description = "Aggregation method ablation for PlantCLEF 2026 (CPU-only, reads parquet from exp 001)"
+description = "Classification method ablation for PlantCLEF 2026 (CPU-only, reads parquet from exp 001)"
 authors = [
     { name = "Murilo Gustineli", email = "mgustineli3@gatech.edu" },
 ]
