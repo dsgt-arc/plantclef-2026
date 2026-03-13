@@ -1,26 +1,59 @@
 #!/usr/bin/env python3
 """Stage 2: CPU classification for PlantCLEF 2026 grid ablation.
 
-Reads parquet files produced by inference.py (Stage 1) and applies classification
-methods to produce submission CSVs. No GPU required.
+Reads per-tile softmax probability parquet files produced by inference.py
+(Experiment 001) and combines them into per-image species lists for Kaggle
+submission. No GPU required.
 
-Usage:
-    # Expanded-list aggregation (best method, F1=0.23)
-    python classify.py --input logits/grid_4x4.parquet \
-        --method expanded-list --top-k 5 --max-species 20
+Classification methods:
+    sorted-prob     Default. Pool all per-tile predictions, sort by probability
+        (default)   descending, take the top --top-k entries, then deduplicate.
+                    Produces variable-length species lists: images where tiles
+                    agree strongly on a few species get fewer unique species
+                    (confident predictions consume multiple top-k slots), while
+                    diverse images get more. This is the 2025 approach that
+                    scored F1=0.30810. Verified as 99.9% exact match against
+                    the 2025 reference CSV.
+    union           Extract top-k species per tile, count how many tiles
+                    predicted each species, return the most common. Ranks by
+                    tile FREQUENCY, ignoring probability magnitude. With
+                    --max-species N, returns exactly N species per image.
+    expanded-list   Build a frequency-expanded list (each species repeated by
+                    its tile count), cap the list at --max-species, then
+                    deduplicate. Requires --max-species.
+    max-prob        Organizers' approach. For each of the 7806 species, take
+                    the max probability across all tiles. Return species above
+                    --min-score threshold, sorted by probability.
 
-    # Union aggregation (all unique species, no cap)
-    python classify.py --input logits/grid_4x4.parquet \
-        --method union --top-k 5
+Flags:
+    --grid-size N       Required. Selects grid_NxN.parquet (0 for no_grid).
+    --method M          Classification method (default: sorted-prob).
+    --top-k K           For sorted-prob: total entries to take before dedup
+                        (default: 9). For union/expanded-list: species
+                        extracted per tile before aggregation.
+    --max-species N     Cap on species per image. Required for expanded-list.
+                        For union, caps the unique species count.
+    --min-score F       Probability threshold for max-prob method (default: 0.01).
+    --output-dir DIR    Output directory for submission CSVs (default: artifacts/).
+    --quadrat-agg       Post-processing: group images by vegetation plot (quadrat)
+                        and union species across all images of the same plot.
+    --quadrat-top-k K   Cap species per quadrat group (only with --quadrat-agg).
 
-    # Max-probability aggregation (organizers' approach)
-    python classify.py --input logits/grid_4x4.parquet \
-        --method max-prob --min-score 0.01
+Examples:
+    # Default (2025 approach): sorted-prob with top-k=9, 4x4 grid
+    python classify.py --grid-size 4
+
+    # Same with different top-k
+    python classify.py --grid-size 4 --top-k 12
+
+    # Union by tile frequency, cap at 10
+    python classify.py --grid-size 4 --method union --max-species 10
+
+    # Max-probability (organizers' approach)
+    python classify.py --grid-size 4 --method max-prob
 
     # With quadrat-level post-processing
-    python classify.py --input logits/grid_4x4.parquet \
-        --method expanded-list --top-k 5 --max-species 20 \
-        --quadrat-agg --quadrat-top-k 10
+    python classify.py --grid-size 4 --quadrat-agg --quadrat-top-k 10
 """
 
 import argparse
@@ -34,6 +67,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 # Default paths on PACE shared storage
+DEFAULT_PARQUET_DIR = "/storage/project/ps-clef2026_plantclef-0/shared/inference/dinov2-vit-base"
 DEFAULT_CLASS_MAPPING = "/storage/project/ps-clef2026_plantclef-0/shared/data/raw/class_id_to_species_mapping/class_mapping.txt"
 
 
@@ -44,22 +78,80 @@ def load_class_mapping(class_mapping_path: str) -> dict[int, int]:
 
 
 def load_parquet(path: Path) -> pd.DataFrame:
-    """Load parquet and reconstruct probability arrays.
+    """Load per-tile parquet and group into per-image probability matrices.
 
-    Returns DataFrame with columns: image_name, grid_size, tiles_per_image, probs
+    Input schema (per-tile rows):
+        image_name (str), tile_idx (int), probs (binary float16 vector of 7806)
+
+    Returns DataFrame with columns: image_name, probs
     where probs is a numpy array of shape (tiles_per_image, 7806) in float32.
     """
     table = pq.read_table(path)
     df = table.to_pandas()
-    # Reconstruct numpy arrays from binary, promote to float32 for arithmetic
-    df["probs"] = [
-        np.frombuffer(row, dtype=np.float16).reshape(t, -1).astype(np.float32)
-        for row, t in zip(df["probs"], df["tiles_per_image"])
-    ]
-    return df
+
+    # Decode binary float16 → float32 numpy arrays
+    df["probs"] = df["probs"].apply(
+        lambda b: np.frombuffer(b, dtype=np.float16).astype(np.float32)
+    )
+
+    # Group by image, stack tiles into (T, num_classes) matrices
+    grouped = (
+        df.sort_values(["image_name", "tile_idx"])
+        .groupby("image_name")["probs"]
+        .apply(lambda tiles: np.stack(tiles.values))
+        .reset_index()
+    )
+    return grouped
 
 
-# ---- Aggregation methods ----
+# ---- Classification methods ----
+
+
+def classify_sorted_prob(
+    probs: np.ndarray,
+    top_k: int,
+    cid_to_spid: dict[int, int],
+) -> list[int]:
+    """Sorted-probability classification — 2025 approach (F1=0.30810).
+
+    Pool all per-tile predictions, sort by probability descending, take the
+    top-k entries, then deduplicate (first occurrence = highest probability).
+
+    This produces variable-length species lists: when multiple tiles predict
+    the same species with high confidence, that species consumes multiple
+    top-k slots, leaving fewer unique species after dedup. Images where tiles
+    strongly agree → fewer species. Diverse images → more species.
+
+    Example with 4 tiles, top-k=6:
+        All predictions sorted by prob:
+            (0.55, species_A)  ← tile 2
+            (0.28, species_B)  ← tile 3
+            (0.13, species_A)  ← tile 0   (duplicate, consumes a slot)
+            (0.13, species_C)  ← tile 0
+            (0.06, species_B)  ← tile 1   (duplicate, consumes a slot)
+            (0.05, species_D)  ← tile 1
+        After dedup: [A, B, C, D] → 4 unique species (not 6)
+    """
+    n_tiles, n_classes = probs.shape
+
+    # Flatten all tile predictions into (prob, class_idx) pairs
+    # Use argsort on flattened array for efficiency
+    flat_probs = probs.ravel()
+    top_flat_idx = np.argpartition(-flat_probs, top_k)[:top_k]
+    top_flat_idx = top_flat_idx[np.argsort(-flat_probs[top_flat_idx])]
+
+    # Convert flat indices to class indices
+    class_indices = top_flat_idx % n_classes
+
+    # Deduplicate, keeping order (highest probability first)
+    seen = set()
+    result = []
+    for cidx in class_indices:
+        spid = cid_to_spid[int(cidx)]
+        if spid not in seen:
+            seen.add(spid)
+            result.append(spid)
+    return result
 
 
 def agg_union(
@@ -202,13 +294,19 @@ def quadrat_aggregate(
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="PlantCLEF 2026 — Stage 2: Aggregate Probabilities → Submission CSV"
+        description="PlantCLEF 2026 — Stage 2: Classify Probabilities → Submission CSV"
     )
     parser.add_argument(
-        "--input",
-        type=Path,
+        "--grid-size",
+        type=int,
         required=True,
-        help="Path to parquet file from inference.py",
+        help="Grid size N (selects grid_NxN.parquet, use 0 for no_grid.parquet)",
+    )
+    parser.add_argument(
+        "--parquet-dir",
+        type=str,
+        default=DEFAULT_PARQUET_DIR,
+        help="Directory containing parquet files from inference.py",
     )
     parser.add_argument(
         "--class-mapping-path",
@@ -219,15 +317,16 @@ def parse_args():
     parser.add_argument(
         "--method",
         type=str,
-        default="expanded-list",
-        choices=["union", "expanded-list", "max-prob"],
-        help="Aggregation method (default: expanded-list)",
+        default="sorted-prob",
+        choices=["sorted-prob", "union", "expanded-list", "max-prob"],
+        help="Classification method (default: sorted-prob, the 2025 approach)",
     )
     parser.add_argument(
         "--top-k",
         type=int,
-        default=5,
-        help="Top-K predictions per tile (for union/expanded-list methods)",
+        default=9,
+        help="For sorted-prob: total top entries before dedup (default: 9). "
+        "For union/expanded-list: species per tile before aggregation.",
     )
     parser.add_argument(
         "--max-species",
@@ -264,18 +363,31 @@ def parse_args():
 def main():
     args = parse_args()
 
+    if args.method == "sorted-prob" and args.max_species is not None:
+        print("Warning: --max-species is ignored for sorted-prob method (use --top-k instead)")
+
     if args.method == "expanded-list" and args.max_species is None:
         print("Error: --max-species is required for expanded-list method")
         raise SystemExit(1)
 
+    # Build parquet path from grid size
+    grid_size = args.grid_size
+    grid_label = f"grid_{grid_size}x{grid_size}" if grid_size > 0 else "no_grid"
+    parquet_path = Path(args.parquet_dir) / f"{grid_label}.parquet"
+
+    if not parquet_path.exists():
+        print(f"Error: parquet not found: {parquet_path}")
+        raise SystemExit(1)
+
     print("=" * 60)
-    print("PlantCLEF 2026 — Stage 2: Aggregation")
+    print("PlantCLEF 2026 — Stage 2: Classification")
     print("=" * 60)
-    print(f"Input:        {args.input}")
+    print(f"Input:        {parquet_path}")
+    print(f"Grid:         {grid_label}")
     print(f"Method:       {args.method}")
+    print(f"Top-K:        {args.top_k}")
     if args.method in ("union", "expanded-list"):
-        print(f"Top-K:        {args.top_k}")
-    print(f"Max species:  {args.max_species or 'no cap'}")
+        print(f"Max species:  {args.max_species or 'no cap'}")
     if args.method == "max-prob":
         print(f"Min score:    {args.min_score}")
     print(f"Quadrat agg:  {args.quadrat_agg}")
@@ -286,24 +398,25 @@ def main():
 
     # ---- Load data ----
     print("Loading parquet...")
-    df = load_parquet(args.input)
-    grid_size = df["grid_size"].iloc[0]
-    grid_label = f"grid_{grid_size}x{grid_size}" if grid_size > 0 else "no_grid"
-    print(f"  Images: {len(df)}, grid: {grid_label}, tiles/image: {df['tiles_per_image'].iloc[0]}")
+    df = load_parquet(parquet_path)
+    tiles_per_image = df["probs"].iloc[0].shape[0]
+    print(f"  Images: {len(df)}, grid: {grid_label}, tiles/image: {tiles_per_image}")
 
     print("Loading class mapping...")
     cid_to_spid = load_class_mapping(args.class_mapping_path)
     print(f"  Classes: {len(cid_to_spid)}")
     print()
 
-    # ---- Aggregate per image ----
-    print(f"Aggregating ({args.method})...")
+    # ---- Classify per image ----
+    print(f"Classifying ({args.method})...")
     results = []
     for _, row in df.iterrows():
         probs = row["probs"]  # (T, num_classes) float32
         name = row["image_name"]
 
-        if args.method == "union":
+        if args.method == "sorted-prob":
+            species_ids = classify_sorted_prob(probs, args.top_k, cid_to_spid)
+        elif args.method == "union":
             species_ids = agg_union(probs, args.top_k, cid_to_spid, args.max_species)
         elif args.method == "expanded-list":
             species_ids = agg_expanded_list(probs, args.top_k, cid_to_spid, args.max_species)
@@ -325,9 +438,8 @@ def main():
 
     # ---- Build output filename ----
     parts = [grid_label, args.method.replace("-", "_")]
-    if args.method in ("union", "expanded-list"):
-        parts.append(f"topk{args.top_k}")
-    if args.max_species:
+    parts.append(f"topk{args.top_k}")
+    if args.method in ("union", "expanded-list") and args.max_species:
         parts.append(f"max{args.max_species}")
     if args.method == "max-prob":
         parts.append(f"minscore{args.min_score}")
