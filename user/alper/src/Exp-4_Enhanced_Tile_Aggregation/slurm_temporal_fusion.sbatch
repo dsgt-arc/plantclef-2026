@@ -23,11 +23,11 @@ mkdir -p logs
 
 source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
 
-# Input: best Exp-4 aggregated parquet (per_view_or + max_prob + T=1.5 + k=3)
-IN_PARQUET="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/aerten3/submissions/exp4_multiview/step5_topm_prob/mv_per_view_or_top1_prob_T1.5_k3.parquet"
+# Input: 1-view (no TTA) best parquet (orig_only + max_prob + T=1.5 + k=4 = F1 0.31950)
+IN_PARQUET="${PLANTCLEF_ROOT}/aerten3/submissions/exp4_multiview/step7_view_ablation/mv_1v_max_prob_T1.5_k4.parquet"
 SPECIES_MAP="${PLANTCLEF_ROOT}/data/raw/class_id_to_species_mapping/class_to_species_id.json"
 GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
-OUT_DIR="${PLANTCLEF_ROOT}/aerten3/submissions/exp4_multiview/step7_temporal_fusion"
+OUT_DIR="${PLANTCLEF_ROOT}/aerten3/submissions/exp4_multiview/step8_temporal_fusion_1v"
 
 echo "=== Step 7: Temporal Fusion Sweep ==="
 echo "Input parquet: ${IN_PARQUET}"
@@ -41,11 +41,11 @@ python "${SRC_ROOT}/temporal_fusion.py" \
   --class-mask-npy "${GEO_MASK}" \
   --topk 10 \
   --threshold 0.03 \
-  --tier tier5
+  --tier tier6
 
 echo ""
 echo "=== Temporal fusion sweep complete ==="
 echo "Submissions in: ${OUT_DIR}/"
-echo "Tier 5: alpha={0.1,0.0} + site-level profiles (fallback/always)"
-echo "Best so far: A_blend alpha=0.2 = F1 0.33817 (baseline 0.31487)"
-echo "Submit CSVs to Kaggle to test site-level fusion"
+echo "Tier 6: 1v (no TTA) base + alpha={0.1,0.2,0.3,0.4,0.5}"
+echo "1v base: orig_only + max_prob + T1.5 + k4 = F1 0.31950"
+echo "Previous best: 3v + temporal fusion alpha=0.1 = F1 0.33881"

@@ -390,6 +390,17 @@ def get_sweep_configs(tier: str = "all") -> List[Tuple[str, str, dict]]:
          {"alpha": 0.3, "site_mode": "always"}),
     ]
 
+    # Tier 6: temporal fusion on 1-view (no TTA) base
+    # 1v orig_only + max_prob + T=1.5 + k=4 = F1 0.31950 (new best base, no TTA)
+    # Sweep alpha 0.1-0.5 to find optimal blend on stronger base
+    tier6 = [
+        ("A_blend_a0.1_1v", "prior_blend", {"alpha": 0.1}),
+        ("A_blend_a0.2_1v", "prior_blend", {"alpha": 0.2}),
+        ("A_blend_a0.3_1v", "prior_blend", {"alpha": 0.3}),
+        ("A_blend_a0.4_1v", "prior_blend", {"alpha": 0.4}),
+        ("A_blend_a0.5_1v", "prior_blend", {"alpha": 0.5}),
+    ]
+
     if tier == "tier1":
         return tier1
     elif tier == "tier2":
@@ -400,7 +411,9 @@ def get_sweep_configs(tier: str = "all") -> List[Tuple[str, str, dict]]:
         return tier4
     elif tier == "tier5":
         return tier5
-    return tier1 + tier2 + tier3 + tier4 + tier5
+    elif tier == "tier6":
+        return tier6
+    return tier1 + tier2 + tier3 + tier4 + tier5 + tier6
 
 
 # ---------------------------------------------------------------------------
@@ -424,7 +437,7 @@ def main() -> None:
     ap.add_argument("--id-col", default="image_name")
     ap.add_argument("--probs-col", default="image_probs_f16")
     ap.add_argument(
-        "--tier", default="all", choices=["tier1", "tier2", "tier3", "tier4", "tier5", "all"],
+        "--tier", default="all", choices=["tier1", "tier2", "tier3", "tier4", "tier5", "tier6", "all"],
         help="Which sweep tier to run (default: all)",
     )
 

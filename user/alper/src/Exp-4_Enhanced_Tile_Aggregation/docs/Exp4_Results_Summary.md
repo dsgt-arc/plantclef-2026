@@ -2,9 +2,11 @@
 
 ## Executive Summary
 
-Exp-4 improved the PlantCLEF 2026 inference pipeline's F1 score from **0.28093 to 0.31487** (+12.1% relative) by combining two changes: (1) multi-view test-time augmentation via per-view independent aggregation, and (2) replacing Noisy-OR with max-probability aggregation. No model retraining was required — all improvements came from better post-processing of existing DINOv2 embeddings.
+Exp-4 improved the PlantCLEF 2026 inference pipeline's F1 score from **0.28093 to 0.31950** (+13.7% relative) by replacing Noisy-OR aggregation with max-probability aggregation and lowering the softmax temperature from T=2.0 to T=1.5. No model retraining was required — all improvements came from better post-processing of existing DINOv2 embeddings.
 
-**Final best config**: `per_view_or` + `max_prob` + T=1.5 + k=3 + thr=0.03 + topk=10 → **F1 = 0.31487**
+A key negative finding: **multi-view test-time augmentation (TTA) does not help** and slightly hurts performance. The Step 7 ablation showed that orig_only (no augmentation) outperforms all multi-view strategies when max_prob + T=1.5 is used. The improvement is entirely attributable to the aggregation method change.
+
+**Final best config**: `orig_only` + `max_prob` + T=1.5 + k=4 + thr=0.03 + topk=10 → **F1 = 0.31950**
 
 ---
 
@@ -211,32 +213,27 @@ Testing `per_view_or` (best view strategy) × `max_prob` (most k-tolerant) at th
 | 8 | 0.30979 | +0.02886 |
 | 10 | 0.30889 | +0.02796 |
 
-### Key Finding: per_view_or + max_prob is a Breakthrough
+### Key Finding: max_prob + T=1.5 is the Breakthrough
 
-The combination produces a **+0.034 F1 improvement** over the baseline (0.28093 → 0.31487), a 12.1% relative gain. This is the single largest improvement found across all PlantCLEF experiments.
-
-The k-tolerance pattern is dramatic:
+The combination of max_prob aggregation with T=1.5 produces a massive improvement over the baseline (0.28093 → 0.31487 with per_view_or, later improved to 0.31950 with orig_only in Step 7). The k-tolerance pattern is dramatic:
 
 ```
     noisy_or:  k=3 (0.292) ──── sharp decline ────→ k=10 (0.230)   spread: 0.062
     max_prob:  k=3 (0.315) ──── stable plateau ──→ k=10 (0.309)   spread: 0.006
 ```
 
-### Explanation: Why This Combination Works
+Note: At this point in the experiment, per_view_or appeared to help because it was tested before orig_only at these settings. Step 7 later revealed that orig_only is actually better — see below.
 
-The synergy between per_view_or and max_prob has three components:
+### Explanation: Why max_prob + T=1.5 Works
 
-**1. per_view_or reduces per-tile variance without inflating tile count.**
-Unlike all_tiles (which triples tile count), per_view_or aggregates each view independently and averages the three image-level probability vectors. This means: (a) each view's aggregation operates on the same k tiles, preserving the optimal tile count; (b) the averaging happens at the image level where probabilities are already well-calibrated; (c) species that appear consistently across views get reinforced, while view-specific noise gets suppressed.
-
-**2. max_prob extracts the strongest signal per species.**
+**1. max_prob extracts the strongest signal per species.**
 For a given species, max_prob selects the single tile where the model is most confident. In vegetation plots, a species may only be visible in 1-2 tiles. Max_prob captures this perfectly — it doesn't penalize the species for being absent from other tiles (unlike mean_prob) or inflate noise from tiles where the species isn't present (unlike noisy_or).
 
-**3. T=1.5 sharpens predictions to match max_prob's strengths.**
-Lower temperature makes per-tile softmax distributions more peaked. This benefits max_prob specifically: the maximum probability becomes higher and more decisive for true positives, while false positives (which are less consistent across tiles) don't get amplified. At T=2.0, max_prob alone (0.278) barely trails noisy_or (0.281) because smooth probabilities don't differentiate true positives sharply enough. At T=1.5 with TTA, the signal is both sharp and reliable.
+**2. T=1.5 sharpens predictions to match max_prob's strengths.**
+Lower temperature makes per-tile softmax distributions more peaked. This benefits max_prob specifically: the maximum probability becomes higher and more decisive for true positives, while false positives (which are less consistent across tiles) don't get amplified. At T=2.0, max_prob alone (0.278) barely trails noisy_or (0.281) because smooth probabilities don't differentiate true positives sharply enough. At T=1.5, the signal is sharp and decisive.
 
-**4. The k=3 sweet spot.**
-k=1 and k=2 fail because even max_prob needs at least a few tiles to cover the spatial diversity of a vegetation plot. A single tile may miss species entirely. k=3 provides just enough spatial coverage while keeping only the most confident tiles. Beyond k=3, max_prob's score plateaus (0.309-0.315) rather than declining, confirming that additional tiles neither help nor hurt — max simply ignores them.
+**3. The k=3-4 sweet spot.**
+k=1 and k=2 fail because even max_prob needs at least a few tiles to cover the spatial diversity of a vegetation plot. A single tile may miss species entirely. k=3-4 provides enough spatial coverage while keeping only the most confident tiles. Beyond k=4, max_prob's score plateaus (0.309-0.320) rather than declining, confirming that additional tiles neither help nor hurt — max simply ignores them.
 
 ### Why noisy_or Collapses at Low k + Low T
 
@@ -249,21 +246,33 @@ The opposite pattern in noisy_or (k=3 → k=10 decline) worsens at T=1.5 because
 
 ## Complete Results Table
 
-All 73 configurations tested, sorted by F1 score:
+All 89 configurations tested, sorted by F1 score (top 25 shown):
 
 | Rank | Strategy | Method | T | k | F1 | vs baseline |
 |------|----------|--------|---|---|-----|-------------|
-| 1 | per_view_or (3v) | max_prob | 1.5 | 3 | **0.31487** | +0.03394 |
-| 2 | per_view_or (3v) | max_prob | 1.5 | 4 | 0.31097 | +0.03004 |
-| 3 | per_view_or (6v) | max_prob | 1.5 | 4 | 0.31067 | +0.02974 |
-| 4 | per_view_or (6v) | max_prob | 1.5 | 3 | 0.31040 | +0.02947 |
-| 5 | per_view_or (3v) | max_prob | 1.5 | 8 | 0.30979 | +0.02886 |
-| 6 | per_view_or (3v) | max_prob | 1.5 | 6 | 0.30970 | +0.02877 |
-| 7 | per_view_or (3v) | max_prob | 1.5 | 10 | 0.30889 | +0.02796 |
-| 8 | per_view_or (3v) | max_prob | 1.5 | 5 | 0.30864 | +0.02771 |
-| 9 | per_view_or (6v) | max_prob | 1.5 | 5 | 0.30692 | +0.02599 |
-| 10 | per_view_or (6v) | max_prob | 1.5 | 6 | 0.30538 | +0.02445 |
-| 11 | per_view_or | noisy_or | 1.5 | 3 | 0.29216 | +0.01123 |
+| 1 | **orig_only (1v)** | **max_prob** | **1.5** | **4** | **0.31950** | **+0.03857** |
+| 2 | orig_only (1v) | max_prob | 1.5 | 6 | 0.31818 | +0.03725 |
+| 3 | orig_only (1v) | max_prob | 1.5 | 5 | 0.31498 | +0.03405 |
+| 4 | per_view_or (3v) | max_prob | 1.5 | 3 | 0.31487 | +0.03394 |
+| 5 | 2v_hflip | max_prob | 1.5 | 3 | 0.31435 | +0.03342 |
+| 6 | 2v_hflip | max_prob | 1.5 | 4 | 0.31385 | +0.03292 |
+| 7 | orig_only (1v) | max_prob | 1.5 | 3 | 0.31371 | +0.03278 |
+| 8 | 2v_hflip | max_prob | 1.5 | 6 | 0.31318 | +0.03225 |
+| 9 | 2v_hflip | max_prob | 1.5 | 5 | 0.31121 | +0.03028 |
+| 10 | per_view_or (3v) | max_prob | 1.5 | 4 | 0.31097 | +0.03004 |
+| 11 | per_view_or (6v) | max_prob | 1.5 | 4 | 0.31067 | +0.02974 |
+| 12 | per_view_or (6v) | max_prob | 1.5 | 3 | 0.31040 | +0.02947 |
+| 13 | per_view_or (3v) | max_prob | 1.5 | 8 | 0.30979 | +0.02886 |
+| 14 | per_view_or (3v) | max_prob | 1.5 | 6 | 0.30970 | +0.02877 |
+| 15 | 2v_rot90 | max_prob | 1.5 | 3 | 0.30914 | +0.02821 |
+| 16 | per_view_or (3v) | max_prob | 1.5 | 10 | 0.30889 | +0.02796 |
+| 17 | per_view_or (3v) | max_prob | 1.5 | 5 | 0.30864 | +0.02771 |
+| 18 | per_view_or (6v) | max_prob | 1.5 | 5 | 0.30692 | +0.02599 |
+| 19 | per_view_or (6v) | max_prob | 1.5 | 6 | 0.30538 | +0.02445 |
+| 20 | 2v_rot90 | max_prob | 1.5 | 4 | 0.30533 | +0.02440 |
+| 21 | 2v_rot90 | max_prob | 1.5 | 5 | 0.30145 | +0.02052 |
+| 22 | 2v_rot90 | max_prob | 1.5 | 6 | 0.30075 | +0.01982 |
+| 23 | per_view_or | noisy_or | 1.5 | 3 | 0.29216 | +0.01123 |
 | 12 | per_view_or | noisy_or | 1.5 | 4 | 0.28514 | +0.00421 |
 | 13 | avg_logits | noisy_or | 1.5 | 4 | 0.28273 | +0.00180 |
 | 14 | orig_only | noisy_or | 2.0 | 6 | 0.28093 | — baseline |
@@ -323,28 +332,30 @@ All 73 configurations tested, sorted by F1 score:
 
 ### What Worked
 
-1. **per_view_or + max_prob + T=1.5 + k=3** — F1 = 0.31487, the best config by a wide margin. The synergy between independent view aggregation (per_view_or) and noise-immune tile combination (max_prob) at sharper temperature produced a +12.1% relative improvement over the baseline.
+1. **max_prob + T=1.5** — The single most important finding. Replacing Noisy-OR with max-probability aggregation and lowering temperature from 2.0 to 1.5 produces a +13.7% relative improvement (0.28093 → 0.31950). max_prob's noise immunity (only uses the single best tile per species) combined with sharper softmax predictions is the key to the gain.
 
-2. **max_prob is uniquely k-tolerant** — Performance spread of only 0.002-0.006 across k=3 to k=16, compared to 0.034-0.062 for noisy_or. This makes max_prob a robust default aggregator that doesn't require careful k tuning.
+2. **max_prob is uniquely k-tolerant** — Performance spread of only 0.006 across k=3 to k=10, compared to 0.062 for noisy_or. This makes max_prob a robust default aggregator that doesn't require careful k tuning.
 
-3. **Lower temperature + fewer tiles works better with TTA** — T=1.5 + k=4 beats T=2.0 + k=6 when multi-view averaging reduces per-tile variance. The old optimal (T=2.0, k=6) was a noise-tolerance compromise that TTA renders unnecessary.
+3. **orig_only (no TTA) is optimal** — The Step 7 ablation conclusively showed that multi-view test-time augmentation provides no benefit and slightly hurts when using max_prob. The original view produces the most reliable predictions; augmented views only add noise.
 
 ### What Didn't Work
 
-1. **all_tiles** — Tripling effective tile count by treating views as independent tiles catastrophically inflates Noisy-OR noise. Even at k=2 (6 effective tiles), it underperforms the baseline by 0.013. Eliminated early.
+1. **All forms of TTA** — per_view_or, avg_logits, all_tiles, 6-view. Every multi-view strategy is worse than orig_only when the aggregation method and temperature are optimized. The model was fine-tuned on upright images; augmented views (especially rot90) produce noisier predictions.
 
-2. **avg_logits at T=2.0** — Averaging logits before softmax at high temperature over-smooths predictions. Only works at T=1.5 + k=4 where sharper base predictions survive the averaging.
+2. **all_tiles** — Tripling effective tile count catastrophically inflates Noisy-OR noise. Eliminated early.
 
-3. **weighted_noisy_or** — Still multiplicative, so the fundamental noise inflation problem persists. Weighting by tile confidence doesn't help because the weighting scale is too narrow (tiles passing the k filter already have similar confidence).
+3. **Top-m averaging (m>1)** — Averaging the top 2 or 3 tiles per species dilutes the max signal. Single-tile evidence is decisive.
 
-4. **mean_prob** — Too conservative. Dilutes strong single-tile species detections by averaging with near-zero probabilities from tiles where the species isn't visible.
+4. **Additional augmentation views (6-view)** — rot180, rot270, vflip add redundant information and over-smooth predictions.
+
+5. **weighted_noisy_or and mean_prob** — weighted_noisy_or still has multiplicative noise inflation. mean_prob dilutes strong single-tile detections.
 
 ### Aggregation Method Characteristics
 
 | Method | Best F1 | k-sensitive? | When it works |
 |--------|---------|-------------|---------------|
-| noisy_or | 0.28093 | Very (must tune k) | Low k, single view |
-| max_prob (=top1) | **0.31487** | No (robust to k) | With TTA, sharp T |
+| max_prob | **0.31950** | No (robust to k) | Sharp T, no TTA |
+| noisy_or | 0.28093 | Very (must tune k) | Low k, single view, T=2.0 |
 | top2_prob | 0.30073 | Moderate | Higher k only |
 | top3_prob | 0.30577 | Moderate | Higher k only |
 | weighted_noisy_or | 0.26851 | Yes | Never outperforms alternatives |
@@ -399,43 +410,51 @@ The original 3 views (orig, hflip, rot90) were chosen in Phase 1 because they re
 
 ---
 
-## Critical Question: Does TTA Actually Help?
+## Step 7: Incremental View Ablation — Does TTA Help?
 
-### The Confounding Variable Problem
+The Step 4 best config changed three variables simultaneously (view strategy, aggregation method, temperature). This ablation isolates the TTA contribution by testing 1-view, 2-view, and 3-view configs all with max_prob + T=1.5.
 
-The best config (per_view_or + max_prob + T=1.5 + k=3 = 0.31487) changed **three variables simultaneously** from the baseline (orig_only + noisy_or + T=2.0 + k=6 = 0.28093):
+**Config**: max_prob + T=1.5 + thr=0.03 + topk=10
 
-1. View strategy: orig_only → per_view_or (3-view TTA)
-2. Aggregation method: noisy_or → max_prob
-3. Temperature: T=2.0 → T=1.5
+| Views | k=3 | k=4 | k=5 | k=6 |
+|-------|-----|-----|-----|-----|
+| **1v (orig only)** | 0.31371 | **0.31950** | 0.31498 | 0.31818 |
+| 2v (orig + hflip) | 0.31435 | 0.31385 | 0.31121 | 0.31318 |
+| 2v (orig + rot90) | 0.30914 | 0.30533 | 0.30145 | 0.30075 |
+| 3v (orig + hflip + rot90) | 0.31487 | 0.31097 | 0.30864 | 0.30970 |
 
-The +0.034 F1 improvement cannot be attributed to TTA alone. It could be entirely from max_prob + T=1.5.
+### Result: TTA Hurts — No Augmentation is Best
 
-### Evidence from Existing Data
+**New best: orig_only + max_prob + T=1.5 + k=4 = F1 0.31950** (+0.00463 over the previous best)
 
-The only direct orig_only vs per_view_or comparison holds everything else equal:
+1-view (no TTA) outperforms all multi-view configs. The entire +0.039 F1 gain over the baseline (0.28093 → 0.31950) comes from **max_prob + T=1.5**, not from TTA.
 
-| Config (T=2.0, k=6, noisy_or) | F1 |
-|-------------------------------|-----|
-| orig_only | 0.28093 |
-| per_view_or | 0.28010 |
-| **Difference** | **-0.00083** |
+### Per-View Analysis
 
-At this config, per_view_or is marginally **worse** than orig_only.
+- **hflip is nearly neutral**: 2v_hflip (0.31435 at k=3) is close to 1v (0.31371 at k=3) but hurts at higher k. The hflip view provides marginally useful information at low k where spatial coverage is limited, but its noise outweighs its benefit with more tiles.
 
-### Missing Ablation
+- **rot90 is actively harmful**: 2v_rot90 is the worst config across all k values (best: 0.30914). Adding rot90 to hflip (3v vs 2v_hflip) also degrades performance. The 90-degree rotation creates tile representations that are too different from the original view — the model was fine-tuned on upright images, so rotated views produce less reliable predictions.
 
-We have never tested: `orig_only + max_prob + T=1.5 + k=3,4,5,6`
+- **3v averages out to mediocre**: The 3-view per_view_or result (0.31487 at k=3) happens to beat 1v at k=3 by +0.001, but this is because hflip's slight benefit at k=3 compensates for rot90's harm. At k=4 (where 1v peaks), 3v is clearly worse (0.31097 vs 0.31950).
 
-This is the critical ablation to isolate per_view_or's contribution. If orig_only + max_prob + T=1.5 also gives ~0.315, then TTA provides no benefit and the entire gain comes from the aggregation method change.
+### Why TTA Hurts with max_prob
 
-**Step 7** (`slurm_orig_only_maxprob_ablation.sbatch`) runs this ablation: orig_only vs per_view_or, both with max_prob + T=1.5 + k={3,4,5,6}.
+max_prob already selects the single best tile per species. Averaging this sharp signal with predictions from augmented views introduces noise:
+
+- The original view produces the most reliable per-tile predictions (model was trained on upright images)
+- Augmented views produce similar but noisier predictions
+- per_view_or averages image-level probability vectors, diluting the sharp max_prob signal from the original view with the noisier augmented signals
+- This is the same pattern seen in Steps 5 (top-m averaging) and 6 (6-view): **any form of additional averaging hurts max_prob**
+
+### k=4 vs k=3 for orig_only
+
+Without view averaging to compensate for limited spatial coverage, orig_only benefits from one extra tile (k=4 vs k=3). With max_prob, the 4th tile can only help (if it contains a species the top-3 tiles missed) or be harmless (max ignores it). The 3v config preferred k=3 because the view averaging already provided redundancy that extra tiles couldn't improve.
 
 ---
 
 ## Compute Cost
 
-Steps 1-4 ran on CPU only (no GPU). Step 6 required a GPU extraction step for the additional augmentation views.
+Steps 1-4 and 7 ran on CPU only (no GPU). Step 6 required a GPU extraction step for the additional augmentation views.
 
 | Step | Resource | Time |
 |------|----------|------|
@@ -444,28 +463,34 @@ Steps 1-4 ran on CPU only (no GPU). Step 6 required a GPU extraction step for th
 | Step 5 (top-m sweep) | CPU, interactive | ~30 minutes |
 | Step 6 extraction | GPU (RTX 6000) | ~30 minutes |
 | Step 6 aggregation | CPU-medium, 48 GB RAM | ~1 hour |
+| Step 7 (view ablation) | CPU-medium, 48 GB RAM | ~30 minutes |
 | topk sweep | CPU | ~1 minute |
-| **Total** | | **~6.5 hours** |
+| **Total** | | **~7 hours** |
 
 ---
 
 ## Final Configuration
 
 ```
-Strategy:           per_view_or
+Strategy:           orig_only (no TTA)
 Aggregation:        max_prob
 Temperature:        1.5
-tile_filter_k:      3
+tile_filter_k:      4
 threshold:          0.03
 topk:               10
 geo_mask:           sw_europe_mask_bool.npy
 aug_filter:         True
 image_topk:         64
 
-F1 Score:           0.31487
-Improvement:        +0.03394 over baseline (0.28093)
-Relative gain:      +12.1%
-
-NOTE: Pending Step 7 ablation to confirm whether per_view_or
-contributes independently or if the gain is entirely from max_prob + T=1.5.
+F1 Score:           0.31950
+Improvement:        +0.03857 over baseline (0.28093)
+Relative gain:      +13.7%
 ```
+
+### Evolution of Best Config
+
+| Step | Config | F1 | Key change |
+|------|--------|-----|-----------|
+| Baseline | orig_only + noisy_or + T=2.0 + k=6 | 0.28093 | — |
+| Step 4 | per_view_or + max_prob + T=1.5 + k=3 | 0.31487 | max_prob + T=1.5 (+ TTA) |
+| **Step 7** | **orig_only + max_prob + T=1.5 + k=4** | **0.31950** | **Remove TTA, increase k** |
