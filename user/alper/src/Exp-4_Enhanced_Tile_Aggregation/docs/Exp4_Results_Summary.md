@@ -249,69 +249,73 @@ The opposite pattern in noisy_or (k=3 → k=10 decline) worsens at T=1.5 because
 
 ## Complete Results Table
 
-All 65 configurations tested, sorted by F1 score:
+All 73 configurations tested, sorted by F1 score:
 
 | Rank | Strategy | Method | T | k | F1 | vs baseline |
 |------|----------|--------|---|---|-----|-------------|
-| 1 | per_view_or | max_prob | 1.5 | 3 | **0.31487** | +0.03394 |
-| 2 | per_view_or | max_prob | 1.5 | 4 | 0.31097 | +0.03004 |
-| 3 | per_view_or | max_prob | 1.5 | 8 | 0.30979 | +0.02886 |
-| 4 | per_view_or | max_prob | 1.5 | 6 | 0.30970 | +0.02877 |
-| 5 | per_view_or | max_prob | 1.5 | 10 | 0.30889 | +0.02796 |
-| 6 | per_view_or | max_prob | 1.5 | 5 | 0.30864 | +0.02771 |
-| 7 | per_view_or | noisy_or | 1.5 | 3 | 0.29216 | +0.01123 |
-| 8 | per_view_or | noisy_or | 1.5 | 4 | 0.28514 | +0.00421 |
-| 9 | avg_logits | noisy_or | 1.5 | 4 | 0.28273 | +0.00180 |
-| 10 | orig_only | noisy_or | 2.0 | 6 | 0.28093 | — baseline |
-| 11 | per_view_or | noisy_or | 2.0 | 6 | 0.28010 | -0.00083 |
-| 12 | orig_only | max_prob | 2.0 | 10 | 0.27841 | -0.00252 |
-| 13 | orig_only | max_prob | 2.0 | 16 | 0.27834 | -0.00259 |
-| 14 | orig_only | max_prob | 2.0 | 6 | 0.27595 | -0.00498 |
-| 15 | per_view_or | noisy_or | 1.5 | 5 | 0.27513 | -0.00580 |
-| 16 | per_view_or | max_prob | 1.5 | 2 | 0.27252 | -0.00841 |
-| 17 | avg_logits | noisy_or | 2.0 | 10 | 0.27109 | -0.00984 |
-| 18 | avg_logits | max_prob | 2.0 | 16 | 0.27076 | -0.01017 |
-| 19 | per_view_or | noisy_or | 2.0 | 4 | 0.27012 | -0.01081 |
-| 20 | avg_logits | max_prob | 2.0 | 10 | 0.27028 | -0.01065 |
-| 21 | orig_only | noisy_or | 2.0 | 10 | 0.26904 | -0.01189 |
-| 22 | per_view_or | noisy_or | 2.0 | 8 | 0.26877 | -0.01216 |
-| 23 | avg_logits | max_prob | 2.0 | 6 | 0.26868 | -0.01225 |
-| 24 | avg_logits | noisy_or | 2.0 | 6 | 0.26857 | -0.01236 |
-| 25 | orig_only | weighted_noisy_or | 2.0 | 6 | 0.26851 | -0.01242 |
-| 26 | avg_logits | noisy_or | 2.0 | 4 | 0.26789 | -0.01304 |
-| 27 | all_tiles | noisy_or | 2.0 | 2 | 0.26764 | -0.01329 |
-| 28 | all_tiles | noisy_or | 2.0 | 4 | 0.26708 | -0.01385 |
-| 29 | avg_logits | noisy_or | 1.5 | 6 | 0.26610 | -0.01483 |
-| 30 | per_view_or | noisy_or | 1.5 | 6 | 0.26516 | -0.01577 |
-| 31 | per_view_or | noisy_or | 2.5 | 6 | 0.25879 | -0.02214 |
-| 32 | avg_logits | noisy_or | 2.0 | 8 | 0.25826 | -0.02267 |
-| 33 | per_view_or | noisy_or | 2.5 | 8 | 0.25714 | -0.02379 |
-| 34 | avg_logits | noisy_or | 2.5 | 6 | 0.25664 | -0.02429 |
-| 35 | avg_logits | weighted_noisy_or | 2.0 | 10 | 0.25660 | -0.02433 |
-| 36 | avg_logits | mean_prob | 2.0 | 6 | 0.25626 | -0.02467 |
-| 37 | avg_logits | noisy_or | 2.5 | 4 | 0.25551 | -0.02542 |
-| 38 | per_view_or | noisy_or | 2.5 | 4 | 0.25525 | -0.02568 |
-| 39 | orig_only | mean_prob | 2.0 | 6 | 0.25492 | -0.02601 |
-| 40 | avg_logits | noisy_or | 2.5 | 8 | 0.25445 | -0.02648 |
-| 41 | avg_logits | weighted_noisy_or | 2.0 | 16 | 0.25156 | -0.02937 |
-| 42 | avg_logits | noisy_or | 2.0 | 16 | 0.24983 | -0.03110 |
-| 43 | avg_logits | mean_prob | 2.0 | 10 | 0.24931 | -0.03162 |
-| 44 | orig_only | weighted_noisy_or | 2.0 | 10 | 0.24771 | -0.03322 |
-| 45 | orig_only | noisy_or | 2.0 | 16 | 0.24730 | -0.03363 |
-| 46 | orig_only | weighted_noisy_or | 2.0 | 16 | 0.24709 | -0.03384 |
-| 47 | per_view_or | noisy_or | 1.5 | 8 | 0.24677 | -0.03416 |
-| 48 | avg_logits | weighted_noisy_or | 2.0 | 6 | 0.24660 | -0.03433 |
-| 49 | avg_logits | noisy_or | 1.5 | 8 | 0.24373 | -0.03720 |
-| 50 | orig_only | mean_prob | 2.0 | 10 | 0.24329 | -0.03764 |
-| 51 | avg_logits | mean_prob | 2.0 | 16 | 0.24232 | -0.03861 |
-| 52 | orig_only | mean_prob | 2.0 | 16 | 0.24086 | -0.04007 |
-| 53 | per_view_or | max_prob | 1.5 | 1 | 0.23281 | -0.04812 |
-| 54 | per_view_or | noisy_or | 1.5 | 10 | 0.22983 | -0.05110 |
-| 55 | all_tiles | noisy_or | 2.0 | 6 | 0.22688 | -0.05405 |
-| 56 | all_tiles | noisy_or | 2.0 | 8 | 0.20487 | -0.07606 |
-| 57 | all_tiles | noisy_or | 2.0 | 16 | 0.20410 | -0.07683 |
-| 58 | all_tiles | noisy_or | 2.0 | 10 | 0.19572 | -0.08521 |
-| 59 | all_tiles | noisy_or | 2.0 | 12 | 0.19572 | -0.08521 |
+| 1 | per_view_or (3v) | max_prob | 1.5 | 3 | **0.31487** | +0.03394 |
+| 2 | per_view_or (3v) | max_prob | 1.5 | 4 | 0.31097 | +0.03004 |
+| 3 | per_view_or (6v) | max_prob | 1.5 | 4 | 0.31067 | +0.02974 |
+| 4 | per_view_or (6v) | max_prob | 1.5 | 3 | 0.31040 | +0.02947 |
+| 5 | per_view_or (3v) | max_prob | 1.5 | 8 | 0.30979 | +0.02886 |
+| 6 | per_view_or (3v) | max_prob | 1.5 | 6 | 0.30970 | +0.02877 |
+| 7 | per_view_or (3v) | max_prob | 1.5 | 10 | 0.30889 | +0.02796 |
+| 8 | per_view_or (3v) | max_prob | 1.5 | 5 | 0.30864 | +0.02771 |
+| 9 | per_view_or (6v) | max_prob | 1.5 | 5 | 0.30692 | +0.02599 |
+| 10 | per_view_or (6v) | max_prob | 1.5 | 6 | 0.30538 | +0.02445 |
+| 11 | per_view_or | noisy_or | 1.5 | 3 | 0.29216 | +0.01123 |
+| 12 | per_view_or | noisy_or | 1.5 | 4 | 0.28514 | +0.00421 |
+| 13 | avg_logits | noisy_or | 1.5 | 4 | 0.28273 | +0.00180 |
+| 14 | orig_only | noisy_or | 2.0 | 6 | 0.28093 | — baseline |
+| 15 | per_view_or | noisy_or | 2.0 | 6 | 0.28010 | -0.00083 |
+| 16 | orig_only | max_prob | 2.0 | 10 | 0.27841 | -0.00252 |
+| 17 | orig_only | max_prob | 2.0 | 16 | 0.27834 | -0.00259 |
+| 18 | orig_only | max_prob | 2.0 | 6 | 0.27595 | -0.00498 |
+| 19 | per_view_or | noisy_or | 1.5 | 5 | 0.27513 | -0.00580 |
+| 20 | per_view_or | max_prob | 1.5 | 2 | 0.27252 | -0.00841 |
+| 21 | avg_logits | noisy_or | 2.0 | 10 | 0.27109 | -0.00984 |
+| 22 | avg_logits | max_prob | 2.0 | 16 | 0.27076 | -0.01017 |
+| 23 | avg_logits | max_prob | 2.0 | 10 | 0.27028 | -0.01065 |
+| 24 | per_view_or | noisy_or | 2.0 | 4 | 0.27012 | -0.01081 |
+| 25 | orig_only | noisy_or | 2.0 | 10 | 0.26904 | -0.01189 |
+| 26 | per_view_or | noisy_or | 2.0 | 8 | 0.26877 | -0.01216 |
+| 27 | avg_logits | max_prob | 2.0 | 6 | 0.26868 | -0.01225 |
+| 28 | avg_logits | noisy_or | 2.0 | 6 | 0.26857 | -0.01236 |
+| 29 | orig_only | weighted_noisy_or | 2.0 | 6 | 0.26851 | -0.01242 |
+| 30 | avg_logits | noisy_or | 2.0 | 4 | 0.26789 | -0.01304 |
+| 31 | all_tiles | noisy_or | 2.0 | 2 | 0.26764 | -0.01329 |
+| 32 | all_tiles | noisy_or | 2.0 | 4 | 0.26708 | -0.01385 |
+| 33 | avg_logits | noisy_or | 1.5 | 6 | 0.26610 | -0.01483 |
+| 34 | per_view_or | noisy_or | 1.5 | 6 | 0.26516 | -0.01577 |
+| 35 | per_view_or | noisy_or | 2.5 | 6 | 0.25879 | -0.02214 |
+| 36 | avg_logits | noisy_or | 2.0 | 8 | 0.25826 | -0.02267 |
+| 37 | per_view_or | noisy_or | 2.5 | 8 | 0.25714 | -0.02379 |
+| 38 | avg_logits | noisy_or | 2.5 | 6 | 0.25664 | -0.02429 |
+| 39 | avg_logits | weighted_noisy_or | 2.0 | 10 | 0.25660 | -0.02433 |
+| 40 | avg_logits | mean_prob | 2.0 | 6 | 0.25626 | -0.02467 |
+| 41 | avg_logits | noisy_or | 2.5 | 4 | 0.25551 | -0.02542 |
+| 42 | per_view_or | noisy_or | 2.5 | 4 | 0.25525 | -0.02568 |
+| 43 | orig_only | mean_prob | 2.0 | 6 | 0.25492 | -0.02601 |
+| 44 | avg_logits | noisy_or | 2.5 | 8 | 0.25445 | -0.02648 |
+| 45 | avg_logits | weighted_noisy_or | 2.0 | 16 | 0.25156 | -0.02937 |
+| 46 | avg_logits | noisy_or | 2.0 | 16 | 0.24983 | -0.03110 |
+| 47 | avg_logits | mean_prob | 2.0 | 10 | 0.24931 | -0.03162 |
+| 48 | orig_only | weighted_noisy_or | 2.0 | 10 | 0.24771 | -0.03322 |
+| 49 | orig_only | noisy_or | 2.0 | 16 | 0.24730 | -0.03363 |
+| 50 | orig_only | weighted_noisy_or | 2.0 | 16 | 0.24709 | -0.03384 |
+| 51 | per_view_or | noisy_or | 1.5 | 8 | 0.24677 | -0.03416 |
+| 52 | avg_logits | weighted_noisy_or | 2.0 | 6 | 0.24660 | -0.03433 |
+| 53 | avg_logits | noisy_or | 1.5 | 8 | 0.24373 | -0.03720 |
+| 54 | orig_only | mean_prob | 2.0 | 10 | 0.24329 | -0.03764 |
+| 55 | avg_logits | mean_prob | 2.0 | 16 | 0.24232 | -0.03861 |
+| 56 | orig_only | mean_prob | 2.0 | 16 | 0.24086 | -0.04007 |
+| 57 | per_view_or | max_prob | 1.5 | 1 | 0.23281 | -0.04812 |
+| 58 | per_view_or | noisy_or | 1.5 | 10 | 0.22983 | -0.05110 |
+| 59 | all_tiles | noisy_or | 2.0 | 6 | 0.22688 | -0.05405 |
+| 60 | all_tiles | noisy_or | 2.0 | 8 | 0.20487 | -0.07606 |
+| 61 | all_tiles | noisy_or | 2.0 | 16 | 0.20410 | -0.07683 |
+| 62 | all_tiles | noisy_or | 2.0 | 10 | 0.19572 | -0.08521 |
+| 63 | all_tiles | noisy_or | 2.0 | 12 | 0.19572 | -0.08521 |
 
 ---
 
@@ -370,17 +374,78 @@ As k increases, m=2 and m=3 improve (the 2nd and 3rd best tiles among more candi
 
 ---
 
+## Step 6: Six-View Aggregation (Additional Augmentations)
+
+Testing whether adding 3 more augmentation views (rot180, rot270, vflip) improves over the 3-view baseline (orig, hflip, rot90). This required re-running DINOv2 inference on all test tiles with the new augmentations (GPU, ~30 min), then running per_view_or aggregation averaging over 6 views instead of 3.
+
+**Config**: per_view_or + max_prob + T=1.5 + thr=0.03 + topk=10
+
+| Views | k=3 | k=4 | k=5 | k=6 |
+|-------|-----|-----|-----|-----|
+| 3-view (orig, hflip, rot90) | **0.31487** | **0.31097** | 0.30864 | 0.30970 |
+| 6-view (+ rot180, rot270, vflip) | 0.31040 | 0.31067 | 0.30692 | 0.30538 |
+
+### Result: 6-View Hurts Across the Board
+
+3-view wins at every k value. The best 6-view result (k=4, 0.31067) is still worse than the best 3-view result (k=3, 0.31487).
+
+### Explanation
+
+The 3 new augmentations (rot180, rot270, vflip) add **redundant** rather than complementary information. DINOv2's ViT architecture, while not explicitly rotation-equivariant, captures similar visual features regardless of rotation — the CLS token attends to patch-level features that are largely orientation-invariant at the semantic level.
+
+Averaging 6 views instead of 3 **over-smooths** the probability vectors. With max_prob aggregation, the strength of the signal depends on having sharp, decisive per-view predictions. More averaging dilutes this sharpness. This is consistent with the Step 5 finding (top-m averaging hurts): any form of additional averaging beyond the 3-view baseline reduces the decisive single-tile signal that makes max_prob effective.
+
+The original 3 views (orig, hflip, rot90) were chosen in Phase 1 because they represent orthogonal geometric transforms. The additional views (rot180 = hflip + vflip; rot270 = rot90 + rot180) are compositions of the originals, so they provide diminishing marginal information.
+
+---
+
+## Critical Question: Does TTA Actually Help?
+
+### The Confounding Variable Problem
+
+The best config (per_view_or + max_prob + T=1.5 + k=3 = 0.31487) changed **three variables simultaneously** from the baseline (orig_only + noisy_or + T=2.0 + k=6 = 0.28093):
+
+1. View strategy: orig_only → per_view_or (3-view TTA)
+2. Aggregation method: noisy_or → max_prob
+3. Temperature: T=2.0 → T=1.5
+
+The +0.034 F1 improvement cannot be attributed to TTA alone. It could be entirely from max_prob + T=1.5.
+
+### Evidence from Existing Data
+
+The only direct orig_only vs per_view_or comparison holds everything else equal:
+
+| Config (T=2.0, k=6, noisy_or) | F1 |
+|-------------------------------|-----|
+| orig_only | 0.28093 |
+| per_view_or | 0.28010 |
+| **Difference** | **-0.00083** |
+
+At this config, per_view_or is marginally **worse** than orig_only.
+
+### Missing Ablation
+
+We have never tested: `orig_only + max_prob + T=1.5 + k=3,4,5,6`
+
+This is the critical ablation to isolate per_view_or's contribution. If orig_only + max_prob + T=1.5 also gives ~0.315, then TTA provides no benefit and the entire gain comes from the aggregation method change.
+
+**Step 7** (`slurm_orig_only_maxprob_ablation.sbatch`) runs this ablation: orig_only vs per_view_or, both with max_prob + T=1.5 + k={3,4,5,6}.
+
+---
+
 ## Compute Cost
 
-All experiments ran on CPU only (no GPU). The DINOv2 classifier head was extracted as numpy arrays and logits computed via matrix multiply.
+Steps 1-4 ran on CPU only (no GPU). Step 6 required a GPU extraction step for the additional augmentation views.
 
 | Step | Resource | Time |
 |------|----------|------|
 | Steps 1 + 1b + 1c + 3 | CPU-medium, 48 GB RAM | ~4 hours |
 | Step 4 (combined) | CPU, interactive | ~30 minutes |
 | Step 5 (top-m sweep) | CPU, interactive | ~30 minutes |
+| Step 6 extraction | GPU (RTX 6000) | ~30 minutes |
+| Step 6 aggregation | CPU-medium, 48 GB RAM | ~1 hour |
 | topk sweep | CPU | ~1 minute |
-| **Total** | | **~5 hours** |
+| **Total** | | **~6.5 hours** |
 
 ---
 
@@ -400,4 +465,7 @@ image_topk:         64
 F1 Score:           0.31487
 Improvement:        +0.03394 over baseline (0.28093)
 Relative gain:      +12.1%
+
+NOTE: Pending Step 7 ablation to confirm whether per_view_or
+contributes independently or if the gain is entirely from max_prob + T=1.5.
 ```
