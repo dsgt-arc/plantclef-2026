@@ -1,0 +1,39 @@
+Tiling strategy testing during phase 4
+
+ Recommended approach
+
+  Run 1 (baseline student): Use the current sbatch as-is (--tile-strategy none, KL loss). This is the most principled
+  starting point — the transformer's attention pooling can learn to downweight low-quality tiles on its own. ~8 GPU-hrs.
+
+  Then immediately: Run Phase 5 → submit to Kaggle → compare to your 0.27 teacher score.
+
+  Decision point:
+  - Student > teacher → the pipeline works. Optionally try fixed_k 8 as a second run to see if pre-filtering helps.
+  - Student ≈ teacher → try fixed_k 8 (mirrors teacher's top-16 but tighter) and/or bump epochs to 20.
+  - Student << teacher → don't sweep tile strategies yet. Check training logs first (loss convergence, consistency loss
+  magnitude).
+
+  If you want to run 2 configs in parallel
+
+  If your PACE GPU quota allows it, you could submit two jobs simultaneously with different output dirs:
+
+  # Job A: none (default)
+  sbatch phase4/slurm_phase4_train.sbatch
+
+  # Job B: fixed_k 8 — just change two args
+  # Copy sbatch, change OUT_DIR and add --tile-strategy fixed_k --tile-k 8
+
+  Want me to create a second sbatch variant for fixed_k 8 so you can run both in parallel? Or do you want to keep it
+  simple and just run none first?
+
+  Why none is a good starting point
+
+  The CrossRegionTransformer uses attention pooling — it already has the capacity to learn "ignore this tile" by
+  assigning near-zero attention weight. Pre-filtering with fixed_k is essentially doing the model's job for it with a
+  hard cutoff. Starting with none tells you whether the model can handle tile selection itself, which is the stronger
+  result.
+
+  The main risk with none is that noisy tiles might slow convergence, but with 15 epochs and attention masking, this is
+  unlikely to be a dealbreaker for an initial signal.
+
+

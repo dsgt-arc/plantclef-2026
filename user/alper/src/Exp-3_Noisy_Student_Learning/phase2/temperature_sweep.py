@@ -1,0 +1,128 @@
+"""Re-aggregate per-tile data sweeping temperature, tile-filter-k, and threshold."""
+from __future__ import annotations
+
+import argparse
+import os
+
+import numpy as np
+
+from phase2.aggregate_tiles import (
+    AggregationConfig,
+    load_per_tile_parquet,
+    run_aggregation,
+    save_aggregated,
+)
+from phase2.generate_submission import (
+    generate_submission_csv,
+    load_class_mask_npy,
+    load_species_map,
+)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Hyperparameter sweep for teacher aggregation")
+
+    ap.add_argument("--tile-parquet-root", required=True, help="Phase 1 per-tile parquet root")
+    ap.add_argument("--out-dir", required=True, help="Output directory for sweep results")
+
+    ap.add_argument("--species-map", required=True, help="Class-to-species JSON/CSV")
+    ap.add_argument("--class-mask-npy", default=None, help="Geo species mask .npy")
+
+    ap.add_argument(
+        "--temperatures",
+        default="2.0,2.5,3.0",
+        help="Comma-separated temperature values (default: 2.0,2.5,3.0)",
+    )
+    ap.add_argument("--aug-filter", action="store_true", default=True)
+    ap.add_argument("--no-aug-filter", action="store_false", dest="aug_filter")
+    ap.add_argument(
+        "--tile-filter-ks",
+        default="4,6,8,10,12,16",
+        help="Comma-separated tile-filter-k values to sweep (default: 4,6,8,10,12,16)",
+    )
+    ap.add_argument("--topk", type=int, default=10, help="Top-K species per image in submission")
+    ap.add_argument(
+        "--thresholds",
+        default="0.03,0.05,0.07",
+        help="Comma-separated probability thresholds (default: 0.03,0.05,0.07)",
+    )
+
+    ap.add_argument("--num-classes", type=int, default=7806)
+    ap.add_argument("--image-topk", type=int, default=64)
+    ap.add_argument("--id-col", default="image_name")
+
+    args = ap.parse_args()
+
+    temps = [float(t.strip()) for t in args.temperatures.split(",")]
+    tile_ks = [int(k.strip()) for k in args.tile_filter_ks.split(",")]
+    thresholds = [float(t.strip()) for t in args.thresholds.split(",")]
+    os.makedirs(args.out_dir, exist_ok=True)
+
+    n_combos = len(temps) * len(tile_ks) * len(thresholds)
+    print(f"Sweep: {len(temps)} temps x {len(tile_ks)} tile-ks x {len(thresholds)} thresholds = {n_combos} submissions")
+
+    # Load tile data once
+    print(f"Loading per-tile data from {args.tile_parquet_root}...")
+    tile_data = load_per_tile_parquet(args.tile_parquet_root)
+    print(f"Loaded {len(tile_data)} tile rows")
+
+    species_map = load_species_map(args.species_map, args.num_classes)
+    class_mask = None
+    if args.class_mask_npy:
+        class_mask = load_class_mask_npy(args.class_mask_npy, args.num_classes)
+
+    results_summary = []
+
+    for temp in temps:
+        for tile_k in tile_ks:
+            print(f"\n{'='*60}")
+            print(f"Temperature = {temp}, tile-filter-k = {tile_k}")
+            print(f"{'='*60}")
+
+            config = AggregationConfig(
+                temperature=temp,
+                aug_filter=args.aug_filter,
+                tile_filter_k=tile_k,
+                geo_mask_path=args.class_mask_npy,
+                image_topk=args.image_topk,
+                num_classes=args.num_classes,
+            )
+
+            image_probs = run_aggregation(tile_data, config, image_col=args.id_col)
+
+            # Save aggregated parquet (once per temp+tile_k combo)
+            parquet_path = os.path.join(args.out_dir, f"sweep_T{temp:.1f}_k{tile_k}.parquet")
+            save_aggregated(image_probs, parquet_path, id_col=args.id_col)
+
+            # Generate submission CSV for each threshold (instant)
+            for thr in thresholds:
+                csv_path = os.path.join(
+                    args.out_dir, f"sweep_T{temp:.1f}_k{tile_k}_thr{thr:.2f}_top{args.topk}.csv"
+                )
+                n_rows = generate_submission_csv(
+                    in_parquet=parquet_path,
+                    out_csv=csv_path,
+                    species_map=species_map,
+                    num_classes=args.num_classes,
+                    class_mask=class_mask,
+                    topk=args.topk,
+                    threshold=thr,
+                    min_k=1,
+                    id_col=args.id_col,
+                )
+
+                results_summary.append((temp, tile_k, thr, n_rows, csv_path))
+
+    # Print summary
+    print(f"\n{'='*60}")
+    print("SWEEP SUMMARY")
+    print(f"{'='*60}")
+    print(f"{'Temperature':>12} {'TileK':>6} {'Threshold':>10} {'Images':>8} {'CSV Path'}")
+    print(f"{'-'*12:>12} {'-'*6:>6} {'-'*10:>10} {'-'*8:>8} {'-'*40}")
+    for temp, tile_k, thr, n, path in results_summary:
+        print(f"{temp:>12.1f} {tile_k:>6d} {thr:>10.2f} {n:>8d} {path}")
+    print(f"{'='*60}")
+
+
+if __name__ == "__main__":
+    main()
