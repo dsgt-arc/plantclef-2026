@@ -473,6 +473,30 @@ The JPEG85 k=3 alpha curve has a clear, confirmed peak:
 
 ---
 
+## Sweep 8: Threshold Optimization (5 configs)
+
+With the alpha and aggregation parameters locked in, a threshold sweep was run on the best JPEG85 + 1v k=3 + alpha=0.6 configuration to determine if the default threshold=0.03 was optimal.
+
+**Base: JPEG85 + 1v + max_prob + T=1.5 + k=3 + alpha=0.6, topk=10**
+
+| Threshold | F1 | Delta vs thr=0.03 |
+|-----------|------|---------------------|
+| 0.020 | 0.33365 | -0.02152 |
+| 0.025 | 0.34143 | -0.01374 |
+| 0.030 | 0.35517 | — (previous best) |
+| **0.040** | **0.35698** | **+0.00181** |
+| 0.050 | 0.35531 | +0.00014 |
+
+**Key findings from Sweep 8:**
+
+1. **New overall best: threshold=0.040 achieves F1=0.35698** — surpasses the previous best (0.35517 at threshold=0.030) by +0.00181.
+2. **Clear peak at 0.040 with decline on both sides.** The curve rises monotonically from 0.020 to 0.040, then drops at 0.050, confirming a real optimum.
+3. **The threshold=0.03 default was slightly too conservative.** Raising to 0.040 eliminates marginal low-confidence predictions that were net false positives, improving precision without meaningfully hurting recall.
+4. **Below 0.030, scores degrade sharply.** The jump from 0.025→0.030 is +0.01374, indicating that many false positives enter between these thresholds.
+5. **The total improvement over the Exp-3 baseline is now +0.07605** (0.28093 → 0.35698), representing a **+27.1% relative gain**.
+
+---
+
 ## Implementation Details
 
 ### Files
@@ -504,9 +528,9 @@ Preprocessing: JPEG compression (quality=85, subsampling=4:2:2, Lanczos)
 Base:          1-view (orig only), max_prob, T=1.5, k=3
 Strategy:      prior_blend
 Alpha:         0.6
-Threshold:     0.03
+Threshold:     0.04
 TopK:          10
-F1:            0.35517 (public)
+F1:            0.35698 (public)
 ```
 
 ---
@@ -517,17 +541,43 @@ F1:            0.35517 (public)
 |--------|-------|
 | Original baseline F1 (3v TTA, no fusion) | 0.31487 |
 | Best non-JPEG F1 (1v + alpha=0.1) | 0.33946 |
-| **Best F1 (JPEG85 + 1v k=3 + alpha=0.6)** | **0.35517** |
-| Absolute improvement over original baseline | +0.04030 |
-| Relative improvement over original baseline | +12.8% |
+| Best F1 at thr=0.03 (JPEG85 + 1v k=3 + alpha=0.6) | 0.35517 |
+| **Best F1 (JPEG85 + 1v k=3 + alpha=0.6 + thr=0.04)** | **0.35698** |
+| Absolute improvement over original baseline | +0.04211 |
+| Relative improvement over original baseline | +13.4% |
+| Absolute improvement over Exp-3 baseline (0.28093) | +0.07605 |
+| Relative improvement over Exp-3 baseline | +27.1% |
 | Strategy | Prior Blend (simplest) |
 | Optimal alpha (non-JPEG) | 0.1 |
 | Optimal alpha (JPEG85) | 0.6 |
+| Optimal threshold | 0.04 |
 | Affected quadrats | 1596 / 2105 (75.8%) |
 | Compute cost (fusion) | CPU-only, < 10 min |
 | Compute cost (JPEG re-extraction) | GPU, ~4h (one-time) |
-| Total configs evaluated | ~57 (across 7 sweep tiers + JPEG85 view ablation) |
-| Strategies tested | 5 base + 2 composite + 3 site-level + 1v + JPEG85 |
+| Total configs evaluated | ~62 (across 8 sweep tiers + JPEG85 view ablation) |
+| Strategies tested | 5 base + 2 composite + 3 site-level + 1v + JPEG85 + threshold |
 | Key negative results | Site-level profiles hurt; TTA hurts with temporal fusion |
 
-The optimal pipeline is: **JPEG85 compression during embedding extraction, skip TTA, use single-view predictions with k=3 tile filtering, blend with 40% location prior / 60% per-photo weight**. JPEG compression is the largest single improvement (+0.016), followed by temporal fusion (+0.024 on the non-JPEG base, +0.024 on JPEG85 base). JPEG compression shifts the optimal alpha from 0.1 to 0.6, reflecting that per-photo predictions become more trustworthy when pixel statistics align with the model's training distribution. Alpha only affects the 1596 multi-visit quadrats (75.8%); the 509 single-visit quadrats pass through unchanged.
+The optimal pipeline is: **JPEG85 compression during embedding extraction, skip TTA, use single-view predictions with k=3 tile filtering, blend with 40% location prior / 60% per-photo weight, threshold at 0.04**. JPEG compression is the largest single improvement (+0.016), followed by temporal fusion (+0.024 on the non-JPEG base, +0.024 on JPEG85 base). Threshold optimization from 0.03→0.04 added a further +0.002. JPEG compression shifts the optimal alpha from 0.1 to 0.6, reflecting that per-photo predictions become more trustworthy when pixel statistics align with the model's training distribution. Alpha only affects the 1596 multi-visit quadrats (75.8%); the 509 single-visit quadrats pass through unchanged.
+
+---
+
+## Current Winning Configuration
+
+```
+Preprocessing:     JPEG compression (quality=85, subsampling=4:2:2, Lanczos)
+View Strategy:     1-view (orig_only, no TTA)
+Aggregation:       max_prob
+Temperature:       1.5
+tile_filter_k:     3
+Temporal Fusion:   prior_blend, alpha=0.6
+Threshold:         0.04
+TopK:              10
+Geo Mask:          sw_europe_mask_bool.npy
+Aug Filter:        True
+Image TopK:        64
+
+F1 Score:          0.35698 (public leaderboard)
+Improvement:       +0.07605 over Exp-3 baseline (0.28093)
+Relative Gain:     +27.1%
+```

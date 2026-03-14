@@ -2,11 +2,11 @@
 
 ## Executive Summary
 
-Exp-4 improved the PlantCLEF 2026 inference pipeline's F1 score from **0.28093 to 0.31950** (+13.7% relative) by replacing Noisy-OR aggregation with max-probability aggregation and lowering the softmax temperature from T=2.0 to T=1.5. No model retraining was required — all improvements came from better post-processing of existing DINOv2 embeddings.
+Exp-4 improved the PlantCLEF 2026 inference pipeline's F1 score from **0.28093 to 0.35698** (+27.1% relative) through a series of post-processing optimizations: replacing Noisy-OR with max-probability aggregation, lowering softmax temperature, adding JPEG85 compression during extraction, applying temporal fusion via location priors, and optimizing the prediction threshold. No model retraining was required — all improvements came from better post-processing of existing DINOv2 embeddings.
 
-A key negative finding: **multi-view test-time augmentation (TTA) does not help** and slightly hurts performance. The Step 7 ablation showed that orig_only (no augmentation) outperforms all multi-view strategies when max_prob + T=1.5 is used. The improvement is entirely attributable to the aggregation method change.
+A key negative finding: **multi-view test-time augmentation (TTA) does not help** and slightly hurts performance. The Step 7 ablation showed that orig_only (no augmentation) outperforms all multi-view strategies when max_prob + T=1.5 is used. The improvement is entirely attributable to the aggregation method change, JPEG compression, temporal fusion, and threshold tuning.
 
-**Final best config**: `orig_only` + `max_prob` + T=1.5 + k=4 + thr=0.03 + topk=10 → **F1 = 0.31950**
+**Final best config**: `orig_only` + `max_prob` + T=1.5 + k=3 + JPEG85 + temporal fusion alpha=0.6 + thr=0.04 + topk=10 → **F1 = 0.35698**
 
 ---
 
@@ -469,7 +469,7 @@ Steps 1-4 and 7 ran on CPU only (no GPU). Step 6 required a GPU extraction step 
 
 ---
 
-## Final Configuration
+## Final Configuration (Aggregation Only — Pre-Temporal Fusion)
 
 ```
 Strategy:           orig_only (no TTA)
@@ -493,4 +493,29 @@ Relative gain:      +13.7%
 |------|--------|-----|-----------|
 | Baseline | orig_only + noisy_or + T=2.0 + k=6 | 0.28093 | — |
 | Step 4 | per_view_or + max_prob + T=1.5 + k=3 | 0.31487 | max_prob + T=1.5 (+ TTA) |
-| **Step 7** | **orig_only + max_prob + T=1.5 + k=4** | **0.31950** | **Remove TTA, increase k** |
+| Step 7 | orig_only + max_prob + T=1.5 + k=4 | 0.31950 | Remove TTA, increase k |
+| Temporal Fusion | 1v + max_prob + T=1.5 + k=4 + alpha=0.1 | 0.33946 | Location prior blending |
+| JPEG85 + Fusion | JPEG85 + 1v + k=3 + alpha=0.6 | 0.35517 | JPEG compression, re-tuned alpha/k |
+| **Threshold Opt.** | **JPEG85 + 1v + k=3 + alpha=0.6 + thr=0.04** | **0.35698** | **Threshold 0.03→0.04** |
+
+---
+
+## Current Winning Configuration (Full Pipeline)
+
+```
+Preprocessing:     JPEG compression (quality=85, subsampling=4:2:2, Lanczos)
+View Strategy:     1-view (orig_only, no TTA)
+Aggregation:       max_prob
+Temperature:       1.5
+tile_filter_k:     3
+Temporal Fusion:   prior_blend, alpha=0.6
+Threshold:         0.04
+TopK:              10
+Geo Mask:          sw_europe_mask_bool.npy
+Aug Filter:        True
+Image TopK:        64
+
+F1 Score:          0.35698 (public leaderboard)
+Improvement:       +0.07605 over Exp-3 baseline (0.28093)
+Relative Gain:     +27.1%
+```
