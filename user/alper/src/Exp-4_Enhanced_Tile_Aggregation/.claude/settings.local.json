@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find \"/c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-3_Noisy_Student_Learning\" -name \"*.py\" -type f | xargs grep -l \"class\\\\|def \" | wc -l)"
+      "Bash(find \"/c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-3_Noisy_Student_Learning\" -name \"*.py\" -type f | xargs grep -l \"class\\\\|def \" | wc -l)",
+      "Bash(grep -h \"^from \\\\|^import \" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-4_Enhanced_Tile_Aggregation/*.py 2>/dev/null | sort -u)",
+      "Bash(wc -l /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-4_Enhanced_Tile_Aggregation/*.py)",
+      "Bash(cd \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\\\\Exp-4_Enhanced_Tile_Aggregation\" && python -c \"import py_compile; py_compile.compile\\('threshold_sweep.py', doraise=True\\); print\\('OK'\\)\")"
     ]
   }
 }
