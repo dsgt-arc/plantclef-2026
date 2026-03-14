@@ -11,7 +11,8 @@
       "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -type f -name \"generate_submission.py\" | head -2 | xargs cat | head -150)",
       "Bash(mkdir -p \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\\\\Exp-6_Adaptive_per_image_thresholding\\\\utils\" && mkdir -p \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\\\\Exp-6_Adaptive_per_image_thresholding\\\\docs\")",
       "Bash(cd \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\\\\Exp-6_Adaptive_per_image_thresholding\" && python -c \"import py_compile; py_compile.compile\\('adaptive_threshold.py', doraise=True\\); print\\('OK'\\)\")",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(cd \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\\\\Exp-6_Adaptive_per_image_thresholding\" && python -c \"import py_compile; py_compile.compile\\('threshold_topk_sweep.py', doraise=True\\); print\\('OK'\\)\")"
     ]
   }
 }
