@@ -496,7 +496,8 @@ Relative gain:      +13.7%
 | Step 7 | orig_only + max_prob + T=1.5 + k=4 | 0.31950 | Remove TTA, increase k |
 | Temporal Fusion | 1v + max_prob + T=1.5 + k=4 + alpha=0.1 | 0.33946 | Location prior blending |
 | JPEG85 + Fusion | JPEG85 + 1v + k=3 + alpha=0.6 | 0.35517 | JPEG compression, re-tuned alpha/k |
-| **Threshold Opt.** | **JPEG85 + 1v + k=3 + alpha=0.6 + thr=0.04** | **0.35698** | **Threshold 0.03→0.04** |
+| Threshold Opt. | JPEG85 + 1v + k=3 + alpha=0.6 + thr=0.04 | 0.35698 | Threshold 0.03→0.04 |
+| **Thr+TopK Opt.** | **JPEG85 + 1v + k=3 + alpha=0.6 + thr=0.045** | **0.35859** | **Threshold 0.04→0.045 (Exp-6)** |
 
 ---
 
@@ -509,13 +510,34 @@ Aggregation:       max_prob
 Temperature:       1.5
 tile_filter_k:     3
 Temporal Fusion:   prior_blend, alpha=0.6
-Threshold:         0.04
-TopK:              10
+Threshold:         0.045
+TopK:              10 (not binding — only ~3 species per image exceed threshold)
 Geo Mask:          sw_europe_mask_bool.npy
 Aug Filter:        True
 Image TopK:        64
 
-F1 Score:          0.35698 (public leaderboard)
-Improvement:       +0.07605 over Exp-3 baseline (0.28093)
-Relative Gain:     +27.1%
+F1 Score:          0.35859 (public leaderboard)
+Improvement:       +0.07766 over Exp-3 baseline (0.28093)
+Relative Gain:     +27.6%
 ```
+
+### Exp-6 Threshold Optimization Summary
+
+Exp-6 (Adaptive Per-Image Thresholding) systematically explored the threshold × topk
+interaction space and found that the original threshold=0.03 + topk=10 was suboptimal:
+
+- The optimal prediction count is ~3 species per image, not 10
+- topk=10 was the binding constraint at thr=0.03, padding most images with 5-7 false positives
+- Raising threshold to 0.045 eliminates these false positives without any topk cap needed
+- Adaptive strategies (max_gap, elbow, relative_ratio) did not beat a simple fixed threshold
+
+**Threshold × TopK sweep results (Exp-6):**
+
+| Threshold | TopK | Avg K | F1 |
+|-----------|------|-------|----|
+| 0.030 | 10 | ~10 | 0.35517 |
+| 0.040 | 10 | 3.6 | 0.35698 |
+| **0.045** | **7+** | **3.1** | **0.35859** |
+| 0.050 | 10 | 2.8 | 0.35531 |
+| 0.045 | 5 | 3.0 | 0.35764 |
+| 0.045 | 6 | 3.1 | 0.35841 |
