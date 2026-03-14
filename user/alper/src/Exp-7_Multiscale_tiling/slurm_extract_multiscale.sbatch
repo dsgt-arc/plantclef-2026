@@ -22,14 +22,15 @@
 set -euo pipefail
 
 PLANTCLEF_ROOT="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0"
-EXP7_SRC="/storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-7_Multiscale_tiling"
+export PLANTCLEF_ROOT
 
+SRC_ROOT="/storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-7_Multiscale_tiling"
+export PYTHONPATH="${SRC_ROOT}:${PYTHONPATH:-}"
 export PYTORCH_ALLOC_CONF=expandable_segments:True
 
 mkdir -p logs
 
-cd /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction
-source .venv/bin/activate
+source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
 
 echo "Running on host: $(hostname)"
 echo "Job: ${SLURM_JOB_NAME}  ArrayJobID: ${SLURM_ARRAY_JOB_ID:-}  TaskID: ${SLURM_ARRAY_TASK_ID:-}"
@@ -48,7 +49,7 @@ echo "=== Extracting embeddings at scale ${SCALE}x${SCALE} ==="
 echo "JPEG: quality=85, subsampling=1 (4:2:2)"
 echo "Output: ${OUTPUT_DIR}"
 
-python "${EXP7_SRC}/extract_multiscale_embeddings.py" \
+python "${SRC_ROOT}/extract_multiscale_embeddings.py" \
   --scale "${SCALE}" \
   --image-dir "${IMAGE_DIR}" \
   --model-path "${MODEL_PATH}" \

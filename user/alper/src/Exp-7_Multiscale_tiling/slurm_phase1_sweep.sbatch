@@ -22,12 +22,14 @@
 set -euo pipefail
 
 PLANTCLEF_ROOT="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0"
-EXP7_SRC="/storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-7_Multiscale_tiling"
+export PLANTCLEF_ROOT
+
+SRC_ROOT="/storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/src/Exp-7_Multiscale_tiling"
+export PYTHONPATH="${SRC_ROOT}:${PYTHONPATH:-}"
 
 mkdir -p logs
 
-cd /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction
-source .venv/bin/activate
+source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
 
 echo "Running on host: $(hostname)"
 echo "Job: ${SLURM_JOB_NAME}  JobID: ${SLURM_JOB_ID}"
@@ -39,8 +41,8 @@ SCALE2_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/exp7_multiscal
 SCALE5_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/exp7_multiscale"
 
 MODEL_PATH="${PLANTCLEF_ROOT}/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth"
-SPECIES_MAP="${PLANTCLEF_ROOT}/data/raw/PlanCLEF_test_data/species_id_mapping.json"
-GEO_MASK="${PLANTCLEF_ROOT}/aerten3/geo_masks/sw_europe_mask_bool.npy"
+SPECIES_MAP="${PLANTCLEF_ROOT}/data/raw/class_id_to_species_mapping/class_to_species_id.json"
+GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
 
 OUT_DIR="${PLANTCLEF_ROOT}/aerten3/submissions/exp7_multiscale/phase1"
 
@@ -49,9 +51,7 @@ echo "Scale 4 (existing): ${SCALE4_DIR}"
 echo "Scale 1,2,5 (new):  ${SCALE1_DIR}"
 echo "Output:             ${OUT_DIR}"
 
-cd "${EXP7_SRC}"
-
-python multiscale_aggregate.py \
+python "${SRC_ROOT}/multiscale_aggregate.py" \
   --scale4-dir "${SCALE4_DIR}" \
   --scale1-dir "${SCALE1_DIR}" \
   --scale2-dir "${SCALE2_DIR}" \
@@ -67,6 +67,7 @@ python multiscale_aggregate.py \
   --tile-filter-k 0 \
   --schemes A,B,C
 
+echo ""
 echo "=== Phase 1 sweep complete ==="
 echo "Submission CSVs in: ${OUT_DIR}"
 echo "Submit to Kaggle and record F1 scores."
