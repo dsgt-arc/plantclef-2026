@@ -65,8 +65,7 @@ python "${SRC_ROOT}/multiscale_aggregate.py" \
   --topk 10 \
   --image-topk 64 \
   --tile-filter-k 0 \
-  --schemes E \
-  --thresholds "0.070,0.075,0.080,0.085,0.090,0.095,0.100"
+  --schemes F
 
 echo ""
 echo "=== Phase 1 sweep complete ==="
