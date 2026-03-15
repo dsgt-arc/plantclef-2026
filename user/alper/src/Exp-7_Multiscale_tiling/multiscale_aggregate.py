@@ -91,15 +91,44 @@ PHASE1_GRID = [
 # --------------------------------------------------------------------------
 
 def load_scale_tiles(
-    parquet_root: str,
+    parquet_path: str,
     scale: int,
 ) -> pd.DataFrame:
-    """Load per-tile data from a scale directory.
+    """Load per-tile data for a specific scale.
 
-    Handles both Exp-3 shard format (shard_XXXX/*.parquet) and
-    single-file format (*.parquet).
+    Accepts either:
+      - A direct parquet file path (e.g., /path/to/scale_2x2.parquet)
+      - A directory with shard format (e.g., /path/to/shard_XXXX/*.parquet)
+      - A directory containing scale-specific files (looks for scale_NxN.parquet)
+
+    When given a directory with multiple parquet files, selects only the
+    file matching scale_NxN.parquet to avoid loading other scales.
     """
-    df = load_per_tile_parquet(parquet_root)
+    import glob as _glob
+
+    if os.path.isfile(parquet_path):
+        # Direct file path
+        df = pd.read_parquet(parquet_path)
+    elif os.path.isdir(parquet_path):
+        # Check for scale-specific file first
+        scale_file = os.path.join(parquet_path, f"scale_{scale}x{scale}.parquet")
+        if os.path.exists(scale_file):
+            df = pd.read_parquet(scale_file)
+        else:
+            # Fall back to shard format (Exp-3/Exp-4 style)
+            shard_files = sorted(_glob.glob(
+                os.path.join(parquet_path, "shard_*/*.parquet")
+            ))
+            if shard_files:
+                df = load_per_tile_parquet(parquet_path, pattern="shard_*/*.parquet")
+            else:
+                raise FileNotFoundError(
+                    f"No scale_{scale}x{scale}.parquet or shard_*/*.parquet "
+                    f"found in {parquet_path}"
+                )
+    else:
+        raise FileNotFoundError(f"Path does not exist: {parquet_path}")
+
     df["scale"] = scale
     # Reindex tile_index to be unique across scales: scale * 1000 + tile_index
     if "tile_index" in df.columns:
@@ -123,7 +152,17 @@ def load_multiscale_tiles(
         print(f"  Loading scale {scale}x{scale} from {path}...")
         t0 = time.time()
         df = load_scale_tiles(path, scale)
-        print(f"    -> {len(df)} tiles in {time.time() - t0:.1f}s")
+        n_images = df["image_name"].nunique()
+        expected_tiles_per_image = scale * scale
+        actual_tiles_per_image = len(df) / n_images if n_images > 0 else 0
+        print(f"    -> {len(df)} tiles, {n_images} images, "
+              f"{actual_tiles_per_image:.1f} tiles/img "
+              f"(expected {expected_tiles_per_image}), "
+              f"{time.time() - t0:.1f}s")
+        if abs(actual_tiles_per_image - expected_tiles_per_image) > 0.5:
+            print(f"    *** WARNING: tile count mismatch! "
+                  f"Expected {expected_tiles_per_image} tiles/img for scale {scale}x{scale}, "
+                  f"got {actual_tiles_per_image:.1f}. Check data source.")
         frames.append(df)
 
     combined = pd.concat(frames, ignore_index=True)
