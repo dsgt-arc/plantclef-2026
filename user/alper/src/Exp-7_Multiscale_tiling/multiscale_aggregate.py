@@ -106,6 +106,16 @@ SCHEMES = {
         "scales": [6],
         "tiles": 36,
     },
+    "J": {
+        "label": "4x4+5x5+6x6+3x3",
+        "scales": [3, 4, 5, 6],
+        "tiles": 86,
+    },
+    "K": {
+        "label": "4x4+5x5+6x6+7x7",
+        "scales": [4, 5, 6, 7],
+        "tiles": 126,
+    },
 }
 
 # Phase 1 sweep grid: (scheme_id, thresholds)
@@ -119,6 +129,8 @@ PHASE1_GRID = [
     ("G", [0.04, 0.06, 0.075, 0.08, 0.10]),
     ("H", [0.04, 0.06, 0.075, 0.08, 0.10, 0.15]),
     ("I", [0.04, 0.06, 0.075, 0.08, 0.10]),
+    ("J", [0.04, 0.06, 0.075, 0.08, 0.10, 0.15]),
+    ("K", [0.04, 0.06, 0.075, 0.08, 0.10, 0.15]),
 ]
 
 
@@ -442,6 +454,10 @@ def main() -> None:
                     help="Parquet root for 5x5 tiles")
     ap.add_argument("--scale6-dir", default=None,
                     help="Parquet root for 6x6 tiles")
+    ap.add_argument("--scale3-dir", default=None,
+                    help="Parquet root for 3x3 tiles")
+    ap.add_argument("--scale7-dir", default=None,
+                    help="Parquet root for 7x7 tiles")
 
     # Model and data
     ap.add_argument("--model-path", required=True,
@@ -480,6 +496,10 @@ def main() -> None:
         all_scale_dirs[5] = args.scale5_dir
     if args.scale6_dir:
         all_scale_dirs[6] = args.scale6_dir
+    if args.scale3_dir:
+        all_scale_dirs[3] = args.scale3_dir
+    if args.scale7_dir:
+        all_scale_dirs[7] = args.scale7_dir
 
     # Build sweep grid
     requested_schemes = [s.strip() for s in args.schemes.split(",")]

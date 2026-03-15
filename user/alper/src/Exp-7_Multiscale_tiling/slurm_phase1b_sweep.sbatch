@@ -40,6 +40,8 @@ SCALE1_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/exp7_multiscal
 SCALE2_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/exp7_multiscale"
 SCALE5_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/exp7_multiscale"
 SCALE6_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/exp7_multiscale"
+SCALE3_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/exp7_multiscale"
+SCALE7_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/exp7_multiscale"
 
 MODEL_PATH="${PLANTCLEF_ROOT}/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth"
 SPECIES_MAP="${PLANTCLEF_ROOT}/data/raw/class_id_to_species_mapping/class_to_species_id.json"
@@ -56,6 +58,8 @@ python "${SRC_ROOT}/multiscale_aggregate.py" \
   --scale4-dir "${SCALE4_DIR}" \
   --scale5-dir "${SCALE5_DIR}" \
   --scale6-dir "${SCALE6_DIR}" \
+  --scale3-dir "${SCALE3_DIR}" \
+  --scale7-dir "${SCALE7_DIR}" \
   --model-path "${MODEL_PATH}" \
   --species-map "${SPECIES_MAP}" \
   --class-mask-npy "${GEO_MASK}" \
@@ -65,7 +69,7 @@ python "${SRC_ROOT}/multiscale_aggregate.py" \
   --topk 10 \
   --image-topk 64 \
   --tile-filter-k 0 \
-  --schemes F
+  --schemes J,K
 
 echo ""
 echo "=== Phase 1 sweep complete ==="
