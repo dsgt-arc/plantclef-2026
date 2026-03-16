@@ -14,8 +14,8 @@
 # Exp-7 Phase 4: Alpha + Temperature re-tuning on Scheme E (4x4+5x5+6x6)
 # Current best: alpha=0.6, T=1.5, thr=0.075, F1=0.38466
 #
-# Step 1: Sweep alpha (0.4, 0.5, 0.6, 0.7, 0.8) with T=1.5 fixed
-# Step 2: Sweep temperature (1.0, 1.25, 1.5, 1.75, 2.0) with alpha=0.6 fixed
+# Step 1: Extend alpha sweep lower (0.1, 0.2, 0.3) — trend shows lower is better
+# Step 2: Threshold sweep at alpha=0.4 (current best) to check if 0.075 is still optimal
 #
 # CSV naming: scheme_E_T{temp}_a{alpha}_thr0.075_top10.csv
 
@@ -48,11 +48,11 @@ OUT_DIR="${PLANTCLEF_ROOT}/aerten3/submissions/exp7_multiscale/phase4"
 echo "=== Exp-7 Phase 4: Alpha + Temperature Sweep ==="
 echo "Output: ${OUT_DIR}"
 
-# ── Step 1: Alpha sweep (T=1.5 fixed) ──
+# ── Step 1: Extend alpha sweep lower (T=1.5 fixed) ──
 echo ""
-echo "=== Step 1: Alpha sweep (T=1.5, thr=0.075) ==="
+echo "=== Step 1: Alpha sweep extension (T=1.5, thr=0.075) ==="
 
-for ALPHA in 0.4 0.5 0.6 0.7 0.8; do
+for ALPHA in 0.1 0.2 0.3; do
   echo "--- Alpha=${ALPHA} ---"
   python "${SRC_ROOT}/multiscale_aggregate.py" \
     --scale4-dir "${SCALE4_DIR}" \
@@ -71,12 +71,12 @@ for ALPHA in 0.4 0.5 0.6 0.7 0.8; do
     --thresholds "0.075"
 done
 
-# ── Step 2: Temperature sweep (alpha=0.6 fixed) ──
+# ── Step 2: Threshold sweep at alpha=0.4 (current best) ──
 echo ""
-echo "=== Step 2: Temperature sweep (alpha=0.6, thr=0.075) ==="
+echo "=== Step 2: Threshold sweep (alpha=0.4, T=1.5) ==="
 
-for TEMP in 1.0 1.25 1.5 1.75 2.0; do
-  echo "--- T=${TEMP} ---"
+for THR in 0.060 0.070 0.075 0.080 0.090 0.100; do
+  echo "--- Threshold=${THR} ---"
   python "${SRC_ROOT}/multiscale_aggregate.py" \
     --scale4-dir "${SCALE4_DIR}" \
     --scale5-dir "${SCALE5_DIR}" \
@@ -85,16 +85,16 @@ for TEMP in 1.0 1.25 1.5 1.75 2.0; do
     --species-map "${SPECIES_MAP}" \
     --class-mask-npy "${GEO_MASK}" \
     --out-dir "${OUT_DIR}" \
-    --temperature "${TEMP}" \
-    --alpha 0.6 \
+    --temperature 1.5 \
+    --alpha 0.4 \
     --topk 10 \
     --image-topk 64 \
     --tile-filter-k 0 \
     --schemes E \
-    --thresholds "0.075"
+    --thresholds "${THR}"
 done
 
 echo ""
 echo "=== Phase 4 sweep complete ==="
 echo "All CSVs in: ${OUT_DIR}"
-echo "Baseline: scheme_E_T1.50_a0.6_thr0.075_top10.csv = F1 0.38466"
+echo "Current best: scheme_E_T1.50_a0.4_thr0.075_top10.csv = F1 0.39085"
