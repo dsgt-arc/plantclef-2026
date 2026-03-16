@@ -71,9 +71,9 @@ for ALPHA in 0.1 0.2 0.3; do
     --thresholds "0.075"
 done
 
-# ── Step 2: Threshold sweep at alpha=0.4 (current best) ──
+# ── Step 2: Threshold sweep at alpha=0.2 (current best) ──
 echo ""
-echo "=== Step 2: Threshold sweep (alpha=0.4, T=1.5) ==="
+echo "=== Step 2: Threshold sweep (alpha=0.2, T=1.5) ==="
 
 for THR in 0.060 0.070 0.075 0.080 0.090 0.100; do
   echo "--- Threshold=${THR} ---"
@@ -86,7 +86,7 @@ for THR in 0.060 0.070 0.075 0.080 0.090 0.100; do
     --class-mask-npy "${GEO_MASK}" \
     --out-dir "${OUT_DIR}" \
     --temperature 1.5 \
-    --alpha 0.4 \
+    --alpha 0.2 \
     --topk 10 \
     --image-topk 64 \
     --tile-filter-k 0 \
@@ -97,4 +97,4 @@ done
 echo ""
 echo "=== Phase 4 sweep complete ==="
 echo "All CSVs in: ${OUT_DIR}"
-echo "Current best: scheme_E_T1.50_a0.4_thr0.075_top10.csv = F1 0.39085"
+echo "Current best: scheme_E_T1.50_a0.2_thr0.075_top10.csv = F1 0.39420"
