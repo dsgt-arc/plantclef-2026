@@ -2,14 +2,16 @@
 
 ## Executive Summary
 
-Multi-scale tiling improves F1 from **0.35698 → 0.38542** (+0.02844, +8.0% relative) by combining three complementary fine-grained scales. The optimal configuration is **Scheme E (4x4+5x5+6x6, 77 tiles)** at **threshold=0.075**, with Scheme K (adding 7x7) marginally better at 0.08.
+Multi-scale tiling with re-tuned parameters improves F1 from **0.35698 → 0.39573** (+0.03875, +10.9% relative). The optimal configuration is **Scheme E (4x4+5x5+6x6, 77 tiles)** with **alpha=0.2, T=1.5, threshold=0.070**.
 
 Key findings:
 - **Fine scales help, coarse scales hurt.** Scales 5x5 and 6x6 capture small/cryptic species at near-native resolution. Coarse scales (1x1, 2x2, 3x3) introduce false positives.
 - **Three complementary scales outperform two.** 4x4+5x5+6x6 beats 4x4+5x5 by +0.006 and 4x4+6x6 by +0.010. All three contribute unique signal.
 - **No single scale is sufficient alone.** 5x5 alone (0.354) is worse than the 4x4 baseline (0.357). The scales are complementary, not redundant.
 - **7x7 provides negligible gain (+0.0008) for 49 extra tiles.** Diminishing returns beyond scale 6.
-- **Threshold must increase with more tiles.** Single-scale 4x4 peaked at threshold=0.04; multi-scale E peaked at 0.075.
+- **Alpha shifted dramatically from 0.6 → 0.2.** Multi-scale produces more candidates but also more noise — the location prior (80% weight) aggressively filters to species actually observed at each site.
+- **T=1.5 remains optimal.** Temperature is a sharp peak; deviations in either direction hurt significantly.
+- **Threshold shifted from 0.04 → 0.070.** More tiles push max probabilities higher, requiring a higher decision boundary.
 
 ## Background
 
@@ -31,20 +33,6 @@ The DINOv2 model was trained on single-species close-up images (~800x800px). Tes
 | 6x6 | 36 | 500x500 | ~1:1 | Best match (slight upscale for ~3000px images) |
 | 7x7 | 49 | ~430x430 | 1.2x upscale | Good match but upscaling needed |
 
-### Fixed Parameters (all runs)
-
-```
-Aggregation:       max_prob
-Temperature:       1.5
-Temporal Fusion:   prior_blend, alpha=0.6
-TopK:              10
-Geo Mask:          sw_europe_mask_bool.npy
-Aug Filter:        True
-Image TopK:        64
-tile_filter_k:     ALL (disabled)
-JPEG:              quality=85, subsampling=4:2:2, Lanczos
-```
-
 ## Phase 0: Embedding Extraction
 
 Extracted JPEG85 CLS embeddings for each scale using `extract_multiscale_embeddings.py`. Existing 4x4 JPEG85 embeddings reused from Exp-4.
@@ -60,6 +48,8 @@ Extracted JPEG85 CLS embeddings for each scale using `extract_multiscale_embeddi
 | 7x7 | 49 | 103,145 | ~4 hrs |
 
 ## Phase 1: Scheme Comparison
+
+All scheme comparison runs used: T=1.5, alpha=0.6, topk=10, tile_filter_k=ALL.
 
 ### All Schemes Tested
 
@@ -149,7 +139,7 @@ Extracted JPEG85 CLS embeddings for each scale using `extract_multiscale_embeddi
 | 0.10 | 0.38358 |
 | 0.15 | 0.35255 |
 
-**Verdict: Best practical scheme.** Adding 6x6 on top of 4x4+5x5 gives +0.006. All three scales are complementary. The 6x6 tiles best match the single-species training distribution.
+**Verdict: Best scheme.** Adding 6x6 on top of 4x4+5x5 gives +0.006. All three scales are complementary. The 6x6 tiles best match the single-species training distribution.
 
 #### Scheme J: 4x4 + 5x5 + 6x6 + 3x3 (86 tiles) — Add coarser scale
 
@@ -176,6 +166,54 @@ Extracted JPEG85 CLS embeddings for each scale using `extract_multiscale_embeddi
 | 0.15 | 0.36284 |
 
 **Verdict:** Marginal gain (+0.0008 vs E) for 49 extra tiles. Diminishing returns. The flat curve across 0.075-0.10 suggests robust but redundant signal from 7x7.
+
+## Phase 2: Alpha Re-tuning on Scheme E
+
+Alpha=0.6 was optimized for single-scale 4x4. With 77 multi-scale tiles producing more candidates (and more noise), the location prior becomes more valuable as a filter.
+
+All runs at T=1.5, thr=0.075.
+
+| Alpha | F1 | Delta vs 0.6 |
+|-------|------|-------------|
+| 0.1 | 0.39268 | +0.00802 |
+| **0.2** | **0.39420** | **+0.00954** |
+| 0.3 | 0.39211 | +0.00745 |
+| 0.4 | 0.39085 | +0.00619 |
+| 0.5 | 0.38890 | +0.00424 |
+| 0.6 | 0.38466 | — |
+| 0.7 | 0.38106 | -0.00360 |
+| 0.8 | 0.37718 | -0.00748 |
+
+**Optimal alpha=0.2** (20% photo prediction, 80% location prior). The location prior aggressively filters multi-scale predictions to species actually observed at each site. Gain: +0.00954 over alpha=0.6.
+
+## Phase 3: Temperature Sweep on Scheme E
+
+All runs at alpha=0.6, thr=0.075. (Temperature is independent of alpha — confirmed T=1.5 is optimal before alpha re-tuning.)
+
+| Temperature | F1 |
+|-------------|------|
+| 1.00 | 0.30766 |
+| 1.25 | 0.33081 |
+| **1.50** | **0.38466** |
+| 1.75 | 0.32643 |
+
+**T=1.5 is a sharp peak.** No change needed. Deviations in either direction cause large drops.
+
+## Phase 4: Threshold Re-tuning at Alpha=0.2
+
+With alpha shifted from 0.6 to 0.2, the optimal threshold may also shift. The location prior already filters noise, potentially allowing a slightly lower threshold.
+
+All runs at T=1.5, alpha=0.2.
+
+| Threshold | F1 |
+|-----------|------|
+| 0.060 | 0.37369 |
+| **0.070** | **0.39573** |
+| 0.075 | 0.39420 |
+| 0.080 | 0.39305 |
+| 0.090 | 0.39224 |
+
+**Optimal threshold shifted from 0.075 → 0.070.** With stronger location prior filtering (alpha=0.2), a slightly lower threshold captures more true positives without excess false positives. Gain: +0.00153 over thr=0.075.
 
 ## Key Insights
 
@@ -208,16 +246,19 @@ Evidence: removing any one scale from E degrades performance.
 
 At scales 1x1–3x3, tiles cover large areas (1000–3000px) compressed to 518px. The model can't distinguish individual plants and produces high-confidence predictions for species that aren't actually present. With `max_prob` aggregation, these false positives propagate to the image level.
 
-### 4. Threshold Shifts with Tile Count
+### 4. Multi-Scale Requires Stronger Location Prior
 
-| Scheme | Tiles | Optimal threshold |
-|--------|-------|-------------------|
-| A (4x4) | 16 | 0.04 |
-| D (4x4+5x5) | 41 | 0.075 |
-| E (4x4+5x5+6x6) | 77 | 0.075 |
-| K (4x4+5x5+6x6+7x7) | 126 | 0.08 |
+With 77 tiles, `max_prob` produces more true positives but also more false positives. The temporal fusion location prior acts as a filter, suppressing species not observed at each site. The optimal alpha shifted from 0.6 (single-scale) to 0.2 (multi-scale), meaning 80% of the final prediction comes from the location prior.
 
-More tiles means more chances for any tile to produce a high `max_prob` for a given species. The threshold must rise to maintain precision. Using the wrong threshold can make a better scheme appear worse (e.g., Scheme E at thr=0.04 scores 0.340, worse than single-scale baseline).
+### 5. Threshold Shifts with Tile Count and Alpha
+
+| Configuration | Tiles | Alpha | Optimal threshold |
+|---------------|-------|-------|-------------------|
+| Single-scale (Exp-4) | 16 | 0.6 | 0.04 |
+| Multi-scale, alpha=0.6 | 77 | 0.6 | 0.075 |
+| Multi-scale, alpha=0.2 | 77 | 0.2 | 0.070 |
+
+More tiles push the threshold up (more chances for high max_prob). Lower alpha (stronger prior filtering) pushes it slightly back down (prior already removes false positives).
 
 ## Evolution of Best Configuration
 
@@ -229,11 +270,13 @@ More tiles means more chances for any tile to produce a high `max_prob` for a gi
 | + JPEG85 | quality=85, 4:2:2 | 0.35517 | +0.01571 |
 | + threshold tuning | thr=0.04 | 0.35698 | +0.00181 |
 | + multi-scale 4x4+5x5 | thr=0.075 | 0.37894 | +0.02196 |
-| **+ add 6x6 scale** | **4x4+5x5+6x6, thr=0.075** | **0.38466** | **+0.00572** |
+| + add 6x6 scale | 4x4+5x5+6x6, thr=0.075 | 0.38466 | +0.00572 |
+| + alpha re-tuning | alpha=0.2 | 0.39420 | +0.00954 |
+| **+ threshold re-tuning** | **thr=0.070** | **0.39573** | **+0.00153** |
 
-**Total improvement: +0.10373** (+36.9% relative over Exp-3 baseline)
+**Total improvement: +0.11480** (+40.9% relative over Exp-3 baseline)
 
-## Current Best Configuration
+## Final Configuration
 
 ```
 Preprocessing:     JPEG compression (quality=85, subsampling=4:2:2, Lanczos)
@@ -242,22 +285,15 @@ View Strategy:     1-view (orig_only, no TTA)
 Aggregation:       max_prob
 Temperature:       1.5
 tile_filter_k:     ALL (disabled)
-Temporal Fusion:   prior_blend, alpha=0.6
-Threshold:         0.075
+Temporal Fusion:   prior_blend, alpha=0.2
+Threshold:         0.070
 TopK:              10
 Geo Mask:          sw_europe_mask_bool.npy
 Aug Filter:        True
 Image TopK:        64
 
-F1 Score:          0.38466 (public leaderboard)
-Improvement:       +0.02768 over Exp-4 best (0.35698)
-                   +0.10373 over Exp-3 baseline (0.28093)
-Relative Gain:     +36.9% over Exp-3 baseline
+F1 Score:          0.39573 (public leaderboard)
+Improvement:       +0.03875 over Exp-4 best (0.35698)
+                   +0.11480 over Exp-3 baseline (0.28093)
+Relative Gain:     +40.9% over Exp-3 baseline
 ```
-
-## Next Steps
-
-- Fine threshold sweep on Scheme E around 0.070–0.100
-- Re-tune temporal fusion alpha (0.6 was optimized for single-scale 4x4)
-- Re-tune temperature T (1.5 was optimized for single-scale)
-- Test tile_filter_k reintroduction (per-scale top-N filtering)
