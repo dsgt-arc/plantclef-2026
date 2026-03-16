@@ -2,13 +2,14 @@
 
 ## Executive Summary
 
-Multi-scale tiling improves F1 from **0.35698 → 0.37894** (+0.02196, +6.2% relative) by adding a 5x5 fine-grained scale alongside the existing 4x4 grid. The optimal configuration is **Scheme D (4x4+5x5, 41 tiles)** at **threshold=0.075**.
+Multi-scale tiling improves F1 from **0.35698 → 0.38542** (+0.02844, +8.0% relative) by combining three complementary fine-grained scales. The optimal configuration is **Scheme E (4x4+5x5+6x6, 77 tiles)** at **threshold=0.075**, with Scheme K (adding 7x7) marginally better at 0.08.
 
 Key findings:
-- **Fine scales help, coarse scales hurt.** The 5x5 scale captures small/cryptic species at near-native resolution that 4x4 misses. Coarse scales (1x1, 2x2) introduce false positives.
-- **4x4 and 5x5 are complementary, not redundant.** Neither scale alone matches the combination — 5x5 alone (0.354) is worse than the 4x4 baseline (0.357).
-- **Threshold must increase with more tiles.** Single-scale 4x4 peaked at threshold=0.04; multi-scale D peaked at 0.075. More tiles push max probabilities higher.
-- Testing of 6x6 scale (4x4+5x5+6x6, Scheme E) is pending.
+- **Fine scales help, coarse scales hurt.** Scales 5x5 and 6x6 capture small/cryptic species at near-native resolution. Coarse scales (1x1, 2x2, 3x3) introduce false positives.
+- **Three complementary scales outperform two.** 4x4+5x5+6x6 beats 4x4+5x5 by +0.006 and 4x4+6x6 by +0.010. All three contribute unique signal.
+- **No single scale is sufficient alone.** 5x5 alone (0.354) is worse than the 4x4 baseline (0.357). The scales are complementary, not redundant.
+- **7x7 provides negligible gain (+0.0008) for 49 extra tiles.** Diminishing returns beyond scale 6.
+- **Threshold must increase with more tiles.** Single-scale 4x4 peaked at threshold=0.04; multi-scale E peaked at 0.075.
 
 ## Background
 
@@ -24,9 +25,11 @@ The DINOv2 model was trained on single-species close-up images (~800x800px). Tes
 |-------|-------|--------------------|---------------|-------------------|
 | 1x1 | 1 | 3000x3000 | 5.8x downscale | Poor (whole scene) |
 | 2x2 | 4 | 1500x1500 | 2.9x downscale | Poor (quarter scene) |
+| 3x3 | 9 | 1000x1000 | 1.9x downscale | Marginal |
 | 4x4 | 16 | 750x750 | 1.4x downscale | Good (plant-level) |
 | 5x5 | 25 | 600x600 | 1.2x downscale | Better (close-up) |
-| 6x6 | 36 | 500x500 | ~1:1 | Best match (but slight upscale for ~3000px images) |
+| 6x6 | 36 | 500x500 | ~1:1 | Best match (slight upscale for ~3000px images) |
+| 7x7 | 49 | ~430x430 | 1.2x upscale | Good match but upscaling needed |
 
 ### Fixed Parameters (all runs)
 
@@ -44,107 +47,177 @@ JPEG:              quality=85, subsampling=4:2:2, Lanczos
 
 ## Phase 0: Embedding Extraction
 
-Extracted JPEG85 CLS embeddings for scales 1x1, 2x2, and 5x5 using `extract_multiscale_embeddings.py`. Existing 4x4 JPEG85 embeddings reused from Exp-4.
+Extracted JPEG85 CLS embeddings for each scale using `extract_multiscale_embeddings.py`. Existing 4x4 JPEG85 embeddings reused from Exp-4.
 
 | Scale | Tiles/image | Total inferences | GPU time |
 |-------|-------------|------------------|----------|
 | 1x1 | 1 | 2,105 | ~5 min |
 | 2x2 | 4 | 8,420 | ~20 min |
+| 3x3 | 9 | 18,945 | ~30 min |
+| 4x4 | 16 | 33,680 | existing |
 | 5x5 | 25 | 52,625 | ~2 hrs |
-| 6x6 | 36 | 75,780 | ~3 hrs (pending) |
+| 6x6 | 36 | 75,780 | ~3 hrs |
+| 7x7 | 49 | 103,145 | ~4 hrs |
 
 ## Phase 1: Scheme Comparison
 
-### Schemes Tested
+### All Schemes Tested
 
-| Scheme | Composition | Total Tiles | Rationale |
-|--------|-------------|-------------|-----------|
-| A | 4x4 (baseline) | 16 | Single-scale reference |
-| B | 4x4 + 2x2 + 1x1 | 21 | Add coarse context |
-| C | 4x4 + 5x5 + 2x2 + 1x1 | 46 | All scales |
-| D | 4x4 + 5x5 | 41 | Fine scale only (no coarse noise) |
-| G | 5x5 only | 25 | Isolate fine scale contribution |
+| Scheme | Composition | Total Tiles | Best Thr | Best F1 | vs baseline (0.357) |
+|--------|-------------|-------------|----------|---------|---------------------|
+| A | 4x4 (baseline) | 16 | 0.04 | 0.35698 | — |
+| B | 4x4 + 2x2 + 1x1 | 21 | 0.04 | 0.35460 | -0.00238 |
+| G | 5x5 only | 25 | 0.075 | 0.35447 | -0.00251 |
+| D | 4x4 + 5x5 | 41 | 0.075 | 0.37894 | +0.02196 |
+| C | 4x4 + 5x5 + 2x2 + 1x1 | 46 | 0.08 | 0.37596 | +0.01898 |
+| F | 4x4 + 6x6 | 52 | 0.075 | 0.37507 | +0.01809 |
+| **E** | **4x4 + 5x5 + 6x6** | **77** | **0.075** | **0.38466** | **+0.02768** |
+| J | 4x4 + 5x5 + 6x6 + 3x3 | 86 | 0.075 | 0.38227 | +0.02529 |
+| K | 4x4 + 5x5 + 6x6 + 7x7 | 126 | 0.08 | 0.38542 | +0.02844 |
 
-### Results: Scheme B (4x4 + 2x2 + 1x1, 21 tiles)
+### Detailed Results by Scheme
 
-Coarse scales only — does adding whole-image and quadrant-level context help?
+#### Scheme B: 4x4 + 2x2 + 1x1 (21 tiles) — Coarse scales only
 
-| Threshold | F1 | Delta vs baseline (0.357) |
-|-----------|------|---------------------------|
-| 0.04 | 0.35460 | -0.00238 |
-| 0.06 | 0.34805 | -0.00893 |
-| 0.08 | 0.34874 | -0.00824 |
-| 0.10 | 0.33932 | -0.01766 |
+| Threshold | F1 |
+|-----------|------|
+| 0.04 | 0.35460 |
+| 0.06 | 0.34805 |
+| 0.08 | 0.34874 |
+| 0.10 | 0.33932 |
 
 **Verdict: Coarse scales HURT at every threshold.** The 1x1 and 2x2 tiles are too zoomed out to identify individual plants and produce confident false positives that max_prob picks up.
 
-### Results: Scheme C (4x4 + 5x5 + 2x2 + 1x1, 46 tiles)
+#### Scheme G: 5x5 only (25 tiles) — Fine scale isolation
 
-All scales combined — does the 5x5 signal overcome coarse noise?
+| Threshold | F1 |
+|-----------|------|
+| 0.04 | 0.35216 |
+| 0.06 | 0.34604 |
+| 0.075 | 0.35447 |
+| 0.08 | 0.35177 |
 
-| Threshold | F1 | Delta vs baseline |
-|-----------|------|-------------------|
-| 0.04 | 0.34652 | -0.01046 |
-| 0.06 | 0.36462 | +0.00764 |
-| **0.08** | **0.37596** | **+0.01898** |
-| 0.10 | 0.37300 | +0.01602 |
-| 0.15 | 0.32701 | -0.02997 |
-| 0.20 | 0.30641 | -0.05057 |
+**Verdict: 5x5 alone is WORSE than the 4x4 baseline.** The two scales are genuinely complementary — 4x4 captures medium-sized plants better while 5x5 captures fine detail. Neither is sufficient alone.
 
-**Verdict: YES.** The 5x5 fine scale provides enough true positives to overcome coarse scale noise. But the coarse scales are still dragging the score down (see Scheme D below).
+#### Scheme C: 4x4 + 5x5 + 2x2 + 1x1 (46 tiles) — All scales
 
-### Results: Scheme D (4x4 + 5x5, 41 tiles)
+| Threshold | F1 |
+|-----------|------|
+| 0.04 | 0.34652 |
+| 0.06 | 0.36462 |
+| **0.08** | **0.37596** |
+| 0.10 | 0.37300 |
+| 0.15 | 0.32701 |
+| 0.20 | 0.30641 |
 
-Fine scale only — does dropping coarse scales improve further?
+**Verdict:** The 5x5 fine scale provides enough true positives to overcome coarse scale noise, but the coarse scales still drag the score down vs Scheme D.
 
-| Threshold | F1 | Delta vs baseline |
-|-----------|------|-------------------|
-| 0.04 | 0.34795 | -0.00903 |
-| 0.06 | 0.36783 | +0.01085 |
-| **0.075** | **0.37894** | **+0.02196** |
-| 0.08 | 0.37617 | +0.01919 |
-| 0.085 | 0.37674 | +0.01976 |
-| 0.09 | 0.37383 | +0.01685 |
-| 0.10 | 0.37103 | +0.01405 |
+#### Scheme D: 4x4 + 5x5 (41 tiles) — Fine scales only
 
-**Verdict: Best scheme so far.** Dropping the noisy 1x1 and 2x2 improves over Scheme C at the optimal threshold (+0.00298 at thr=0.075 vs C's best of 0.37596 at thr=0.08). The fine threshold sweep confirms peak at **threshold=0.075**.
+| Threshold | F1 |
+|-----------|------|
+| 0.04 | 0.34795 |
+| 0.06 | 0.36783 |
+| **0.075** | **0.37894** |
+| 0.08 | 0.37617 |
+| 0.085 | 0.37674 |
+| 0.09 | 0.37383 |
+| 0.10 | 0.37103 |
 
-### Results: Scheme G (5x5 only, 25 tiles)
+**Verdict:** Dropping the noisy 1x1 and 2x2 improves over Scheme C. Fine threshold sweep confirms peak at threshold=0.075.
 
-Is 5x5 alone sufficient, or is 4x4 needed?
+#### Scheme F: 4x4 + 6x6 (52 tiles) — Skip 5x5
 
-| Threshold | F1 | Delta vs baseline |
-|-----------|------|-------------------|
-| 0.04 | 0.35216 | -0.00482 |
-| 0.06 | 0.34604 | -0.01094 |
-| 0.075 | 0.35447 | -0.00251 |
-| 0.08 | 0.35177 | -0.00521 |
+| Threshold | F1 |
+|-----------|------|
+| 0.04 | 0.34710 |
+| 0.06 | 0.37172 |
+| **0.075** | **0.37507** |
+| 0.08 | 0.36783 |
+| 0.10 | 0.36765 |
 
-**Verdict: 5x5 alone is WORSE than the 4x4 baseline.** The two scales are genuinely complementary — 4x4 captures medium-sized plants better while 5x5 captures fine detail. Neither is sufficient alone. `max_prob` picks the best from each.
+**Verdict:** Worse than 4x4+5x5 (Scheme D). The gap between 4x4 (750px) and 6x6 (500px) is too large — 5x5 (600px) fills a critical middle ground.
+
+#### Scheme E: 4x4 + 5x5 + 6x6 (77 tiles) — Three fine scales
+
+| Threshold | F1 |
+|-----------|------|
+| 0.04 | 0.33970 |
+| 0.06 | 0.37082 |
+| **0.075** | **0.38466** |
+| 0.08 | 0.37965 |
+| 0.10 | 0.38358 |
+| 0.15 | 0.35255 |
+
+**Verdict: Best practical scheme.** Adding 6x6 on top of 4x4+5x5 gives +0.006. All three scales are complementary. The 6x6 tiles best match the single-species training distribution.
+
+#### Scheme J: 4x4 + 5x5 + 6x6 + 3x3 (86 tiles) — Add coarser scale
+
+| Threshold | F1 |
+|-----------|------|
+| 0.04 | 0.33758 |
+| 0.06 | 0.37181 |
+| **0.075** | **0.38227** |
+| 0.08 | 0.37731 |
+| 0.10 | 0.38110 |
+| 0.15 | 0.35245 |
+
+**Verdict:** Adding 3x3 hurts (-0.002 vs E). Consistent with all coarse scale findings.
+
+#### Scheme K: 4x4 + 5x5 + 6x6 + 7x7 (126 tiles) — Add finer scale
+
+| Threshold | F1 |
+|-----------|------|
+| 0.04 | 0.33242 |
+| 0.06 | 0.37325 |
+| 0.075 | 0.38453 |
+| **0.08** | **0.38542** |
+| 0.10 | 0.38529 |
+| 0.15 | 0.36284 |
+
+**Verdict:** Marginal gain (+0.0008 vs E) for 49 extra tiles. Diminishing returns. The flat curve across 0.075-0.10 suggests robust but redundant signal from 7x7.
 
 ## Key Insights
 
-### 1. Scale Complementarity
+### 1. The Sweet Spot: Scales 4–6
 
-The combination of 4x4 + 5x5 works because they capture different plant sizes:
-- **4x4 tiles** (750x750px → 518x518): Good for medium-sized plants, some scene context
-- **5x5 tiles** (600x600px → 518x518): Better for small/cryptic species at near-native resolution
+Only scales that produce tiles in the 500–750px range (before resize to 518) provide complementary value. This range captures individual plants at a resolution close to the single-species training images.
 
-With `max_prob`, each species is detected at whichever scale sees it most clearly. This is genuinely additive information, not redundancy.
+| Direction | Scales tested | Effect |
+|-----------|---------------|--------|
+| Coarser than 4x4 | 1x1, 2x2, 3x3 | Always hurts (false positives) |
+| **4x4 to 6x6** | **4, 5, 6** | **Each adds unique signal** |
+| Finer than 6x6 | 7x7 | Negligible gain (+0.0008) |
 
-### 2. Coarse Scales Are Harmful
+### 2. Scale Complementarity
 
-Scales 1x1 and 2x2 produce tiles covering 3000x3000 and 1500x1500 pixels respectively, downscaled to 518x518. At this compression ratio, individual plants are too small to identify. The model produces confident but incorrect species predictions that max_prob propagates to the image level.
+No single scale is optimal alone. The combination works because `max_prob` selects the best detection per species across all scales:
+- **4x4** (750px): medium plants, some scene context
+- **5x5** (600px): smaller species, near-native resolution
+- **6x6** (500px): finest useful detail, closest to training distribution
 
-### 3. Threshold Shifts with Tile Count
+Evidence: removing any one scale from E degrades performance.
+
+| Removed | Remaining | Best F1 | Loss vs E |
+|---------|-----------|---------|-----------|
+| — | 4x4+5x5+6x6 (E) | 0.38466 | — |
+| 6x6 | 4x4+5x5 (D) | 0.37894 | -0.00572 |
+| 5x5 | 4x4+6x6 (F) | 0.37507 | -0.00959 |
+
+### 3. Coarse Scales Produce False Positives
+
+At scales 1x1–3x3, tiles cover large areas (1000–3000px) compressed to 518px. The model can't distinguish individual plants and produces high-confidence predictions for species that aren't actually present. With `max_prob` aggregation, these false positives propagate to the image level.
+
+### 4. Threshold Shifts with Tile Count
 
 | Scheme | Tiles | Optimal threshold |
 |--------|-------|-------------------|
 | A (4x4) | 16 | 0.04 |
 | D (4x4+5x5) | 41 | 0.075 |
-| C (4x4+5x5+2x2+1) | 46 | 0.08 |
+| E (4x4+5x5+6x6) | 77 | 0.075 |
+| K (4x4+5x5+6x6+7x7) | 126 | 0.08 |
 
-More tiles means more chances for any tile to produce a high `max_prob` for a given species. The threshold must rise to maintain precision. This relationship is critical — using the wrong threshold can make a better scheme appear worse (e.g., Scheme D at thr=0.04 scores 0.348, worse than baseline).
+More tiles means more chances for any tile to produce a high `max_prob` for a given species. The threshold must rise to maintain precision. Using the wrong threshold can make a better scheme appear worse (e.g., Scheme E at thr=0.04 scores 0.340, worse than single-scale baseline).
 
 ## Evolution of Best Configuration
 
@@ -155,21 +228,16 @@ More tiles means more chances for any tile to produce a high `max_prob` for a gi
 | + temporal fusion | alpha=0.6 | 0.33946 | +0.01996 |
 | + JPEG85 | quality=85, 4:2:2 | 0.35517 | +0.01571 |
 | + threshold tuning | thr=0.04 | 0.35698 | +0.00181 |
-| **+ multi-scale (Exp-7)** | **4x4+5x5, thr=0.075** | **0.37894** | **+0.02196** |
+| + multi-scale 4x4+5x5 | thr=0.075 | 0.37894 | +0.02196 |
+| **+ add 6x6 scale** | **4x4+5x5+6x6, thr=0.075** | **0.38466** | **+0.00572** |
 
-**Total improvement: +0.09801** (+34.9% relative over Exp-3 baseline)
-
-## Pending: Scheme E (4x4 + 5x5 + 6x6)
-
-6x6 extraction is in progress. The hypothesis: 6x6 tiles (500x500px, near 1:1 with native resolution) may capture the finest detail and better match the single-species training images. Testing as Scheme E (4x4+5x5+6x6, 77 tiles).
-
-Note: for ~3000x3000 source images, 6x6 requires slight upscaling (3000→3108, +3.6%). The winner's paper confirmed 6x6 helped in their pipeline but scales beyond 6 hurt.
+**Total improvement: +0.10373** (+36.9% relative over Exp-3 baseline)
 
 ## Current Best Configuration
 
 ```
 Preprocessing:     JPEG compression (quality=85, subsampling=4:2:2, Lanczos)
-Tiling:            Multi-scale: 4x4 + 5x5 (41 tiles/image)
+Tiling:            Multi-scale: 4x4 + 5x5 + 6x6 (77 tiles/image)
 View Strategy:     1-view (orig_only, no TTA)
 Aggregation:       max_prob
 Temperature:       1.5
@@ -181,8 +249,15 @@ Geo Mask:          sw_europe_mask_bool.npy
 Aug Filter:        True
 Image TopK:        64
 
-F1 Score:          0.37894 (public leaderboard)
-Improvement:       +0.02196 over Exp-4 best (0.35698)
-                   +0.09801 over Exp-3 baseline (0.28093)
-Relative Gain:     +34.9% over Exp-3 baseline
+F1 Score:          0.38466 (public leaderboard)
+Improvement:       +0.02768 over Exp-4 best (0.35698)
+                   +0.10373 over Exp-3 baseline (0.28093)
+Relative Gain:     +36.9% over Exp-3 baseline
 ```
+
+## Next Steps
+
+- Fine threshold sweep on Scheme E around 0.070–0.100
+- Re-tune temporal fusion alpha (0.6 was optimized for single-scale 4x4)
+- Re-tune temperature T (1.5 was optimized for single-scale)
+- Test tile_filter_k reintroduction (per-scale top-N filtering)
