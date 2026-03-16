@@ -361,7 +361,7 @@ def run_sweep(
         print(f"  -> {len(image_probs)} images in {time.time() - t0:.1f}s")
 
         # Save pre-fusion parquet
-        tag = f"scheme_{scheme_id}"
+        tag = f"scheme_{scheme_id}_T{temperature:.2f}"
         prefusion_path = os.path.join(out_dir, f"{tag}_prefusion.parquet")
         save_aggregated(image_probs, prefusion_path)
 
@@ -391,7 +391,7 @@ def run_sweep(
 
         # Generate CSVs at each threshold
         for thr in thresholds:
-            csv_name = f"{tag}_thr{thr:.3f}_top{topk}.csv"
+            csv_name = f"{tag}_a{alpha}_thr{thr:.3f}_top{topk}.csv"
             csv_path = os.path.join(out_dir, csv_name)
 
             n_rows = generate_submission_csv(

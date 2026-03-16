@@ -15,7 +15,9 @@
 # Current best: alpha=0.6, T=1.5, thr=0.075, F1=0.38466
 #
 # Step 1: Sweep alpha (0.4, 0.5, 0.6, 0.7, 0.8) with T=1.5 fixed
-# Step 2: Sweep temperature (1.0, 1.25, 1.5, 1.75, 2.0) with best alpha fixed
+# Step 2: Sweep temperature (1.0, 1.25, 1.5, 1.75, 2.0) with alpha=0.6 fixed
+#
+# CSV naming: scheme_E_T{temp}_a{alpha}_thr0.075_top10.csv
 
 set -euo pipefail
 
@@ -41,19 +43,17 @@ MODEL_PATH="${PLANTCLEF_ROOT}/pretrained_models/base_vit_model/vit_base_patch14_
 SPECIES_MAP="${PLANTCLEF_ROOT}/data/raw/class_id_to_species_mapping/class_to_species_id.json"
 GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
 
-BASE_OUT="${PLANTCLEF_ROOT}/aerten3/submissions/exp7_multiscale/phase4"
+OUT_DIR="${PLANTCLEF_ROOT}/aerten3/submissions/exp7_multiscale/phase4"
+
+echo "=== Exp-7 Phase 4: Alpha + Temperature Sweep ==="
+echo "Output: ${OUT_DIR}"
 
 # ── Step 1: Alpha sweep (T=1.5 fixed) ──
 echo ""
-echo "=========================================="
-echo "Step 1: Alpha sweep (T=1.5, thr=0.075)"
-echo "=========================================="
+echo "=== Step 1: Alpha sweep (T=1.5, thr=0.075) ==="
 
 for ALPHA in 0.4 0.5 0.6 0.7 0.8; do
-  OUT_DIR="${BASE_OUT}/alpha_${ALPHA}"
-  echo ""
   echo "--- Alpha=${ALPHA} ---"
-
   python "${SRC_ROOT}/multiscale_aggregate.py" \
     --scale4-dir "${SCALE4_DIR}" \
     --scale5-dir "${SCALE5_DIR}" \
@@ -71,17 +71,12 @@ for ALPHA in 0.4 0.5 0.6 0.7 0.8; do
     --thresholds "0.075"
 done
 
-# ── Step 2: Temperature sweep (alpha=0.6 fixed, update if Step 1 finds better) ──
+# ── Step 2: Temperature sweep (alpha=0.6 fixed) ──
 echo ""
-echo "=========================================="
-echo "Step 2: Temperature sweep (alpha=0.6, thr=0.075)"
-echo "=========================================="
+echo "=== Step 2: Temperature sweep (alpha=0.6, thr=0.075) ==="
 
 for TEMP in 1.0 1.25 1.5 1.75 2.0; do
-  OUT_DIR="${BASE_OUT}/temp_${TEMP}"
-  echo ""
   echo "--- T=${TEMP} ---"
-
   python "${SRC_ROOT}/multiscale_aggregate.py" \
     --scale4-dir "${SCALE4_DIR}" \
     --scale5-dir "${SCALE5_DIR}" \
@@ -100,11 +95,6 @@ for TEMP in 1.0 1.25 1.5 1.75 2.0; do
 done
 
 echo ""
-echo "=========================================="
-echo "Phase 4 sweep complete"
-echo "=========================================="
-echo "Alpha CSVs:  ${BASE_OUT}/alpha_*/scheme_E_thr0.075_top10.csv"
-echo "Temp CSVs:   ${BASE_OUT}/temp_*/scheme_E_thr0.075_top10.csv"
-echo ""
-echo "Submit to Kaggle and compare against baseline:"
-echo "  Scheme E, alpha=0.6, T=1.5, thr=0.075 = F1 0.38466"
+echo "=== Phase 4 sweep complete ==="
+echo "All CSVs in: ${OUT_DIR}"
+echo "Baseline: scheme_E_T1.50_a0.6_thr0.075_top10.csv = F1 0.38466"
