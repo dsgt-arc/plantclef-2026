@@ -15,7 +15,11 @@
       "Bash(grep -r \"sklearn.*neighbors\\\\|from sklearn\\\\|import KNeighbors\\\\|nearest\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src --include=*.py)",
       "Bash(grep -r \"cosine.*similarity\\\\|similarity.*metric\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src --include=*.py)",
       "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -type f -name *.py -exec grep -l \"retrieve\\\\|knn\\\\|faiss\\\\|embedding.*pool\\\\|feature.*bank\" {})",
-      "Bash(2)"
+      "Bash(2)",
+      "Bash(grep -r \"geo.*mask\\\\|species.*mask\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src --include=*.md --include=*.json)",
+      "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -name *mask_stats* -o -name *species_masking*)",
+      "Bash(grep -r \"PlantCLEF.*train\\\\|metadata_PlantCLEF\\\\|PlantCLEF2024\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 --include=*.py --include=*.md)",
+      "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -type f -name *prepare*metadata* -o -name *metadata*csv*)"
     ]
   }
 }

@@ -1,7 +1,7 @@
 # Next Steps: Literature Review & Improvement Roadmap
 
 **Date**: 2026-03-15
-**Current Best F1**: 0.38466 (Exp-7, 4x4+5x5+6x6, thr=0.075)
+**Current Best F1**: 0.40100 (Exp-8, 4x4+5x5+6x6, max_prob, T=1.5, alpha=0.05, thr=0.100)
 **Baseline**: 0.28093 (Exp-3) | **Total improvement so far**: +0.10373 (+36.9%)
 
 ---
@@ -118,20 +118,12 @@ Three techniques appear independently in multiple winning solutions:
 
 ### Phase B2: New Techniques from Extended Research (no training required)
 
-#### B4. Quantile Aggregation (replace max_prob)
-- **Source**: General signal processing; mentioned by 1st place as alternative
-- **What**: Replace `max(probs_across_tiles)` with `np.quantile(probs_across_tiles, q)`. Max_prob is vulnerable to a single spurious high-confidence tile producing a false positive. Quantile (e.g., q=0.9) keeps most of the benefit while being robust to outlier tiles.
-- **Implementation**: One-line change in aggregation code. Sweep q from 0.75-0.95 in 0.05 steps.
-- **GPU cost**: 0 (CPU-only, uses existing predictions)
-- **Expected**: +0.2-1.0%
-- **Why try first**: Literally minutes to test. Zero risk.
+#### ~~B4. Quantile Aggregation (replace max_prob)~~ — TESTED, NEGATIVE
+- **Result**: All quantile values significantly underperform max_prob. Best quantile (q=0.95, thr=0.04) = 0.35382 vs max_prob best = 0.39768. With 77 tiles, most species appear in only 1-2 tiles, so taking any percentile below max kills signal.
+- **Side finding**: max_prob at thr=0.100 scored **0.39768**, a new best over the previous 0.39573 (thr=0.070).
 
-#### B5. Aggregation Ensemble (combine multiple strategies)
-- **Source**: General ensemble methodology
-- **What**: Run max_prob, quantile(q=0.9), and noisy_or in parallel on the same tile predictions. Take a weighted combination of their image-level outputs. Each method has different error profiles — max_prob is aggressive (high recall), mean is conservative, quantile is balanced.
-- **Implementation**: Compute all three aggregations, then `final = w1*max_prob + w2*quantile + w3*noisy_or`. Sweep weights.
-- **GPU cost**: 0 (CPU-only)
-- **Expected**: +0.3-0.7%
+#### ~~B5. Aggregation Ensemble (combine multiple strategies)~~ — DEPRIORITIZED
+- **Why deprioritized**: B4 results show max_prob dominates all alternatives by a large margin (~0.04-0.12 F1). Blending in any weaker aggregation method would only dilute max_prob's signal. Not worth pursuing.
 
 ### Phase B3: New Techniques (requires re-extraction or retraining linear head)
 
@@ -213,9 +205,9 @@ Three techniques appear independently in multiple winning solutions:
 
 | Recommendation | Impact | Effort | Risk | Priority |
 |---|---|---|---|---|
-| **B4. Quantile aggregation** | Med-High | **Minutes** | None | **Test immediately** |
+| ~~B4. Quantile aggregation~~ | ~~Med-High~~ | ~~Minutes~~ | -- | **Tested: NEGATIVE** |
 | A1. Border margin cropping | Medium | Low | Low | **Do first** |
-| **B5. Aggregation ensemble** | Medium | Low | Low | **Do first** |
+| ~~B5. Aggregation ensemble~~ | ~~Medium~~ | ~~Low~~ | -- | **Deprioritized** |
 | B1. Multi-head taxonomic fusion | High | Medium | Low | **Do second** |
 | B2. SAM artifact masking | High | Medium | Medium | **Do second** |
 | **B6. kNN retrieval ensemble** | Med-High | Medium | Low | **Do second** |

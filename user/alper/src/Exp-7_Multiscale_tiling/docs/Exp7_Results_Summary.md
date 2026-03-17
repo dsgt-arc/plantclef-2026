@@ -256,9 +256,50 @@ With 77 tiles, `max_prob` produces more true positives but also more false posit
 |---------------|-------|-------|-------------------|
 | Single-scale (Exp-4) | 16 | 0.6 | 0.04 |
 | Multi-scale, alpha=0.6 | 77 | 0.6 | 0.075 |
-| Multi-scale, alpha=0.2 | 77 | 0.2 | 0.070 |
+| Multi-scale, alpha=0.2 | 77 | 0.2 | 0.100 |
 
-More tiles push the threshold up (more chances for high max_prob). Lower alpha (stronger prior filtering) pushes it slightly back down (prior already removes false positives).
+More tiles push the threshold up (more chances for high max_prob). Lower alpha (stronger prior filtering) also pushes threshold up — the prior already removes false positives, so a higher threshold can safely cut remaining noise.
+
+**Exp-8 fine threshold sweep (alpha=0.2, T=1.5, Scheme E):**
+
+| Threshold | F1 |
+|-----------|------|
+| 0.040 | 0.33838 |
+| 0.060 | 0.37369 |
+| 0.070 | 0.39573 |
+| 0.075 | 0.39420 |
+| 0.080 | 0.39305 |
+| 0.090 | 0.39224 |
+| 0.095 | 0.39457 |
+| **0.100** | **0.39768** |
+| 0.105 | 0.39590 |
+| 0.110 | 0.38621 |
+| 0.120 | 0.38398 |
+
+Clear peak at thr=0.100. Also tested quantile aggregation (q=0.75-0.95) in Exp-8 — all significantly underperformed max_prob (best quantile: q=0.95 at 0.35382 vs max_prob at 0.39768).
+
+**Exp-8 alpha re-sweep at thr=0.100:**
+
+Recall: `P_fused = alpha * P_model + (1-alpha) * P_location_prior`
+
+| Alpha | Blend | F1 | Notes |
+|-------|-------|------|-------|
+| 0.00 | 100% prior | 0.40031 | Model predictions ignored |
+| **0.05** | **5% model + 95% prior** | **0.40100** | **New best** |
+| 0.10 | 10% model + 90% prior | 0.39997 | |
+| 0.15 | 15% model + 85% prior | 0.39929 | |
+| 0.20 | 20% model + 80% prior | 0.39768 | Previous best alpha |
+| 0.25 | 25% model + 75% prior | 0.39489 | |
+| 0.30 | 30% model + 70% prior | 0.39268 | |
+| 0.35 | 35% model + 65% prior | 0.39249 | |
+| 0.40 | 40% model + 60% prior | 0.39004 | |
+| 0.45 | 45% model + 55% prior | 0.38732 | |
+| 0.50 | 50% model + 50% prior | 0.38331 | |
+| 0.60 | 60% model + 40% prior | 0.38358 | Previous Exp-7 best alpha |
+
+At thr=0.100, the location prior (average of all predictions at the same physical location across years) is the dominant signal. The model's per-image predictions add only a small refinement (5%). This is because the prior aggregates evidence from multiple visits, making it more reliable than any single image's predictions at a high threshold.
+
+**Important**: Alpha and threshold interact — optimal alpha shifts as threshold changes. Re-sweep alpha whenever other pipeline components change.
 
 ## Evolution of Best Configuration
 
@@ -272,9 +313,11 @@ More tiles push the threshold up (more chances for high max_prob). Lower alpha (
 | + multi-scale 4x4+5x5 | thr=0.075 | 0.37894 | +0.02196 |
 | + add 6x6 scale | 4x4+5x5+6x6, thr=0.075 | 0.38466 | +0.00572 |
 | + alpha re-tuning | alpha=0.2 | 0.39420 | +0.00954 |
-| **+ threshold re-tuning** | **thr=0.070** | **0.39573** | **+0.00153** |
+| + threshold re-tuning | thr=0.070 | 0.39573 | +0.00153 |
+| + Exp-8 fine thr sweep | thr=0.100 | 0.39768 | +0.00195 |
+| **+ Exp-8 alpha re-sweep** | **alpha=0.05** | **0.40100** | **+0.00332** |
 
-**Total improvement: +0.11480** (+40.9% relative over Exp-3 baseline)
+**Total improvement: +0.12007** (+42.7% relative over Exp-3 baseline)
 
 ## Final Configuration
 
@@ -285,15 +328,15 @@ View Strategy:     1-view (orig_only, no TTA)
 Aggregation:       max_prob
 Temperature:       1.5
 tile_filter_k:     ALL (disabled)
-Temporal Fusion:   prior_blend, alpha=0.2
-Threshold:         0.070
+Temporal Fusion:   prior_blend, alpha=0.05
+Threshold:         0.100
 TopK:              10
 Geo Mask:          sw_europe_mask_bool.npy
 Aug Filter:        True
 Image TopK:        64
 
-F1 Score:          0.39573 (public leaderboard)
-Improvement:       +0.03875 over Exp-4 best (0.35698)
-                   +0.11480 over Exp-3 baseline (0.28093)
-Relative Gain:     +40.9% over Exp-3 baseline
+F1 Score:          0.40100 (public leaderboard)
+Improvement:       +0.04402 over Exp-4 best (0.35698)
+                   +0.12007 over Exp-3 baseline (0.28093)
+Relative Gain:     +42.7% over Exp-3 baseline
 ```
