@@ -75,8 +75,8 @@ python "${SRC_ROOT}/multiscale_aggregate_knn.py" \
   --knn-k "${KNN_K}" \
   --knn-tau "${KNN_TAU}" \
   --betas "0.80" \
-  --alphas "0.00,0.05,0.10,0.15,0.20,0.30,0.50" \
-  --thresholds "0.100" \
+  --alphas "0.05,0.10,0.15,0.20,0.30,0.40,0.50,0.60" \
+  --thresholds "0.040,0.060,0.070,0.080,0.090,0.100,0.110" \
   --scales "4,5,6"
 
 echo ""

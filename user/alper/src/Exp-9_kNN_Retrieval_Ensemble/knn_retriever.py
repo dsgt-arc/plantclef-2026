@@ -27,15 +27,25 @@ class KNNRetriever:
         self.tau = tau
         self.num_classes = num_classes
 
-    def query_batch(self, embeddings: np.ndarray) -> np.ndarray:
+    def query_batch(
+        self,
+        embeddings: np.ndarray,
+        k: int | None = None,
+        tau: float | None = None,
+    ) -> np.ndarray:
         """Query FAISS index and return kNN vote probabilities.
 
         Args:
             embeddings: [N, 768] float32 (raw, will be L2-normalized internally)
+            k: override self.k for this query (optional)
+            tau: override self.tau for this query (optional)
 
         Returns:
             p_knn: [N, num_classes] float32 probability vectors
         """
+        k = k if k is not None else self.k
+        tau = tau if tau is not None else self.tau
+
         N = embeddings.shape[0]
         if N == 0:
             return np.zeros((0, self.num_classes), dtype=np.float32)
@@ -46,13 +56,13 @@ class KNNRetriever:
         emb /= norms + 1e-8
 
         # FAISS search — inner product on L2-normed = cosine similarity
-        similarities, indices = self.index.search(emb, self.k)
+        similarities, indices = self.index.search(emb, k)
         # similarities: [N, k], indices: [N, k]
 
         # Distance-weighted voting via softmax over similarities
         # Subtract max for numerical stability
         sim_shifted = similarities - np.max(similarities, axis=1, keepdims=True)
-        weights = np.exp(sim_shifted / self.tau)  # [N, k]
+        weights = np.exp(sim_shifted / tau)  # [N, k]
         weights /= weights.sum(axis=1, keepdims=True)  # normalize per query
 
         # Scatter-add weighted votes into class probabilities

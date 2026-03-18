@@ -102,6 +102,8 @@ def aggregate_one_image_knn(
     knn_retriever: KNNRetriever,
     beta: float,
     geo_mask: Optional[np.ndarray] = None,
+    knn_k: Optional[int] = None,
+    knn_tau: Optional[float] = None,
 ) -> Optional[np.ndarray]:
     """Aggregate tiles with kNN blend for one image.
 
@@ -111,6 +113,8 @@ def aggregate_one_image_knn(
 
     Args:
         beta: weight for softmax (1.0 = no kNN, 0.0 = pure kNN)
+        knn_k: override retriever's default k (optional)
+        knn_tau: override retriever's default tau (optional)
     """
     pdf = tiles_df
 
@@ -138,7 +142,7 @@ def aggregate_one_image_knn(
     if beta < 1.0:
         emb_bufs = pdf["embedding_orig_f16"].tolist()
         tile_embs = f16_bytes_list_to_f32_matrix(emb_bufs, 768)  # [T, 768]
-        p_knn = knn_retriever.query_batch(tile_embs)  # [T, C]
+        p_knn = knn_retriever.query_batch(tile_embs, k=knn_k, tau=knn_tau)  # [T, C]
 
         # 3. Blend at tile level
         p_blended = beta * p_softmax + (1.0 - beta) * p_knn  # [T, C]
@@ -166,14 +170,56 @@ def aggregate_one_image_knn(
     return p_image.astype(np.float16)
 
 
+def identify_single_visit_images(
+    tile_data: pd.DataFrame,
+    image_col: str = "image_name",
+) -> set:
+    """Identify images that are the only visit at their location.
+
+    Uses the quadrat_id convention: 'CBN-PdlC-E3-20130723' where the
+    location is everything before the trailing 8-digit date.
+
+    Returns:
+        Set of image_name strings that are single-visit.
+    """
+    image_names = tile_data[image_col].unique().tolist()
+
+    # Strip .jpg extension to get quadrat_ids
+    qids = [os.path.splitext(name)[0] for name in image_names]
+    qid_to_name = {os.path.splitext(name)[0]: name for name in image_names}
+
+    location_groups = group_by_location(qids)
+
+    single_visit = set()
+    for loc, loc_qids in location_groups.items():
+        if len(loc_qids) < 2:
+            for qid in loc_qids:
+                if qid in qid_to_name:
+                    single_visit.add(qid_to_name[qid])
+
+    return single_visit
+
+
 def aggregate_multiscale_knn(
     tile_data: pd.DataFrame,
     config: AggregationConfig,
     knn_retriever: KNNRetriever,
     beta: float,
     image_col: str = "image_name",
+    knn_k: Optional[int] = None,
+    knn_tau: Optional[float] = None,
+    beta_single: Optional[float] = None,
+    single_visit_images: Optional[set] = None,
 ) -> Dict[str, np.ndarray]:
-    """Aggregate all images with kNN-blended tile probabilities."""
+    """Aggregate all images with kNN-blended tile probabilities.
+
+    Args:
+        beta: default softmax weight for all images
+        knn_k: override retriever's k (optional)
+        knn_tau: override retriever's tau (optional)
+        beta_single: if set, use this beta for single-visit images
+        single_visit_images: set of image names that are single-visit
+    """
     geo_mask = None
     if config.geo_mask_path:
         geo_mask = np.load(config.geo_mask_path)
@@ -182,11 +228,19 @@ def aggregate_multiscale_knn(
 
     results = {}
     for name, group in tile_data.groupby(image_col):
+        name_str = str(name)
+        # Use differentiated beta if configured
+        img_beta = beta
+        if beta_single is not None and single_visit_images is not None:
+            if name_str in single_visit_images:
+                img_beta = beta_single
+
         probs = aggregate_one_image_knn(
-            group, config, knn_retriever, beta, geo_mask
+            group, config, knn_retriever, img_beta, geo_mask,
+            knn_k=knn_k, knn_tau=knn_tau,
         )
         if probs is not None:
-            results[str(name)] = probs
+            results[name_str] = probs
 
     return results
 
@@ -209,12 +263,21 @@ def run_knn_sweep(
     image_topk: int = 64,
     tile_filter_k: int = 0,
     scales: Optional[List[int]] = None,
+    knn_ks: Optional[List[int]] = None,
+    knn_taus: Optional[List[float]] = None,
+    beta_singles: Optional[List[float]] = None,
 ) -> None:
-    """Run kNN ensemble sweep over beta, alpha, threshold."""
+    """Run kNN ensemble sweep over beta, alpha, threshold, k, tau, beta_single.
+
+    Sweep modes (determined by which params are lists):
+      - Standard:    sweep betas × alphas × thresholds (fixed k, tau)
+      - k/tau sweep: sweep knn_ks × knn_taus (fixed beta, alpha, threshold)
+      - Diff beta:   sweep beta_singles (fixed beta_multi, k, tau, alpha, threshold)
+    """
     if alphas is None:
         alphas = [0.05]
     if betas is None:
-        betas = [0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0]
+        betas = [0.80]
     if thresholds is None:
         thresholds = [0.100]
     if scales is None:
@@ -250,6 +313,12 @@ def run_knn_sweep(
     total_tiles = len(combined)
     print(f"\nCombined: {total_tiles} tiles, {n_images} images")
 
+    # Identify single-visit images (needed for differentiated beta)
+    single_visit_images = identify_single_visit_images(combined)
+    n_single = len(single_visit_images)
+    n_multi = n_images - n_single
+    print(f"Single-visit: {n_single}, Multi-visit: {n_multi}")
+
     config = AggregationConfig(
         temperature=temperature,
         aug_filter=True,
@@ -261,91 +330,173 @@ def run_knn_sweep(
 
     results_summary = []
 
-    for beta in betas:
-        print(f"\n{'=' * 70}")
-        print(f"Beta={beta:.2f} ({'pure softmax' if beta == 1.0 else f'{beta:.0%} softmax + {1-beta:.0%} kNN'})")
-        print(f"{'=' * 70}")
+    # Determine sweep mode
+    sweep_ktau = knn_ks is not None and knn_taus is not None
+    sweep_diff_beta = beta_singles is not None
 
-        # Aggregate with kNN blend
-        t0 = time.time()
-        image_probs = aggregate_multiscale_knn(
-            combined, config, knn_retriever, beta
-        )
-        agg_time = time.time() - t0
-        print(f"  Aggregated {len(image_probs)} images in {agg_time:.1f}s")
+    if sweep_ktau:
+        # k/tau sweep: iterate (k, tau) pairs, fixed beta
+        beta = betas[0]
+        alpha = alphas[0]
+        thr = thresholds[0]
+        print(f"\n*** k/tau sweep mode: beta={beta}, alpha={alpha}, thr={thr}")
 
-        # Save pre-fusion parquet
-        tag = f"knn_beta{beta:.2f}_T{temperature:.2f}"
-        prefusion_path = os.path.join(out_dir, f"{tag}_prefusion.parquet")
-        save_aggregated(image_probs, prefusion_path)
+        for k_val in knn_ks:
+            for tau_val in knn_taus:
+                print(f"\n{'=' * 70}")
+                print(f"k={k_val}, tau={tau_val}, beta={beta:.2f}")
+                print(f"{'=' * 70}")
 
-        for alpha in alphas:
-            # Temporal fusion
+                t0 = time.time()
+                image_probs = aggregate_multiscale_knn(
+                    combined, config, knn_retriever, beta,
+                    knn_k=k_val, knn_tau=tau_val,
+                )
+                print(f"  Aggregated {len(image_probs)} images in {time.time() - t0:.1f}s")
+
+                tag = f"knn_k{k_val}_tau{tau_val:.3f}_beta{beta:.2f}_T{temperature:.2f}"
+                prefusion_path = os.path.join(out_dir, f"{tag}_prefusion.parquet")
+                save_aggregated(image_probs, prefusion_path)
+
+                # Temporal fusion + CSV
+                quadrat_probs = load_quadrat_probs(prefusion_path)
+                location_groups = group_by_location(list(quadrat_probs.keys()))
+                location_profiles = build_location_profiles(
+                    quadrat_probs, location_groups, NUM_CLASSES
+                )
+                fused_probs = fuse_all(
+                    quadrat_probs, location_groups, location_profiles,
+                    strategy="prior_blend", params={"alpha": alpha},
+                )
+                fused_f16 = {qid: p.astype(np.float16) for qid, p in fused_probs.items()}
+                fused_path = os.path.join(out_dir, f"{tag}_fused_a{alpha}.parquet")
+                save_aggregated(fused_f16, fused_path)
+
+                csv_name = f"{tag}_a{alpha}_thr{thr:.3f}_top{topk}.csv"
+                n_rows = generate_submission_csv(
+                    in_parquet=fused_path, out_csv=os.path.join(out_dir, csv_name),
+                    species_map=species_map, num_classes=NUM_CLASSES,
+                    class_mask=class_mask, topk=topk, threshold=thr,
+                    min_k=1, id_col="image_name",
+                )
+                results_summary.append({
+                    "k": k_val, "tau": tau_val, "beta": beta,
+                    "alpha": alpha, "threshold": thr,
+                    "images": n_rows, "csv": csv_name,
+                })
+
+    elif sweep_diff_beta:
+        # Differentiated beta sweep: different beta for single vs multi-visit
+        beta_multi = betas[0]
+        alpha = alphas[0]
+        thr = thresholds[0]
+        print(f"\n*** Differentiated beta sweep: beta_multi={beta_multi}, alpha={alpha}, thr={thr}")
+        print(f"    Sweeping beta_single: {beta_singles}")
+
+        for beta_s in beta_singles:
+            print(f"\n{'=' * 70}")
+            print(f"beta_multi={beta_multi:.2f}, beta_single={beta_s:.2f}")
+            print(f"{'=' * 70}")
+
             t0 = time.time()
+            image_probs = aggregate_multiscale_knn(
+                combined, config, knn_retriever, beta_multi,
+                beta_single=beta_s, single_visit_images=single_visit_images,
+            )
+            print(f"  Aggregated {len(image_probs)} images in {time.time() - t0:.1f}s")
+
+            tag = f"knn_bM{beta_multi:.2f}_bS{beta_s:.2f}_T{temperature:.2f}"
+            prefusion_path = os.path.join(out_dir, f"{tag}_prefusion.parquet")
+            save_aggregated(image_probs, prefusion_path)
+
+            # Temporal fusion + CSV
             quadrat_probs = load_quadrat_probs(prefusion_path)
             location_groups = group_by_location(list(quadrat_probs.keys()))
             location_profiles = build_location_profiles(
                 quadrat_probs, location_groups, NUM_CLASSES
             )
             fused_probs = fuse_all(
-                quadrat_probs,
-                location_groups,
-                location_profiles,
-                strategy="prior_blend",
-                params={"alpha": alpha},
+                quadrat_probs, location_groups, location_profiles,
+                strategy="prior_blend", params={"alpha": alpha},
             )
-            fusion_time = time.time() - t0
-
-            # Save fused parquet
-            fused_f16 = {
-                qid: p.astype(np.float16) for qid, p in fused_probs.items()
-            }
+            fused_f16 = {qid: p.astype(np.float16) for qid, p in fused_probs.items()}
             fused_path = os.path.join(out_dir, f"{tag}_fused_a{alpha}.parquet")
             save_aggregated(fused_f16, fused_path)
 
-            # Generate CSVs at each threshold
-            for thr in thresholds:
-                csv_name = f"{tag}_a{alpha}_thr{thr:.3f}_top{topk}.csv"
-                csv_path = os.path.join(out_dir, csv_name)
+            csv_name = f"{tag}_a{alpha}_thr{thr:.3f}_top{topk}.csv"
+            n_rows = generate_submission_csv(
+                in_parquet=fused_path, out_csv=os.path.join(out_dir, csv_name),
+                species_map=species_map, num_classes=NUM_CLASSES,
+                class_mask=class_mask, topk=topk, threshold=thr,
+                min_k=1, id_col="image_name",
+            )
+            results_summary.append({
+                "beta_multi": beta_multi, "beta_single": beta_s,
+                "alpha": alpha, "threshold": thr,
+                "images": n_rows, "csv": csv_name,
+            })
 
-                n_rows = generate_submission_csv(
-                    in_parquet=fused_path,
-                    out_csv=csv_path,
-                    species_map=species_map,
-                    num_classes=NUM_CLASSES,
-                    class_mask=class_mask,
-                    topk=topk,
-                    threshold=thr,
-                    min_k=1,
-                    id_col="image_name",
+    else:
+        # Standard sweep: betas × alphas × thresholds
+        for beta in betas:
+            print(f"\n{'=' * 70}")
+            print(f"Beta={beta:.2f} ({'pure softmax' if beta == 1.0 else f'{beta:.0%} softmax + {1-beta:.0%} kNN'})")
+            print(f"{'=' * 70}")
+
+            t0 = time.time()
+            image_probs = aggregate_multiscale_knn(
+                combined, config, knn_retriever, beta
+            )
+            agg_time = time.time() - t0
+            print(f"  Aggregated {len(image_probs)} images in {agg_time:.1f}s")
+
+            tag = f"knn_beta{beta:.2f}_T{temperature:.2f}"
+            prefusion_path = os.path.join(out_dir, f"{tag}_prefusion.parquet")
+            save_aggregated(image_probs, prefusion_path)
+
+            for alpha in alphas:
+                t0 = time.time()
+                quadrat_probs = load_quadrat_probs(prefusion_path)
+                location_groups = group_by_location(list(quadrat_probs.keys()))
+                location_profiles = build_location_profiles(
+                    quadrat_probs, location_groups, NUM_CLASSES
+                )
+                fused_probs = fuse_all(
+                    quadrat_probs, location_groups, location_profiles,
+                    strategy="prior_blend", params={"alpha": alpha},
                 )
 
-                results_summary.append({
-                    "beta": beta,
-                    "alpha": alpha,
-                    "threshold": thr,
-                    "images": n_rows,
-                    "csv": csv_name,
-                })
+                fused_f16 = {qid: p.astype(np.float16) for qid, p in fused_probs.items()}
+                fused_path = os.path.join(out_dir, f"{tag}_fused_a{alpha}.parquet")
+                save_aggregated(fused_f16, fused_path)
+
+                for thr in thresholds:
+                    csv_name = f"{tag}_a{alpha}_thr{thr:.3f}_top{topk}.csv"
+                    csv_path = os.path.join(out_dir, csv_name)
+
+                    n_rows = generate_submission_csv(
+                        in_parquet=fused_path, out_csv=csv_path,
+                        species_map=species_map, num_classes=NUM_CLASSES,
+                        class_mask=class_mask, topk=topk, threshold=thr,
+                        min_k=1, id_col="image_name",
+                    )
+
+                    results_summary.append({
+                        "beta": beta, "alpha": alpha, "threshold": thr,
+                        "images": n_rows, "csv": csv_name,
+                    })
 
     # Print summary
     print(f"\n{'=' * 100}")
     print("EXP-9 kNN RETRIEVAL ENSEMBLE SWEEP SUMMARY")
     print(f"{'=' * 100}")
-    print(f"kNN: k={knn_retriever.k}, tau={knn_retriever.tau}")
+    print(f"kNN defaults: k={knn_retriever.k}, tau={knn_retriever.tau}")
     print(f"Temperature: {temperature}  TopK: {topk}  "
           f"tile_filter_k: {'ALL' if tile_filter_k <= 0 else tile_filter_k}")
     print()
 
-    fmt = "{:>6} | {:>6} | {:>9} | {:>6} | {}"
-    print(fmt.format("Beta", "Alpha", "Threshold", "Images", "CSV"))
-    print(fmt.format("-" * 6, "-" * 6, "-" * 9, "-" * 6, "-" * 50))
     for r in results_summary:
-        print(fmt.format(
-            f"{r['beta']:.2f}", f"{r['alpha']:.2f}",
-            f"{r['threshold']:.3f}", r["images"], r["csv"],
-        ))
-    print(f"{'=' * 100}")
+        print(f"  {r['csv']}")
     print(f"\nTotal CSVs: {len(results_summary)}")
     print(f"Output: {out_dir}")
 
@@ -382,14 +533,25 @@ def main() -> None:
     ap.add_argument("--tile-filter-k", type=int, default=0)
 
     # Sweep params
-    ap.add_argument("--betas", default="0.5,0.6,0.7,0.8,0.9,0.95,1.0",
+    ap.add_argument("--betas", default="0.80",
                     help="Comma-separated beta values (softmax weight)")
-    ap.add_argument("--alphas", default="0.05",
+    ap.add_argument("--alphas", default="0.15",
                     help="Comma-separated alpha values (temporal fusion)")
     ap.add_argument("--thresholds", default="0.100",
                     help="Comma-separated thresholds")
     ap.add_argument("--scales", default="4,5,6",
                     help="Comma-separated scale values to use")
+
+    # k/tau sweep (triggers k/tau sweep mode)
+    ap.add_argument("--knn-ks", default=None,
+                    help="Comma-separated k values to sweep (e.g., '5,10,20,50')")
+    ap.add_argument("--knn-taus", default=None,
+                    help="Comma-separated tau values to sweep (e.g., '0.03,0.07,0.15')")
+
+    # Differentiated beta sweep (triggers diff-beta mode)
+    ap.add_argument("--beta-singles", default=None,
+                    help="Comma-separated beta values for single-visit images "
+                         "(e.g., '0.5,0.6,0.7'). beta from --betas is used for multi-visit.")
 
     args = ap.parse_args()
 
@@ -405,12 +567,31 @@ def main() -> None:
     alphas = [float(a) for a in args.alphas.split(",")]
     thresholds = [float(t) for t in args.thresholds.split(",")]
 
+    knn_ks = [int(k) for k in args.knn_ks.split(",")] if args.knn_ks else None
+    knn_taus = [float(t) for t in args.knn_taus.split(",")] if args.knn_taus else None
+    beta_singles = [float(b) for b in args.beta_singles.split(",")] if args.beta_singles else None
+
+    # Determine mode
+    if knn_ks and knn_taus:
+        mode = "k/tau sweep"
+    elif beta_singles:
+        mode = "differentiated beta sweep"
+    else:
+        mode = "standard sweep"
+
     print("Exp-9: kNN Retrieval Ensemble")
+    print(f"Mode: {mode}")
     print(f"Scales: {scales}")
     print(f"kNN k={args.knn_k}, tau={args.knn_tau}")
     print(f"Betas: {betas}")
     print(f"Alphas: {alphas}")
     print(f"Thresholds: {thresholds}")
+    if knn_ks:
+        print(f"k sweep: {knn_ks}")
+    if knn_taus:
+        print(f"tau sweep: {knn_taus}")
+    if beta_singles:
+        print(f"beta_single sweep: {beta_singles}")
     print()
 
     # Load kNN retriever
@@ -440,6 +621,9 @@ def main() -> None:
         image_topk=args.image_topk,
         tile_filter_k=args.tile_filter_k,
         scales=scales,
+        knn_ks=knn_ks,
+        knn_taus=knn_taus,
+        beta_singles=beta_singles,
     )
 
 
