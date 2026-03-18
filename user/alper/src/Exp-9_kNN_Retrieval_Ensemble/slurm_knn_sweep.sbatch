@@ -11,15 +11,17 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=aerten3@gatech.edu
 
-# Exp-9 Phase 2: kNN retrieval ensemble sweep.
+# Exp-9 Phase 2b: Fine beta sweep + alpha/threshold re-tune.
 #
-# Sweeps beta (softmax vs kNN weight) at fixed alpha=0.05, thr=0.100.
-# beta=1.0 is the control (should reproduce F1=0.40100).
+# Phase 1 results: beta=0.80 best (F1=0.41067), sweet spot 0.75-0.90.
+# This run: fine-sweep beta in [0.75-0.88], then re-sweep alpha+threshold.
 #
 # CPU-only job. FAISS index loaded into RAM (~2.5 GB).
-# Expected: ~3-4 hours for full sweep.
 
 set -euo pipefail
+
+# Ensure Python output appears in SLURM logs immediately
+export PYTHONUNBUFFERED=1
 
 PLANTCLEF_ROOT="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0"
 export PLANTCLEF_ROOT
@@ -72,12 +74,12 @@ python "${SRC_ROOT}/multiscale_aggregate_knn.py" \
   --tile-filter-k 0 \
   --knn-k "${KNN_K}" \
   --knn-tau "${KNN_TAU}" \
-  --betas "0.5,0.6,0.7,0.8,0.9,0.95,1.0" \
+  --betas "0.75,0.78,0.80,0.82,0.85,0.88" \
   --alphas "0.05" \
   --thresholds "0.100" \
   --scales "4,5,6"
 
 echo ""
-echo "=== Exp-9 sweep complete ==="
+echo "=== Exp-9 fine sweep complete ==="
 echo "All CSVs in: ${OUT_DIR}"
-echo "Control to match: beta=1.0 should give F1=0.40100"
+echo "Phase 1 best: beta=0.80, alpha=0.05, thr=0.100 → F1=0.41067"
