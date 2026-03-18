@@ -5,18 +5,16 @@
 #SBATCH --qos=embers
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=48G
-#SBATCH --time=06:00:00
-#SBATCH --output=logs/%x_%j.out
-#SBATCH --error=logs/%x_%j.err
+#SBATCH --time=02:00:00
+#SBATCH --array=0-4
+#SBATCH --output=logs/%x_%A_%a.out
+#SBATCH --error=logs/%x_%A_%a.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=aerten3@gatech.edu
 
 # Exp-9: Differentiated beta for single-visit vs multi-visit images.
-#
-# Multi-visit images (~1600) have temporal prior → beta_multi=0.80 (from sweep)
-# Single-visit images (~500) have NO prior → try heavier kNN weight (lower beta)
-#
-# Each beta_single requires a full FAISS re-query.
+# Array index 0-4 maps to beta_single=[0.40, 0.50, 0.60, 0.70, 0.80].
+# beta_multi=0.80 (fixed). beta_single=0.80 is the control.
 
 set -euo pipefail
 export PYTHONUNBUFFERED=1
@@ -32,8 +30,12 @@ mkdir -p logs
 
 source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
 
+# Map array index to beta_single value
+BETA_SINGLES=(0.40 0.50 0.60 0.70 0.80)
+BETA_S=${BETA_SINGLES[$SLURM_ARRAY_TASK_ID]}
+
 echo "Running on host: $(hostname)"
-echo "Job: ${SLURM_JOB_NAME}  JobID: ${SLURM_JOB_ID}"
+echo "Job: ${SLURM_JOB_NAME}  ArrayTask: ${SLURM_ARRAY_TASK_ID}  beta_single=${BETA_S}"
 
 SCALE4_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/phase1_tiles_test_jpeg85"
 SCALE5_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/exp7_multiscale"
@@ -46,10 +48,6 @@ SPECIES_MAP="${PLANTCLEF_ROOT}/data/raw/class_id_to_species_mapping/class_to_spe
 GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
 
 OUT_DIR="${PLANTCLEF_ROOT}/aerten3/submissions/exp9_knn_diff_beta"
-
-echo "=== Exp-9: Differentiated Beta Sweep ==="
-echo "beta_multi=0.80 (fixed), sweeping beta_single"
-echo "Output: ${OUT_DIR}"
 
 python "${SRC_ROOT}/multiscale_aggregate_knn.py" \
   --scale4-dir "${SCALE4_DIR}" \
@@ -70,9 +68,6 @@ python "${SRC_ROOT}/multiscale_aggregate_knn.py" \
   --alphas "0.15" \
   --thresholds "0.100" \
   --scales "4,5,6" \
-  --beta-singles "0.40,0.50,0.60,0.70,0.80"
+  --beta-singles "${BETA_S}"
 
-echo ""
-echo "=== Differentiated beta sweep complete ==="
-echo "Baseline: uniform beta=0.80 → F1=0.41153"
-echo "beta_single=0.80 should reproduce the baseline exactly"
+echo "=== Done: beta_multi=0.80, beta_single=${BETA_S} ==="

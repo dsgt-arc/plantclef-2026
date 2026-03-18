@@ -1,19 +1,20 @@
 #!/bin/bash
-#SBATCH --job-name=exp9-ktau-sweep
+#SBATCH --job-name=exp9-k-sweep
 #SBATCH --account=paceship-dsgt_clef2026
 #SBATCH --partition=cpu-medium
 #SBATCH --qos=embers
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=48G
-#SBATCH --time=06:00:00
-#SBATCH --output=logs/%x_%j.out
-#SBATCH --error=logs/%x_%j.err
+#SBATCH --time=02:00:00
+#SBATCH --array=0-4
+#SBATCH --output=logs/%x_%A_%a.out
+#SBATCH --error=logs/%x_%A_%a.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=aerten3@gatech.edu
 
-# Exp-9: Sweep kNN k and tau at fixed beta=0.80, alpha=0.15, thr=0.100.
-# Each (k, tau) combo requires a full FAISS re-query (~30-60 min each).
-# 5 k values × 5 tau values = 25 combos.
+# Exp-9: Sweep kNN k values in parallel via SLURM array.
+# Array index 0-4 maps to k=[5, 10, 20, 50, 100].
+# Fixed: beta=0.80, tau=0.07, alpha=0.15, thr=0.100.
 
 set -euo pipefail
 export PYTHONUNBUFFERED=1
@@ -29,8 +30,13 @@ mkdir -p logs
 
 source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
 
+# Map array index to k value
+K_VALUES=(5 10 20 50 100)
+KNN_K=${K_VALUES[$SLURM_ARRAY_TASK_ID]}
+KNN_TAU=0.07
+
 echo "Running on host: $(hostname)"
-echo "Job: ${SLURM_JOB_NAME}  JobID: ${SLURM_JOB_ID}"
+echo "Job: ${SLURM_JOB_NAME}  ArrayTask: ${SLURM_ARRAY_TASK_ID}  k=${KNN_K}"
 
 SCALE4_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/phase1_tiles_test_jpeg85"
 SCALE5_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/exp7_multiscale"
@@ -42,10 +48,7 @@ FAISS_LABELS="${PLANTCLEF_ROOT}/aerten3/exp9_knn/faiss_index/faiss_labels_geo.np
 SPECIES_MAP="${PLANTCLEF_ROOT}/data/raw/class_id_to_species_mapping/class_to_species_id.json"
 GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
 
-OUT_DIR="${PLANTCLEF_ROOT}/aerten3/submissions/exp9_knn_ktau_sweep"
-
-echo "=== Exp-9: k/tau Sweep ==="
-echo "Output: ${OUT_DIR}"
+OUT_DIR="${PLANTCLEF_ROOT}/aerten3/submissions/exp9_knn_k_sweep"
 
 python "${SRC_ROOT}/multiscale_aggregate_knn.py" \
   --scale4-dir "${SCALE4_DIR}" \
@@ -60,15 +63,13 @@ python "${SRC_ROOT}/multiscale_aggregate_knn.py" \
   --topk 10 \
   --image-topk 64 \
   --tile-filter-k 0 \
-  --knn-k 20 \
-  --knn-tau 0.07 \
+  --knn-k ${KNN_K} \
+  --knn-tau ${KNN_TAU} \
   --betas "0.80" \
   --alphas "0.15" \
   --thresholds "0.100" \
   --scales "4,5,6" \
-  --knn-ks "5,10,20,50,100" \
-  --knn-taus "0.01,0.03,0.07,0.15,0.30"
+  --knn-ks "${KNN_K}" \
+  --knn-taus "${KNN_TAU}"
 
-echo ""
-echo "=== k/tau sweep complete ==="
-echo "Baseline: k=20, tau=0.07 → F1=0.41153"
+echo "=== Done: k=${KNN_K}, tau=${KNN_TAU} ==="
