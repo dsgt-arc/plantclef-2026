@@ -1,5 +1,5 @@
 [project]
-name = "000-template"
+name = "murilo-000-template"
 version = "0.1.0"
 description = "Template experiment — copy this to start a new experiment"
 authors = [

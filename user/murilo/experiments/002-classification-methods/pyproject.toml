@@ -1,0 +1,17 @@
+[project]
+name = "002-classification-methods"
+version = "0.1.0"
+description = "Classification method ablation for PlantCLEF 2026 (CPU-only, reads parquet from exp 001)"
+authors = [
+    { name = "Murilo Gustineli", email = "mgustineli3@gatech.edu" },
+]
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0.0",
+    "pyarrow>=14.0.0",
+    "numpy>=1.24.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

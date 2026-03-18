@@ -1,0 +1,17 @@
+[project]
+name = "lucas-embedding-extraction"
+version = "0.1.0"
+description = "LUCAS embedding extraction for PlantCLEF 2026"
+requires-python = ">=3.10"
+
+dependencies = [
+  "torch",
+  "torchvision",
+  "numpy",
+  "pandas",
+  "pyspark",
+  "luigi",
+  "pyarrow",
+  "tqdm",
+  "Pillow",
+]
