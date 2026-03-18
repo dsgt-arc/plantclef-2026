@@ -50,45 +50,63 @@ FREQ_WEIGHTS="${PLANTCLEF_ROOT}/aerten3/exp9_knn/faiss_index/class_counts_geo.np
 SPECIES_MAP="${PLANTCLEF_ROOT}/data/raw/class_id_to_species_mapping/class_to_species_id.json"
 GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
 
-OUT_DIR="${PLANTCLEF_ROOT}/aerten3/submissions/exp9_knn_rare_species"
+OUT_BASE="${PLANTCLEF_ROOT}/aerten3/submissions/exp9_knn_rare_species"
 
-# Common args
-COMMON="--scale4-dir ${SCALE4_DIR} --scale5-dir ${SCALE5_DIR} --scale6-dir ${SCALE6_DIR} \
-  --faiss-index ${FAISS_INDEX} --faiss-labels ${FAISS_LABELS} \
-  --species-map ${SPECIES_MAP} --class-mask-npy ${GEO_MASK} \
-  --out-dir ${OUT_DIR} \
-  --temperature 1.5 --topk 10 --image-topk 64 --tile-filter-k 0 \
-  --knn-k 20 --knn-tau 0.07 \
-  --betas 0.80 --alphas 0.15 --thresholds 0.100 --scales 4,5,6"
+# Common args (no --out-dir, added per task)
+COMMON_ARGS=(
+  --scale4-dir "${SCALE4_DIR}"
+  --scale5-dir "${SCALE5_DIR}"
+  --scale6-dir "${SCALE6_DIR}"
+  --faiss-index "${FAISS_INDEX}"
+  --faiss-labels "${FAISS_LABELS}"
+  --species-map "${SPECIES_MAP}"
+  --class-mask-npy "${GEO_MASK}"
+  --temperature 1.5
+  --topk 10
+  --image-topk 64
+  --tile-filter-k 0
+  --knn-k 20
+  --knn-tau 0.07
+  --betas "0.80"
+  --alphas "0.15"
+  --thresholds "0.100"
+  --scales "4,5,6"
+)
 
 case ${SLURM_ARRAY_TASK_ID} in
   0)
     echo "=== Baseline (no boosting) ==="
-    python "${SRC_ROOT}/multiscale_aggregate_knn.py" ${COMMON}
+    python "${SRC_ROOT}/multiscale_aggregate_knn.py" "${COMMON_ARGS[@]}" \
+      --out-dir "${OUT_BASE}/baseline"
     ;;
   1)
     echo "=== Inverse frequency weighting ==="
-    python "${SRC_ROOT}/multiscale_aggregate_knn.py" ${COMMON} \
+    python "${SRC_ROOT}/multiscale_aggregate_knn.py" "${COMMON_ARGS[@]}" \
+      --out-dir "${OUT_BASE}/inv_freq" \
       --freq-weights "${FREQ_WEIGHTS}" --use-inv-freq
     ;;
   2)
     echo "=== Confidence gating at 0.3 ==="
-    python "${SRC_ROOT}/multiscale_aggregate_knn.py" ${COMMON} \
+    python "${SRC_ROOT}/multiscale_aggregate_knn.py" "${COMMON_ARGS[@]}" \
+      --out-dir "${OUT_BASE}/conf_gate_0.3" \
       --confidence-gate 0.3
     ;;
   3)
     echo "=== Confidence gating at 0.5 ==="
-    python "${SRC_ROOT}/multiscale_aggregate_knn.py" ${COMMON} \
+    python "${SRC_ROOT}/multiscale_aggregate_knn.py" "${COMMON_ARGS[@]}" \
+      --out-dir "${OUT_BASE}/conf_gate_0.5" \
       --confidence-gate 0.5
     ;;
   4)
     echo "=== Inv-freq + confidence gate 0.3 ==="
-    python "${SRC_ROOT}/multiscale_aggregate_knn.py" ${COMMON} \
+    python "${SRC_ROOT}/multiscale_aggregate_knn.py" "${COMMON_ARGS[@]}" \
+      --out-dir "${OUT_BASE}/inv_freq_gate_0.3" \
       --freq-weights "${FREQ_WEIGHTS}" --use-inv-freq --confidence-gate 0.3
     ;;
   5)
     echo "=== beta_single=0.90 (less kNN for single-visit) ==="
-    python "${SRC_ROOT}/multiscale_aggregate_knn.py" ${COMMON} \
+    python "${SRC_ROOT}/multiscale_aggregate_knn.py" "${COMMON_ARGS[@]}" \
+      --out-dir "${OUT_BASE}/beta_single_0.90" \
       --beta-singles "0.90"
     ;;
 esac
