@@ -104,6 +104,8 @@ def aggregate_one_image_knn(
     geo_mask: Optional[np.ndarray] = None,
     knn_k: Optional[int] = None,
     knn_tau: Optional[float] = None,
+    use_inv_freq: bool = False,
+    confidence_gate: Optional[float] = None,
 ) -> Optional[np.ndarray]:
     """Aggregate tiles with kNN blend for one image.
 
@@ -115,6 +117,9 @@ def aggregate_one_image_knn(
         beta: weight for softmax (1.0 = no kNN, 0.0 = pure kNN)
         knn_k: override retriever's default k (optional)
         knn_tau: override retriever's default tau (optional)
+        use_inv_freq: weight kNN votes by inverse class frequency
+        confidence_gate: if set, only use kNN for tiles where
+            max(softmax) < this threshold. Confident tiles use pure softmax.
     """
     pdf = tiles_df
 
@@ -142,10 +147,24 @@ def aggregate_one_image_knn(
     if beta < 1.0:
         emb_bufs = pdf["embedding_orig_f16"].tolist()
         tile_embs = f16_bytes_list_to_f32_matrix(emb_bufs, 768)  # [T, 768]
-        p_knn = knn_retriever.query_batch(tile_embs, k=knn_k, tau=knn_tau)  # [T, C]
+        p_knn = knn_retriever.query_batch(
+            tile_embs, k=knn_k, tau=knn_tau, use_inv_freq=use_inv_freq,
+        )  # [T, C]
 
         # 3. Blend at tile level
-        p_blended = beta * p_softmax + (1.0 - beta) * p_knn  # [T, C]
+        if confidence_gate is not None:
+            # Per-tile adaptive blending: only use kNN for uncertain tiles
+            tile_max_probs = p_softmax.max(axis=1)  # [T]
+            uncertain = tile_max_probs < confidence_gate  # [T] bool
+
+            p_blended = p_softmax.copy()
+            if uncertain.any():
+                p_blended[uncertain] = (
+                    beta * p_softmax[uncertain] + (1.0 - beta) * p_knn[uncertain]
+                )
+            # Confident tiles keep pure softmax
+        else:
+            p_blended = beta * p_softmax + (1.0 - beta) * p_knn  # [T, C]
     else:
         # beta=1.0: pure softmax, skip kNN for speed
         p_blended = p_softmax
@@ -210,6 +229,8 @@ def aggregate_multiscale_knn(
     knn_tau: Optional[float] = None,
     beta_single: Optional[float] = None,
     single_visit_images: Optional[set] = None,
+    use_inv_freq: bool = False,
+    confidence_gate: Optional[float] = None,
 ) -> Dict[str, np.ndarray]:
     """Aggregate all images with kNN-blended tile probabilities.
 
@@ -219,6 +240,8 @@ def aggregate_multiscale_knn(
         knn_tau: override retriever's tau (optional)
         beta_single: if set, use this beta for single-visit images
         single_visit_images: set of image names that are single-visit
+        use_inv_freq: weight kNN votes by inverse class frequency
+        confidence_gate: only use kNN for tiles below this confidence
     """
     geo_mask = None
     if config.geo_mask_path:
@@ -238,6 +261,8 @@ def aggregate_multiscale_knn(
         probs = aggregate_one_image_knn(
             group, config, knn_retriever, img_beta, geo_mask,
             knn_k=knn_k, knn_tau=knn_tau,
+            use_inv_freq=use_inv_freq,
+            confidence_gate=confidence_gate,
         )
         if probs is not None:
             results[name_str] = probs
@@ -266,6 +291,8 @@ def run_knn_sweep(
     knn_ks: Optional[List[int]] = None,
     knn_taus: Optional[List[float]] = None,
     beta_singles: Optional[List[float]] = None,
+    use_inv_freq: bool = False,
+    confidence_gate: Optional[float] = None,
 ) -> None:
     """Run kNN ensemble sweep over beta, alpha, threshold, k, tau, beta_single.
 
@@ -351,6 +378,8 @@ def run_knn_sweep(
                 image_probs = aggregate_multiscale_knn(
                     combined, config, knn_retriever, beta,
                     knn_k=k_val, knn_tau=tau_val,
+                    use_inv_freq=use_inv_freq,
+                    confidence_gate=confidence_gate,
                 )
                 print(f"  Aggregated {len(image_probs)} images in {time.time() - t0:.1f}s")
 
@@ -402,6 +431,8 @@ def run_knn_sweep(
             image_probs = aggregate_multiscale_knn(
                 combined, config, knn_retriever, beta_multi,
                 beta_single=beta_s, single_visit_images=single_visit_images,
+                use_inv_freq=use_inv_freq,
+                confidence_gate=confidence_gate,
             )
             print(f"  Aggregated {len(image_probs)} images in {time.time() - t0:.1f}s")
 
@@ -445,7 +476,9 @@ def run_knn_sweep(
 
             t0 = time.time()
             image_probs = aggregate_multiscale_knn(
-                combined, config, knn_retriever, beta
+                combined, config, knn_retriever, beta,
+                use_inv_freq=use_inv_freq,
+                confidence_gate=confidence_gate,
             )
             agg_time = time.time() - t0
             print(f"  Aggregated {len(image_probs)} images in {agg_time:.1f}s")
@@ -553,6 +586,15 @@ def main() -> None:
                     help="Comma-separated beta values for single-visit images "
                          "(e.g., '0.5,0.6,0.7'). beta from --betas is used for multi-visit.")
 
+    # Rare species boosting
+    ap.add_argument("--freq-weights", default=None,
+                    help="Path to class_counts_geo.npy for inverse frequency weighting")
+    ap.add_argument("--use-inv-freq", action="store_true",
+                    help="Weight kNN votes by inverse class frequency (rare species boost)")
+    ap.add_argument("--confidence-gate", type=float, default=None,
+                    help="Only use kNN for tiles where max(softmax) < this value "
+                         "(e.g., 0.3). Confident tiles use pure softmax.")
+
     args = ap.parse_args()
 
     # Build scale directory mapping
@@ -603,9 +645,14 @@ def main() -> None:
         k=args.knn_k,
         tau=args.knn_tau,
         num_classes=NUM_CLASSES,
+        freq_weights_path=args.freq_weights,
     )
     print(f"  Index loaded in {time.time() - t0:.1f}s, "
           f"ntotal={knn_retriever.index.ntotal}")
+    if args.use_inv_freq:
+        print(f"  Inverse frequency weighting: ENABLED")
+    if args.confidence_gate is not None:
+        print(f"  Confidence gating: tiles with max_prob >= {args.confidence_gate} use pure softmax")
 
     run_knn_sweep(
         all_scale_dirs=all_scale_dirs,
@@ -624,6 +671,8 @@ def main() -> None:
         knn_ks=knn_ks,
         knn_taus=knn_taus,
         beta_singles=beta_singles,
+        use_inv_freq=args.use_inv_freq,
+        confidence_gate=args.confidence_gate,
     )
 
 

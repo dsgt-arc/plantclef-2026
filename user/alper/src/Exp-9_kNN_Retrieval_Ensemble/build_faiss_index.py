@@ -89,6 +89,40 @@ def load_training_embeddings(
     return embeddings, labels, n_total, n_skipped_species
 
 
+def subsample_balanced(
+    embeddings: np.ndarray,
+    labels: np.ndarray,
+    max_per_class: int,
+    seed: int = 42,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Subsample so each class has at most max_per_class images.
+
+    Rare classes keep all images. Common classes are randomly subsampled.
+    """
+    rng = np.random.RandomState(seed)
+    unique_classes, counts = np.unique(labels, return_counts=True)
+
+    keep_indices = []
+    n_subsampled = 0
+    for cls, cnt in zip(unique_classes, counts):
+        cls_indices = np.where(labels == cls)[0]
+        if cnt > max_per_class:
+            chosen = rng.choice(cls_indices, max_per_class, replace=False)
+            keep_indices.append(chosen)
+            n_subsampled += 1
+        else:
+            keep_indices.append(cls_indices)
+
+    keep_indices = np.concatenate(keep_indices)
+    keep_indices.sort()
+
+    print(f"  Balanced subsampling: max_per_class={max_per_class}")
+    print(f"  {n_subsampled} classes subsampled, "
+          f"{len(keep_indices)} vectors kept (was {len(labels)})")
+
+    return embeddings[keep_indices], labels[keep_indices]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build FAISS index from training embeddings")
     ap.add_argument("--train-emb-dir", required=True,
@@ -99,6 +133,8 @@ def main() -> None:
                     help="sw_europe_mask_bool.npy")
     ap.add_argument("--out-dir", required=True,
                     help="Output directory for index + labels")
+    ap.add_argument("--max-per-class", type=int, default=0,
+                    help="Cap each species to N images (0=disabled, keep all)")
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -131,11 +167,29 @@ def main() -> None:
     print(f"  Unique species in index: {len(np.unique(labels))}")
     print(f"  Embedding shape: {embeddings.shape}")
 
-    # 4. L2-normalize
+    # 4. Save class frequency counts (before any subsampling)
+    class_counts = np.zeros(7806, dtype=np.int64)
+    for lbl in labels:
+        class_counts[lbl] += 1
+    counts_path = os.path.join(args.out_dir, "class_counts_geo.npy")
+    np.save(counts_path, class_counts)
+    print(f"\nClass frequency stats (before subsampling):")
+    nonzero_counts = class_counts[class_counts > 0]
+    print(f"  Species with images: {len(nonzero_counts)}")
+    print(f"  Min/median/max images per species: "
+          f"{nonzero_counts.min()}/{int(np.median(nonzero_counts))}/{nonzero_counts.max()}")
+
+    # 5. Optional balanced subsampling
+    if args.max_per_class > 0:
+        embeddings, labels = subsample_balanced(
+            embeddings, labels, args.max_per_class
+        )
+
+    # 6. L2-normalize
     print("\nL2-normalizing embeddings...")
     faiss.normalize_L2(embeddings)
 
-    # 5. Build FAISS index
+    # 7. Build FAISS index
     print("Building FAISS IndexFlatIP (768d)...")
     t0 = time.time()
     index = faiss.IndexFlatIP(embeddings.shape[1])
@@ -143,7 +197,7 @@ def main() -> None:
     print(f"  Index built in {time.time() - t0:.1f}s, "
           f"ntotal={index.ntotal}")
 
-    # 6. Sanity check: self-retrieval
+    # 8. Sanity check: self-retrieval
     print("\nSanity check: self-retrieval on first 5 vectors...")
     test_embs = embeddings[:5].copy()
     sims, idxs = index.search(test_embs, 1)
@@ -155,10 +209,11 @@ def main() -> None:
               f"sim={sims[i,0]:.4f}, "
               f"label={retrieved_label} vs {actual_label} [{match}]")
 
-    # 7. Save
-    index_path = os.path.join(args.out_dir, "faiss_index_geo.bin")
-    labels_path = os.path.join(args.out_dir, "faiss_labels_geo.npy")
-    stats_path = os.path.join(args.out_dir, "index_stats.json")
+    # 9. Save
+    suffix = f"_bal{args.max_per_class}" if args.max_per_class > 0 else ""
+    index_path = os.path.join(args.out_dir, f"faiss_index_geo{suffix}.bin")
+    labels_path = os.path.join(args.out_dir, f"faiss_labels_geo{suffix}.npy")
+    stats_path = os.path.join(args.out_dir, f"index_stats{suffix}.json")
 
     print(f"\nSaving index to {index_path}...")
     faiss.write_index(index, index_path)
@@ -174,6 +229,8 @@ def main() -> None:
         "embedding_dim": int(embeddings.shape[1]),
         "index_type": "IndexFlatIP",
         "geo_mask": args.geo_mask_npy,
+        "max_per_class": args.max_per_class,
+        "class_counts_path": counts_path,
     }
     with open(stats_path, "w") as f:
         json.dump(stats, f, indent=2)
