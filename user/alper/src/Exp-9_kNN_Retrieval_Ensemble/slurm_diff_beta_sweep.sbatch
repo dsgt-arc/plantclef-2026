@@ -6,15 +6,15 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=48G
 #SBATCH --time=02:00:00
-#SBATCH --array=0-4
+#SBATCH --array=0-2
 #SBATCH --output=logs/%x_%A_%a.out
 #SBATCH --error=logs/%x_%A_%a.err
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=aerten3@gatech.edu
 
 # Exp-9: Differentiated beta for single-visit vs multi-visit images.
-# Array index 0-4 maps to beta_single=[0.40, 0.50, 0.60, 0.70, 0.80].
-# beta_multi=0.80 (fixed). beta_single=0.80 is the control.
+# Array index 0-2 maps to beta_single=[0.90, 0.95, 1.00].
+# beta_multi=0.80 (fixed). beta_single=0.90 is the control (F1=0.41236).
 
 set -euo pipefail
 export PYTHONUNBUFFERED=1
@@ -31,7 +31,7 @@ mkdir -p logs
 source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-embedding-extraction/.venv/bin/activate
 
 # Map array index to beta_single value
-BETA_SINGLES=(0.40 0.50 0.60 0.70 0.80)
+BETA_SINGLES=(0.90 0.95 1.00)
 BETA_S=${BETA_SINGLES[$SLURM_ARRAY_TASK_ID]}
 
 echo "Running on host: $(hostname)"
@@ -71,3 +71,4 @@ python "${SRC_ROOT}/multiscale_aggregate_knn.py" \
   --beta-singles "${BETA_S}"
 
 echo "=== Done: beta_multi=0.80, beta_single=${BETA_S} ==="
+echo "Control: beta_single=0.90 → F1=0.41236"
