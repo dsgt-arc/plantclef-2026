@@ -1,0 +1,326 @@
+Image Similarity Graph for Multi-Label Prediction Refinement
+1. Motivation
+
+In the PlantCLEF task, the model is trained on single-species images, while the test images contain complex multi-species vegetation plots. This creates a strong domain shift.
+
+However, visually similar plots often share similar plant communities.
+
+For example:
+
+two grassland plots
+
+two alpine plots
+
+two Mediterranean shrub plots
+
+If two plots are visually similar, the set of species present in them is likely similar.
+
+Therefore we can improve predictions by sharing information between similar test images.
+
+This is implemented using an image similarity graph.
+
+2. Method Overview
+
+The algorithm consists of five steps:
+
+1) Compute embeddings for all test images
+2) Build similarity graph using nearest neighbors
+3) Convert similarities into edge weights
+4) Propagate predictions across the graph
+5) Output refined predictions
+
+This procedure does not update model weights and is therefore a form of transductive inference.
+
+3. Step 1 — Extract Image Embeddings
+
+Each test image is represented by a feature vector.
+
+Since your pipeline already uses DINOv2, you can reuse those embeddings.
+
+Example:
+
+embedding dimension = 768
+number of images = 2100
+
+Create matrix:
+
+E ∈ R^(N × D)
+
+Where:
+
+N = number of test images
+D = embedding dimension
+
+Example:
+
+E.shape = (2100, 768)
+
+These embeddings should represent the entire plot, not individual tiles.
+
+Good choices:
+
+CLS token
+
+mean pooled tokens
+
+aggregated tile embedding
+
+4. Step 2 — Build the Similarity Graph
+
+We construct a k-nearest neighbor graph.
+
+Each node represents one image.
+
+Edges connect visually similar images.
+
+Similarity metric:
+
+cosine_similarity(i,j)
+
+Compute pairwise similarity:
+
+S = cosine_similarity(E)
+
+Shape:
+
+S ∈ R^(N × N)
+
+Then keep only k nearest neighbors per image.
+
+Typical value:
+
+k = 10
+
+Graph structure:
+
+image_i → neighbors_j
+
+Example:
+
+image_45 → [12, 89, 320, 77, ...]
+5. Step 3 — Edge Weight Computation
+
+Each edge receives a weight proportional to similarity.
+
+w_ij = max(0, cosine_similarity(i,j))
+
+Then normalize weights per node:
+
+w_ij = w_ij / Σ_j w_ij
+
+This produces a row-normalized adjacency matrix:
+
+W ∈ R^(N × N)
+
+Properties:
+
+W_ij > 0 if j is neighbor of i
+Σ_j W_ij = 1
+6. Step 4 — Initial Prediction Matrix
+
+Let:
+
+P ∈ R^(N × C)
+
+Where:
+
+N = number of images
+C = number of species (7806)
+
+Each row contains predicted probabilities:
+
+P_i = model prediction for image i
+
+Example:
+
+P.shape = (2100, 7806)
+
+These predictions come from your tile aggregation pipeline.
+
+7. Step 5 — Graph Propagation
+
+Predictions are refined using neighbor information.
+
+Update rule:
+
+P_new = (1 − α) P + α W P
+
+Where:
+
+α = propagation strength
+
+Typical value:
+
+α = 0.2 – 0.4
+
+Meaning:
+
+new_prediction =
+70–80% original prediction
+20–30% neighbors
+8. Iterative Propagation
+
+The update can be repeated several times:
+
+for t in range(T):
+    P = (1−α)P + αWP
+
+Typical iterations:
+
+T = 3
+
+This gradually spreads predictions across similar images.
+
+9. Optional Improvements
+Mutual Nearest Neighbors
+
+To reduce noise, only keep edges where similarity is mutual.
+
+i is neighbor of j
+AND
+j is neighbor of i
+
+This significantly improves stability.
+
+Confidence Weighted Propagation
+
+Neighbors with stronger predictions should contribute more.
+
+Modify weights:
+
+w_ij = similarity(i,j) × confidence_j
+
+Where:
+
+confidence_j = max(P_j)
+Top-K Class Filtering
+
+To reduce noise across 7806 classes:
+
+retain only top-50 predictions per image
+
+before propagation.
+
+10. Algorithm Summary
+
+Full pipeline:
+
+1) extract DINOv2 embeddings
+2) compute cosine similarity
+3) build kNN graph
+4) compute normalized adjacency matrix W
+5) compute initial prediction matrix P
+6) run propagation iterations
+7) output refined predictions
+11. Computational Complexity
+
+For your dataset:
+
+N = 2100 images
+D ≈ 768
+C = 7806 classes
+
+Cost:
+
+Similarity computation
+
+O(N²D)
+≈ 2100² × 768
+≈ trivial (< 1 second)
+
+Propagation:
+
+O(N × k × C)
+
+Still extremely small.
+
+Total runtime:
+
+< 1 second CPU
+12. Why This Works
+
+This method improves predictions because:
+
+vegetation plots cluster naturally
+
+grasslands cluster together
+shrublands cluster together
+forest plots cluster together
+
+embedding space captures ecological similarity
+
+prediction noise is reduced
+
+Example:
+
+image A predicts species X with 0.9
+image B predicts species X with 0.4
+
+If A and B are similar, B should likely contain species X.
+
+Propagation corrects this.
+
+13. Failure Modes
+
+Potential issues:
+
+Over-smoothing
+
+Predictions become identical across clusters.
+
+Mitigation:
+
+α ≤ 0.4
+iterations ≤ 3
+Wrong neighbors
+
+If embeddings group visually similar but ecologically different scenes.
+
+Mitigation:
+
+mutual neighbors
+similarity threshold
+14. Expected Impact
+
+Typical gains in similar problems:
+
++0.5% to +2% absolute F1
+
+Most effective when:
+
+embeddings are strong
+
+predictions are noisy
+
+dataset contains repeated scene types
+
+All of which apply to PlantCLEF.
+
+15. Why This Fits Your Pipeline
+
+Your pipeline already contains:
+
+DINOv2 embeddings
+tile filtering
+aggregation
+co-occurrence priors
+
+Similarity propagation simply adds:
+
+test-set structural smoothing
+
+as the final step.
+
+✅ In short
+
+The similarity graph method:
+
+connects similar test images using embeddings
+
+spreads predictions across the graph
+
+stabilizes multilabel outputs
+
+without retraining the model.
+
+If you'd like, I can also show you one important trick that makes this method much stronger for PlantCLEF: a community-level propagation step that operates on species co-occurrence graphs at the same time as the image graph. That combination can sometimes outperform plain graph propagation.

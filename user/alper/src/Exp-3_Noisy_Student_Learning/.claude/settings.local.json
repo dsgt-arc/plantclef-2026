@@ -7,7 +7,12 @@
       "WebFetch(domain:bismex.github.io)",
       "WebFetch(domain:arxiv.org)",
       "WebFetch(domain:www.nature.com)",
-      "WebFetch(domain:pmc.ncbi.nlm.nih.gov)"
+      "WebFetch(domain:pmc.ncbi.nlm.nih.gov)",
+      "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-4_Enhanced_Tile_Aggregation -type f \\\\\\( -name \".gitignore\" -o -name \"README*\" \\\\\\) 2>/dev/null | head -10)",
+      "Bash(grep -r \"Exp-3\\\\|phase[0-9]\\\\|phase_\\\\|phase\\\\.\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-4_Enhanced_Tile_Aggregation --include=\"*.py\" --include=\"*.sh\" --include=\"*.sbatch\" 2>/dev/null | head -20)",
+      "Bash(grep -n \"probs.col\\\\|image_probs\\\\|teacher_image_probs\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-4_Enhanced_Tile_Aggregation/*.py)",
+      "Bash(grep -n \"from aggregate_tiles import\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-4_Enhanced_Tile_Aggregation/*.py)",
+      "Bash(grep -n \"image_topk\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-4_Enhanced_Tile_Aggregation/*.py | head -20)"
     ]
   }
 }

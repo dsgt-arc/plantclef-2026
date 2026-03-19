@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"/c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-3_Noisy_Student_Learning\" -name \"*.py\" -type f | xargs grep -l \"class\\\\|def \" | wc -l)",
+      "Bash(grep -h \"^from \\\\|^import \" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-4_Enhanced_Tile_Aggregation/*.py 2>/dev/null | sort -u)",
+      "Bash(wc -l /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-4_Enhanced_Tile_Aggregation/*.py)",
+      "Bash(cd \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\\\\Exp-4_Enhanced_Tile_Aggregation\" && python -c \"import py_compile; py_compile.compile\\('threshold_sweep.py', doraise=True\\); print\\('OK'\\)\")",
+      "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -type f -name \"*.md\" | xargs grep -l \"f1\\\\|F1\\\\|macro.*f1\\\\|micro.*f1\" | head -10)",
+      "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -type f -name \"generate_submission.py\" | head -1 | xargs head -100)",
+      "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -type f \\\\\\( -name \"*.md\" -o -name \"*.txt\" \\\\\\) | xargs grep -l \"PlantCLEF.*task\\\\|competition.*rules\\\\|evaluation.*metric\" | head -5)",
+      "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -type f -name \"generate_submission.py\" | head -2 | xargs cat | head -150)",
+      "Bash(mkdir -p \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\\\\Exp-6_Adaptive_per_image_thresholding\\\\utils\" && mkdir -p \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\\\\Exp-6_Adaptive_per_image_thresholding\\\\docs\")",
+      "Bash(cd \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\\\\Exp-6_Adaptive_per_image_thresholding\" && python -c \"import py_compile; py_compile.compile\\('adaptive_threshold.py', doraise=True\\); print\\('OK'\\)\")",
+      "Bash(find:*)",
+      "Bash(cd \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\\\\Exp-6_Adaptive_per_image_thresholding\" && python -c \"import py_compile; py_compile.compile\\('threshold_topk_sweep.py', doraise=True\\); print\\('OK'\\)\")",
+      "Bash(python:*)",
+      "Bash(ls -la /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/*.md /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/*.txt)"
+    ]
+  }
+}
