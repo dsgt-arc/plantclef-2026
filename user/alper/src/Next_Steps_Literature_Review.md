@@ -1,7 +1,7 @@
 # Next Steps: Literature Review & Improvement Roadmap
 
 **Date**: 2026-03-15
-**Current Best F1**: 0.38466 (Exp-7, 4x4+5x5+6x6, thr=0.075)
+**Current Best F1**: 0.40100 (Exp-8, 4x4+5x5+6x6, max_prob, T=1.5, alpha=0.05, thr=0.100)
 **Baseline**: 0.28093 (Exp-3) | **Total improvement so far**: +0.10373 (+36.9%)
 
 ---
@@ -75,7 +75,7 @@ Three techniques appear independently in multiple winning solutions:
 - **What**: Parse transect IDs from test image filenames. Optimize detection threshold per transect using bisection search to target ~3-4 species/image average. Some transects are harder and need different thresholds.
 - **Implementation**: Group images by transect name prefix. For each transect, sweep threshold to match expected species count. Use a multiplicative parameter to adjust globally.
 - **GPU cost**: 0 (CPU-only, uses existing predictions)
-- **Expected**: +0.3-0.7%
+- **Expected**: +0.1-0.3% (reduced estimate — we already use transect IDs for temporal fusion, which calibrates probabilities. The 1st place gained +0.007 but used noisy_or aggregation which has worse calibration. With our max_prob pipeline + temporal fusion, the marginal gain from per-transect thresholds is likely small. Exp-6 also showed fixed threshold beats adaptive strategies for our pipeline.)
 
 ### Phase B: Medium Effort, High Impact (days of work)
 
@@ -116,6 +116,52 @@ Three techniques appear independently in multiple winning solutions:
 - **GPU cost**: ~2-3x current extraction time depending on stride
 - **Expected**: +0.5-1.5% (uncertain — could be redundant with multi-scale)
 
+### Phase B2: New Techniques from Extended Research (no training required)
+
+#### ~~B4. Quantile Aggregation (replace max_prob)~~ — TESTED, NEGATIVE
+- **Result**: All quantile values significantly underperform max_prob. Best quantile (q=0.95, thr=0.04) = 0.35382 vs max_prob best = 0.39768. With 77 tiles, most species appear in only 1-2 tiles, so taking any percentile below max kills signal.
+- **Side finding**: max_prob at thr=0.100 scored **0.39768**, a new best over the previous 0.39573 (thr=0.070).
+
+#### ~~B5. Aggregation Ensemble (combine multiple strategies)~~ — DEPRIORITIZED
+- **Why deprioritized**: B4 results show max_prob dominates all alternatives by a large margin (~0.04-0.12 F1). Blending in any weaker aggregation method would only dilute max_prob's signal. Not worth pursuing.
+
+### Phase B3: New Techniques (requires re-extraction or retraining linear head)
+
+#### B6. kNN Retrieval Ensemble (FAISS on training embeddings)
+- **Source**: Retrieval Augmented Classification (CVPR 2022); DINOv2 kNN evaluation
+- **What**: Pre-compute DINOv2 CLS embeddings for all 1.4M training images, build a FAISS index. For each test tile, retrieve k nearest training tiles, combine their species labels with softmax predictions as a weighted vote.
+- **Why it helps**: The linear classifier is biased toward common species (long-tail problem). kNN is frequency-agnostic — rare species with few training images get equal retrieval weight. For 7806 species with heavy long-tail distribution, this specifically helps tail classes.
+- **Implementation**:
+  1. Extract CLS embeddings for all 1.4M training images (or subsample, e.g., 50 per species)
+  2. Build FAISS index (IVF or flat for exact search)
+  3. For each test tile embedding, retrieve k=20 nearest neighbors
+  4. Combine: `final_score = alpha * softmax_score + (1-alpha) * knn_vote_score`
+  5. Aggregate across tiles with max_prob as before
+- **GPU cost**: ~6-12 hours to extract training embeddings (one-time). Index build and retrieval are CPU.
+- **Expected**: +0.5-1.5% (especially for rare species)
+
+#### B7. Multi-Layer Feature Concatenation
+- **Source**: DINOv2 "boosted" evaluation; common in dense prediction literature
+- **What**: Instead of using only the final-layer CLS token (768-dim), concatenate CLS tokens from layers 3, 6, 9, 12 to get a 3072-dim feature. Earlier layers capture texture/color; later layers capture high-level semantics. Different plant species are distinguished at different feature levels — leaf texture (low-level) vs. flower shape (high-level).
+- **Implementation**:
+  1. Modify embedding extraction to save CLS from 4 layers (not just final)
+  2. Concatenate: `feature = [CLS_3 | CLS_6 | CLS_9 | CLS_12]` (3072-dim)
+  3. Retrain linear classification head on concatenated features using 1.4M training images
+  4. Re-run inference pipeline with new embeddings
+- **GPU cost**: ~9 hours to re-extract multi-layer embeddings for all scales + ~3 hours to retrain linear head
+- **Expected**: +0.3-1.0%
+
+#### B8. Attention-Weighted Patch Pooling
+- **Source**: Dense prediction literature; DINOv2 patch token analysis
+- **What**: Each tile produces 1369 patch tokens + 1 CLS token. Instead of discarding patch tokens, pool them using attention weights from the last transformer layer: `feature = CLS + alpha * attention_weighted_mean(patches)`. Small plants in a tile might only occupy a few patches — CLS averages over everything including soil/debris, while attention-weighted pooling focuses on the discriminative patches.
+- **Implementation**:
+  1. Modify embedding extraction to also save last-layer attention weights and patch tokens
+  2. Compute weighted pool: use CLS-to-patch attention as weights
+  3. Concatenate or add to CLS: `enriched = CLS + alpha * weighted_pool(patches)`
+  4. Retrain linear head on enriched features
+- **GPU cost**: ~9 hours re-extraction + ~3 hours retrain head
+- **Expected**: +0.3-1.0%
+
 ### Phase C: Higher Effort, Strategic (week+ of work)
 
 #### C1. EIVE Niche Similarity Filtering
@@ -142,32 +188,7 @@ Three techniques appear independently in multiple winning solutions:
 - **Implementation**: Post-processing on existing predictions. No GPU needed.
 - **Expected**: +0.1-0.5%
 
-#### C3. Multi-Context Environmental Attention (Novel)
-- **Source**: FathomNet CVPR 2025 winner (MCEAM module)
-- **What**: Instead of classifying tiles independently, let each tile attend to its spatial neighbors. A tile at position (i,j) receives context from surrounding tiles via cross-attention. This captures co-occurrence patterns (e.g., species A and B often appear together).
-- **Architecture**: Small transformer that takes per-tile CLS embeddings as input, applies positional encoding based on tile grid position, and outputs context-enriched embeddings for classification.
-- **Implementation**:
-  1. Extract per-tile CLS embeddings (already have these)
-  2. For each image, arrange tile embeddings in spatial grid with positional encoding
-  3. Train small attention module: input = tile embeddings, output = refined embeddings
-  4. Use refined embeddings for classification
-  5. Training data: use temporal fusion priors or pseudo-labels as supervision
-- **GPU cost**: Moderate (small model, but needs training loop)
-- **Expected**: +0.5-2.0% (novel, uncertain)
-
-#### C4. Self-Distillation for Student Recovery
-- **Source**: arxiv 2601.19897 (Shenfeld et al.)
-- **What**: Your Exp-3 student failed due to mode collapse from off-policy KL distillation on ~7742 near-zero targets. Self-distillation approach could fix this:
-  1. Use teacher model conditioned on pseudo-labels as guide (demonstration-conditioned)
-  2. Student generates predictions on-policy
-  3. Distill from teacher's conditioned output (not raw pseudo-labels)
-  4. EMA teacher update: phi <- alpha*theta + (1-alpha)*phi
-- **Why it might fix Exp-3**: The mode collapse happened because 7742/7806 targets were near-zero, overwhelming the ~64 positive signals. Self-distillation generates training signal from the model's own distribution, which is already concentrated on plausible species, avoiding the sparse target problem.
-- **Key insight from paper**: On-policy learning essential; offline distillation from same teacher underperforms.
-- **Implementation**: Major rework of Exp-3 phase 4 training loop.
-- **Expected**: +1.0-3.0% (high variance, research-grade)
-
-#### C5. Image Similarity Graph (Exp-5, previously planned)
+#### C3. Image Similarity Graph (Exp-5, previously planned)
 - **Source**: Your own Exp-5 plan (never implemented)
 - **What**: Build k-NN graph of test images using DINOv2 embeddings. Propagate predictions across similar images iteratively.
 - **Algorithm**:
@@ -184,26 +205,49 @@ Three techniques appear independently in multiple winning solutions:
 
 | Recommendation | Impact | Effort | Risk | Priority |
 |---|---|---|---|---|
+| ~~B4. Quantile aggregation~~ | ~~Med-High~~ | ~~Minutes~~ | -- | **Tested: NEGATIVE** |
 | A1. Border margin cropping | Medium | Low | Low | **Do first** |
-| A2. Per-transect threshold | Medium | Low | Low | **Do first** |
+| ~~B5. Aggregation ensemble~~ | ~~Medium~~ | ~~Low~~ | -- | **Deprioritized** |
 | B1. Multi-head taxonomic fusion | High | Medium | Low | **Do second** |
 | B2. SAM artifact masking | High | Medium | Medium | **Do second** |
+| **B6. kNN retrieval ensemble** | Med-High | Medium | Low | **Do second** |
+| **B7. Multi-layer feature concat** | Medium | Medium | Low | **Do third** |
+| **B8. Attention-weighted pooling** | Medium | Medium | Low | **Do third** |
 | B3. Overlapping tiles | Medium | Medium | Medium | Consider |
 | C1. EIVE niche filtering | Medium | Medium | Low | **Do third** |
 | C2. GBIF seasonal filtering | Low-Med | Low | Low | **Do third** |
-| C3. Multi-context attention | Med-High | High | High | Research |
-| C4. Self-distillation student | High | Very High | High | Research |
-| C5. Image similarity graph | Med-High | Medium | Medium | Consider |
+| A2. Per-transect threshold | Low | Low | Low | Try if time permits |
+| C3. Image similarity graph | Med-High | Medium | Medium | Consider |
+
+---
+
+## Additional Options (Deprioritized)
+
+These approaches were considered but deprioritized due to feasibility or risk concerns.
+
+### Self-Distillation for Student Recovery
+- **Source**: arxiv 2601.19897 (Shenfeld et al.)
+- **What**: On-policy self-distillation where the model uses itself as teacher via demonstration-conditioned predictions. EMA teacher update: `phi <- alpha*theta + (1-alpha)*phi`.
+- **Why deprioritized**: The original paper targets LLM continual learning and relies on in-context learning (prompting with demonstrations), which has no direct ViT equivalent. Additionally, Exp-3 showed that our pseudo-labels are too noisy and sparse (86% low-confidence, 7742/7806 near-zero targets) for any distillation approach to work well. The current hand-crafted pipeline (F1=0.38) already outperforms any student trained on those labels (F1=0.22). Would only become viable with a much stronger teacher (F1 > 0.50+) or real multi-label annotations.
+- **Requires**: 1.4M training dataset + 212k LUCAS images (same as Exp-3)
+- **Expected**: +1.0-3.0% (high variance, research-grade)
+
+### Multi-Context Environmental Attention
+- **Source**: FathomNet CVPR 2025 winner (MCEAM module)
+- **What**: Instead of classifying tiles independently, let each tile attend to its spatial neighbors via cross-attention, capturing co-occurrence patterns.
+- **Why deprioritized**: Requires training an attention module, but we lack the labeled multi-label quadrat annotations needed to supervise it. The FathomNet winner had labeled bounding boxes per ROI; we only have noisy pseudo-labels. Training on pseudo-labels risks the same problems seen in Exp-3 (noisy/sparse supervision). Without proper supervision, the attention module has nothing meaningful to learn about spatial tile relationships.
+- **Requires**: Multi-label annotated quadrat images (not available) or high-quality pseudo-labels
+- **Expected**: +0.5-2.0% (novel, uncertain)
 
 ---
 
 ## Estimated Cumulative Impact
 
 ```
-Current best:                              0.38466
-+ Phase A (border crop + per-transect):   ~0.390 - 0.395
-+ Phase B (taxonomy + SAM masking):       ~0.405 - 0.425
-+ Phase C (ecological + novel):           ~0.415 - 0.445
+Current best:                                          0.38466
++ Quick wins (quantile agg, border crop, agg ensemble): ~0.390 - 0.400
++ Medium effort (SAM, kNN, taxonomy, features):         ~0.410 - 0.435
++ Strategic (ecological filtering, similarity graph):    ~0.420 - 0.450
 
 Target: 0.42+ would significantly exceed all 2025 competitors
 ```
@@ -219,3 +263,8 @@ Target: 0.42+ would significantly exceed all 2025 competitors
 - Self-Distillation paper: https://arxiv.org/abs/2601.19897
 - EIVE dataset: Dengler et al. (2023), Vegetation Classification and Survey 4, 7-29. doi:10.3897/VCS.98324
 - GBIF Europe occurrences: https://www.gbif.org/occurrence/search
+- Retrieval Augmented Classification (CVPR 2022): https://openaccess.thecvf.com/content/CVPR2022/papers/Long_Retrieval_Augmented_Classification_for_Long-Tail_Visual_Recognition_CVPR_2022_paper.pdf
+- DINOv2 kNN evaluation: https://github.com/facebookresearch/dinov2/blob/main/dinov2/eval/knn.py
+- NeCo patch consistency (ICLR 2025): https://arxiv.org/abs/2408.11054
+- Tip-Adapter training-free adaptation: https://arxiv.org/abs/2207.09519
+- SALAD optimal transport aggregation (CVPR 2024): https://arxiv.org/abs/2311.15937

@@ -6,7 +6,20 @@
       "WebFetch(domain:arxiv.org)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:api.github.com)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "WebSearch",
+      "Bash(mkdir:*)",
+      "Bash(SRC=\"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\\\\Exp-7_Multiscale_tiling\" && DST=\"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\\\\Exp-8_Quantile_Aggregation\" && cp \"$SRC/aggregate_tiles.py\" \"$DST/\" && cp \"$SRC/multiscale_aggregate.py\" \"$DST/\" && cp \"$SRC/generate_submission.py\" \"$DST/\" && cp \"$SRC/temporal_fusion.py\" \"$DST/\" && cp \"$SRC/threshold_sweep.py\" \"$DST/\" && cp \"$SRC/utils/__init__.py\" \"$DST/utils/\" && cp \"$SRC/utils/aggregator.py\" \"$DST/utils/\" && cp \"$SRC/utils/io_bytes.py\" \"$DST/utils/\")",
+      "Bash(xargs grep:*)",
+      "Bash(cd:*)",
+      "Bash(grep -r \"sklearn.*neighbors\\\\|from sklearn\\\\|import KNeighbors\\\\|nearest\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src --include=*.py)",
+      "Bash(grep -r \"cosine.*similarity\\\\|similarity.*metric\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src --include=*.py)",
+      "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -type f -name *.py -exec grep -l \"retrieve\\\\|knn\\\\|faiss\\\\|embedding.*pool\\\\|feature.*bank\" {})",
+      "Bash(2)",
+      "Bash(grep -r \"geo.*mask\\\\|species.*mask\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src --include=*.md --include=*.json)",
+      "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -name *mask_stats* -o -name *species_masking*)",
+      "Bash(grep -r \"PlantCLEF.*train\\\\|metadata_PlantCLEF\\\\|PlantCLEF2024\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 --include=*.py --include=*.md)",
+      "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -type f -name *prepare*metadata* -o -name *metadata*csv*)"
     ]
   }
 }
