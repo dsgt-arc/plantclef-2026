@@ -1,4 +1,5 @@
 # Phase 1: Head-only training for ConvNeXt-Large (backbone frozen)
+# Matches ViT classifier-only recipe: 100 epochs, lr=0.01, full augmentation
 model: convnext_large.dinov3_lvd1689m
 pretrained: true
 num_classes: 7806
@@ -10,23 +11,24 @@ input_size:
   - 224
   - 224
 
-# Training
-epochs: 5
+# Training (matching ViT Phase 1)
+epochs: 100
 batch_size: 128
-opt: adamw
-lr: 5.0e-4
+opt: adam
+lr: 0.01
 weight_decay: 0.0
 sched: cosine
 warmup_lr: 1.0e-5
-warmup_epochs: 1
+warmup_epochs: 0
 min_lr: 0
 
-# Regularization (light for Phase 1)
+# Regularization (matching ViT Phase 1 - full augmentation)
 smoothing: 0.1
 drop: 0.0
-drop_path: 0.0
-mixup: 0.0
-cutmix: 0.0
+drop_path: 0.05
+aa: rand-m9-mstd0.5-inc1
+mixup: 0.8
+cutmix: 1.0
 
 # Precision & performance
 amp: true
@@ -42,9 +44,10 @@ workers: 8
 pin_mem: true
 
 # Output & logging
-checkpoint_hist: 3
-log_interval: 100
+checkpoint_hist: 1
+log_interval: 10
 eval_metric: top1
+patience_epochs: 10
 
 # Reproducibility
 seed: 42
