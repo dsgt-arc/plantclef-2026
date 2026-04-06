@@ -21,7 +21,7 @@ set -euo pipefail
 # ---- Configuration ----
 VARIANT="${VARIANT:-base}"
 GPU_TYPE="${GPU_TYPE:-h200}"
-NGPUS="${NGPUS:-1}"
+NGPUS="${NGPUS:-2}"
 GRAD_ACCUM="${GRAD_ACCUM:-4}"
 
 # ---- Resolve GPU partition and GRES ----
