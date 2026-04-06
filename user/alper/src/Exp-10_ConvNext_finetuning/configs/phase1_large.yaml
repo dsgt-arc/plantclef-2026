@@ -1,50 +1,50 @@
 # Phase 1: Head-only training for ConvNeXt-Large (backbone frozen)
 model: convnext_large.dinov3_lvd1689m
 pretrained: true
-num-classes: 7806
-freeze-backbone: true
+num_classes: 7806
+freeze_backbone: true
 
 # Input
-input-size:
+input_size:
   - 3
   - 224
   - 224
 
 # Training
 epochs: 5
-batch-size: 128
+batch_size: 128
 opt: adamw
 lr: 5.0e-4
-weight-decay: 0.0
+weight_decay: 0.0
 sched: cosine
-warmup-lr: 1.0e-5
-warmup-epochs: 1
-min-lr: 0
+warmup_lr: 1.0e-5
+warmup_epochs: 1
+min_lr: 0
 
 # Regularization (light for Phase 1)
 smoothing: 0.1
 drop: 0.0
-drop-path: 0.0
+drop_path: 0.0
 mixup: 0.0
 cutmix: 0.0
 
 # Precision & performance
 amp: true
-amp-dtype: float16
-channels-last: true
+amp_dtype: float16
+channels_last: true
 
 # EMA
-model-ema: true
-model-ema-decay: 0.9998
+model_ema: true
+model_ema_decay: 0.9998
 
 # Data loading
 workers: 8
-pin-mem: true
+pin_mem: true
 
 # Output & logging
-checkpoint-hist: 3
-log-interval: 100
-eval-metric: top1
+checkpoint_hist: 3
+log_interval: 100
+eval_metric: top1
 
 # Reproducibility
 seed: 42
