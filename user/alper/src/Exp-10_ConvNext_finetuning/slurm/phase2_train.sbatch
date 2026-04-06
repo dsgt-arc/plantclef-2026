@@ -88,7 +88,13 @@ echo "Date: $(date)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
 # ---- Train ----
-torchrun --nproc_per_node=${NGPUS} "${EXP_DIR}/train_convnext.py" \
+if [ "${NGPUS}" -gt 1 ]; then
+    CMD="torchrun --nproc_per_node=${NGPUS} --master_port=$((29500 + RANDOM % 1000))"
+else
+    CMD="python"
+fi
+
+${CMD} "${EXP_DIR}/train_convnext.py" \
     -c "${EXP_DIR}/configs/phase2_${VARIANT}.yaml" \
     --data-dir "${DATA_DIR}" \
     --train-split train \

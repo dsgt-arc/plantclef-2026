@@ -41,7 +41,13 @@ nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 python -c "import timm; print(f'timm {timm.__version__}')"
 
 # ---- Train ----
-torchrun --nproc_per_node=${NGPUS} "${EXP_DIR}/train_convnext.py" \
+if [ "${NGPUS}" -gt 1 ]; then
+    CMD="torchrun --nproc_per_node=${NGPUS} --master_port=$((29500 + RANDOM % 1000))"
+else
+    CMD="python"
+fi
+
+${CMD} "${EXP_DIR}/train_convnext.py" \
     -c "${EXP_DIR}/configs/phase1_${VARIANT}.yaml" \
     --data-dir "${DATA_DIR}" \
     --train-split train \
