@@ -19,7 +19,19 @@
       "Bash(grep -r \"geo.*mask\\\\|species.*mask\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src --include=*.md --include=*.json)",
       "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -name *mask_stats* -o -name *species_masking*)",
       "Bash(grep -r \"PlantCLEF.*train\\\\|metadata_PlantCLEF\\\\|PlantCLEF2024\" /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 --include=*.py --include=*.md)",
-      "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -type f -name *prepare*metadata* -o -name *metadata*csv*)"
+      "Bash(find /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 -type f -name *prepare*metadata* -o -name *metadata*csv*)",
+      "WebFetch(domain:www.imageclef.org)",
+      "Bash(find C:UsersalperDocumentsPlantCLEF_2026_Local_GitHubplantclef-2026useralper/src/Exp-6_Adaptive_per_image_thresholding -type f -name *.md -o -name *.txt)",
+      "Bash(find C:UsersalperDocumentsPlantCLEF_2026_Local_GitHubplantclef-2026useralper/src/Exp-7_Multiscale_tiling -type f -name *.md -o -name *.txt)",
+      "Bash(find C:UsersalperDocumentsPlantCLEF_2026_Local_GitHubplantclef-2026useralper/src/Exp-9_kNN_Retrieval_Ensemble -type f -name *.md -o -name *.txt)",
+      "Bash(python create_slides.py)",
+      "Bash(python tiling_diagram.py)",
+      "Bash(python knn_diagram.py)",
+      "Bash(python vote_box_diagram.py)",
+      "Bash(grep -E \"\\\\.\\(py|md|txt\\)$\")",
+      "Bash(ls -d /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp*)",
+      "Bash(pip list:*)",
+      "Bash(pip install:*)"
     ]
   }
 }

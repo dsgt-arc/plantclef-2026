@@ -1,0 +1,52 @@
+# Phase 2: Full fine-tuning for ConvNeXt-Small with layer-wise LR decay
+# Weights loaded via --initial-checkpoint from Phase 1 best model
+model: convnext_small.dinov3_lvd1689m
+num-classes: 7806
+
+# Input
+input-size:
+  - 3
+  - 224
+  - 224
+
+# Training
+epochs: 100
+batch-size: 192
+opt: adamw
+lr: 8.0e-5
+weight-decay: 0.05
+layer-decay: 0.7
+sched: cosine
+warmup-lr: 1.0e-6
+warmup-epochs: 5
+min-lr: 1.0e-7
+
+# Regularization
+smoothing: 0.1
+drop: 0.0
+drop-path: 0.15
+aa: rand-m9-mstd0.5-inc1
+mixup: 0.8
+cutmix: 1.0
+
+# Precision & performance
+amp: true
+amp-dtype: float16
+channels-last: true
+
+# EMA
+model-ema: true
+model-ema-decay: 0.9998
+
+# Data loading
+workers: 8
+pin-mem: true
+
+# Output & logging
+checkpoint-hist: 5
+log-interval: 100
+eval-metric: top1
+patience-epochs: 10
+
+# Reproducibility
+seed: 42

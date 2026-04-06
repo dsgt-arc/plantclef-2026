@@ -1,0 +1,51 @@
+# Phase 1: Head-only training for ConvNeXt-Base (backbone frozen)
+# Most comparable to ViT-Base (~87.6M vs ~86M params) — start here
+model: convnext_base.dinov3_lvd1689m
+pretrained: true
+num-classes: 7806
+freeze-backbone: true
+
+# Input
+input-size:
+  - 3
+  - 224
+  - 224
+
+# Training
+epochs: 5
+batch-size: 256
+opt: adamw
+lr: 1.0e-3
+weight-decay: 0.0
+sched: cosine
+warmup-lr: 1.0e-5
+warmup-epochs: 1
+min-lr: 0
+
+# Regularization (light for Phase 1 — backbone is frozen)
+smoothing: 0.1
+drop: 0.0
+drop-path: 0.0
+mixup: 0.0
+cutmix: 0.0
+
+# Precision & performance
+amp: true
+amp-dtype: float16
+channels-last: true
+
+# EMA
+model-ema: true
+model-ema-decay: 0.9998
+
+# Data loading
+workers: 8
+pin-mem: true
+
+# Output & logging
+checkpoint-hist: 3
+log-interval: 100
+eval-metric: top1
+
+# Reproducibility
+seed: 42
