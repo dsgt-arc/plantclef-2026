@@ -32,20 +32,34 @@ import torchvision.utils
 import yaml
 
 from timm import utils
-from timm.data import create_dataset, create_loader, create_naflex_loader, resolve_data_config, \
+from timm.data import create_dataset, create_loader, resolve_data_config, \
     Mixup, FastCollateMixup, AugMixDataset
+try:
+    from timm.data import create_naflex_loader
+except ImportError:
+    create_naflex_loader = None
 from timm.layers import convert_splitbn_model, convert_sync_batchnorm, set_fast_norm
 from timm.loss import JsdCrossEntropy, SoftTargetCrossEntropy, BinaryCrossEntropy, LabelSmoothingCrossEntropy
 from timm.models import create_model, safe_model_name, resume_checkpoint, load_checkpoint, model_parameters
 from timm.optim import create_optimizer_v2, optimizer_kwargs
 from timm.scheduler import create_scheduler_v2, scheduler_kwargs
 from timm.utils import NativeScaler
-from timm.task import (
-    ClassificationTask,
-    LogitDistillationTask,
-    FeatureDistillationTask,
-    TokenDistillationTask,
-)
+try:
+    from timm.task import (
+        ClassificationTask,
+        LogitDistillationTask,
+        FeatureDistillationTask,
+        TokenDistillationTask,
+    )
+except ImportError:
+    # timm < 1.0.26 compatibility
+    from timm.task import ClassificationTask
+    try:
+        from timm.task import LogitDistillationTask, FeatureDistillationTask
+    except ImportError:
+        LogitDistillationTask = None
+        FeatureDistillationTask = None
+    TokenDistillationTask = None
 
 
 try:
