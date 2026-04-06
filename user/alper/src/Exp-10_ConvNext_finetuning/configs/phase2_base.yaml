@@ -44,6 +44,7 @@ pin-mem: true
 
 # Output & logging
 checkpoint-hist: 5
+recovery-interval: 500
 log-interval: 100
 eval-metric: top1
 patience-epochs: 10

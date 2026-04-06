@@ -7,7 +7,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --time=04:00:00
+#SBATCH --time=08:00:00
 #SBATCH --output=logs/phase1_%x_%A.out
 #SBATCH --error=logs/phase1_%x_%A.err
 #SBATCH --mail-type=FAIL,END
