@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=cnxt-p1
 #SBATCH --account=paceship-dsgt_clef2026
-#SBATCH --partition=gpu-h100
+#SBATCH --partition=gpu-h200
 #SBATCH --qos=inferno
-#SBATCH --gres=gpu:h100:1
+#SBATCH --gres=gpu:h200:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
