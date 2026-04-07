@@ -25,7 +25,12 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(echo \"Exit code: $?\")",
       "Bash(curl -sL https://raw.githubusercontent.com/huggingface/pytorch-image-models/main/train.py -o /tmp/timm_train.py)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(rm phase2_tiny.yaml phase2_small.yaml phase2_base.yaml phase2_large.yaml)",
+      "Bash(mv phase2_tiny_518.yaml phase2_tiny.yaml)",
+      "Bash(mv phase2_small_518.yaml phase2_small.yaml)",
+      "Bash(mv phase2_base_518.yaml phase2_base.yaml)",
+      "Bash(mv phase2_large_518.yaml phase2_large.yaml)"
     ]
   }
 }

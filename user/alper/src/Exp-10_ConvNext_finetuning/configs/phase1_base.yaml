@@ -8,12 +8,12 @@ freeze_backbone: true
 # Input
 input_size:
   - 3
-  - 224
-  - 224
+  - 518
+  - 518
 
 # Training (matching ViT Phase 1)
 epochs: 100
-batch_size: 256
+batch_size: 1280
 opt: adam
 lr: 0.01
 weight_decay: 0.0

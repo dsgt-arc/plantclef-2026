@@ -6,8 +6,8 @@ num_classes: 7806
 # Input
 input_size:
   - 3
-  - 224
-  - 224
+  - 518
+  - 518
 
 # Training
 epochs: 100
