@@ -3,6 +3,7 @@
 model: convnext_tiny.dinov3_lvd1689m
 pretrained: true
 num_classes: 7806
+class_map: /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_mapping.txt
 freeze_backbone: true
 
 # Input
