@@ -8,8 +8,12 @@
 
 #SBATCH --job-name=cnxt-p2
 #SBATCH --account=paceship-dsgt_clef2026
+#SBATCH --partition=gpu-h200
 #SBATCH --qos=inferno
+#SBATCH --gres=gpu:h200:2
 #SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=128G
 #SBATCH --time=72:00:00
 #SBATCH --output=logs/phase2_%x_%A.out
 #SBATCH --error=logs/phase2_%x_%A.err
