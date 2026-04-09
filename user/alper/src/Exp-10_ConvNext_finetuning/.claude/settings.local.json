@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -L \"https://huggingface.co/facebook/dinov3-convnext-tiny-pretrain-lvd1689m\")",
+      "Bash(curl -s -L \"https://huggingface.co/facebook/dinov3-convnext-large-pretrain-lvd1689m\")",
+      "Bash(curl -s -L \"https://zenodo.org/records/10848263\")",
+      "Bash(curl -s -L \"https://www.imageclef.org/PlantCLEF2026\")",
+      "Bash(pip show:*)",
+      "Bash(echo \"---EXIT:$?\")",
+      "WebFetch(domain:zenodo.org)",
+      "WebFetch(domain:www.imageclef.org)",
+      "Bash(python -c \"import timm; print\\('Version:', timm.__version__\\); print\\('File:', timm.__file__\\)\")",
+      "Bash(pip list:*)",
+      "Bash(conda list:*)",
+      "Bash(curl -s \"https://huggingface.co/api/models/facebook/dinov3-convnext-large-pretrain-lvd1689m\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s \"https://huggingface.co/api/models/facebook/dinov3-convnext-tiny-pretrain-lvd1689m\")",
+      "Bash(pip install:*)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:d[k] for k in ['config','safetensors','tags','library_name','pipeline_tag'] if k in d}, indent=2\\)\\)\")",
+      "Bash(python:*)",
+      "Bash(curl -s \"https://huggingface.co/api/models/facebook/dinov3-convnext-small-pretrain-lvd1689m\")",
+      "Bash(curl -s \"https://huggingface.co/api/models/facebook/dinov3-convnext-base-pretrain-lvd1689m\")",
+      "WebFetch(domain:github.com)",
+      "Read(//c/Users/alper/anaconda3/Lib/site-packages/timm/**)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(curl -sL https://raw.githubusercontent.com/huggingface/pytorch-image-models/main/train.py -o /tmp/timm_train.py)",
+      "Read(//tmp/**)",
+      "Bash(rm phase2_tiny.yaml phase2_small.yaml phase2_base.yaml phase2_large.yaml)",
+      "Bash(mv phase2_tiny_518.yaml phase2_tiny.yaml)",
+      "Bash(mv phase2_small_518.yaml phase2_small.yaml)",
+      "Bash(mv phase2_base_518.yaml phase2_base.yaml)",
+      "Bash(mv phase2_large_518.yaml phase2_large.yaml)",
+      "Bash(python3)"
+    ]
+  }
+}
