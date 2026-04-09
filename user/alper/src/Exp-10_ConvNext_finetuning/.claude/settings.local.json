@@ -30,7 +30,8 @@
       "Bash(mv phase2_tiny_518.yaml phase2_tiny.yaml)",
       "Bash(mv phase2_small_518.yaml phase2_small.yaml)",
       "Bash(mv phase2_base_518.yaml phase2_base.yaml)",
-      "Bash(mv phase2_large_518.yaml phase2_large.yaml)"
+      "Bash(mv phase2_large_518.yaml phase2_large.yaml)",
+      "Bash(python3)"
     ]
   }
 }
