@@ -3,7 +3,7 @@
 # Saves to separate experiment dir to avoid collision with 2-GPU run
 
 #SBATCH --job-name=cnxt-p2-4g
-#SBATCH --account=paceship-dsgt_clef2026
+#SBATCH --account=paceship-clef2026_plantclef
 #SBATCH --partition=gpu-h200
 #SBATCH --qos=inferno
 #SBATCH --gres=gpu:h200:4
@@ -54,13 +54,22 @@ echo "Date: $(date)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
 # ---- Train ----
+LAST_CKPT="${OUTPUT_DIR}/convnext_${VARIANT}_phase2_4gpu/last.pth.tar"
+if [ -f "${LAST_CKPT}" ]; then
+    echo "Resuming from ${LAST_CKPT}"
+    CHECKPOINT_ARG="--resume ${LAST_CKPT}"
+else
+    echo "Starting from Phase 1 checkpoint: ${PHASE1_BEST}"
+    CHECKPOINT_ARG="--initial-checkpoint ${PHASE1_BEST}"
+fi
+
 torchrun --nproc_per_node=${NGPUS} --master_port=$((29500 + RANDOM % 1000)) \
     "${EXP_DIR}/train_convnext.py" \
     -c "${EXP_DIR}/configs/phase2_${VARIANT}.yaml" \
     --data-dir "${DATA_DIR}" \
     --train-split train \
     --val-split val \
-    --initial-checkpoint "${PHASE1_BEST}" \
+    ${CHECKPOINT_ARG} \
     --grad-accum-steps "${GRAD_ACCUM}" \
     --output "${OUTPUT_DIR}" \
     --experiment "convnext_${VARIANT}_phase2_4gpu"

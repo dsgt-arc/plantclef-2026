@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=cnxt-p1
-#SBATCH --account=paceship-dsgt_clef2026
+#SBATCH --account=paceship-clef2026_plantclef
 #SBATCH --partition=gpu-h200
 #SBATCH --qos=inferno
 #SBATCH --gres=gpu:h200:4
