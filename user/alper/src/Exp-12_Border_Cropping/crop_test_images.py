@@ -18,20 +18,29 @@ import time
 from PIL import Image
 
 
-def crop_border(img: Image.Image, pct: float) -> Image.Image:
+def crop_border(
+    img: Image.Image, pct: float, resize_back: bool = False,
+) -> Image.Image:
     """Crop pct% of pixels from each side of the image.
 
     Args:
         img: Input PIL image.
         pct: Percentage to remove per side (e.g. 5.0 = 5%).
+        resize_back: If True, resize the cropped image back to the
+            original dimensions so the pipeline sees the same input
+            size. Isolates the content-removal effect from the
+            dimension-change effect.
 
     Returns:
-        Cropped image.
+        Cropped (and optionally resized) image.
     """
     w, h = img.size
     crop_w = int(w * pct / 100.0)
     crop_h = int(h * pct / 100.0)
-    return img.crop((crop_w, crop_h, w - crop_w, h - crop_h))
+    cropped = img.crop((crop_w, crop_h, w - crop_w, h - crop_h))
+    if resize_back:
+        cropped = cropped.resize((w, h), Image.LANCZOS)
+    return cropped
 
 
 def main() -> None:
@@ -54,6 +63,11 @@ def main() -> None:
         "--jpeg-quality", type=int, default=95,
         help="JPEG save quality for cropped images (default: 95)",
     )
+    ap.add_argument(
+        "--resize-back", action="store_true",
+        help="Resize cropped images back to original dimensions "
+             "(isolates content removal from dimension change)",
+    )
     args = ap.parse_args()
 
     pcts = [float(p) for p in args.crop_pcts.split(",")]
@@ -64,16 +78,19 @@ def main() -> None:
     ])
     print(f"Found {len(image_files)} images in {args.image_dir}")
 
+    suffix = "_resized" if args.resize_back else ""
+
     for pct in pcts:
-        out_dir = os.path.join(args.output_root, f"crop_{pct:.0f}pct")
+        out_dir = os.path.join(args.output_root, f"crop_{pct:.0f}pct{suffix}")
         os.makedirs(out_dir, exist_ok=True)
 
-        print(f"\n=== Cropping at {pct}% per side -> {out_dir} ===")
+        mode = "crop + resize back" if args.resize_back else "crop only"
+        print(f"\n=== Cropping at {pct}% per side ({mode}) -> {out_dir} ===")
         t0 = time.time()
 
         for i, fname in enumerate(image_files):
             img = Image.open(os.path.join(args.image_dir, fname)).convert("RGB")
-            cropped = crop_border(img, pct)
+            cropped = crop_border(img, pct, resize_back=args.resize_back)
             cropped.save(
                 os.path.join(out_dir, fname),
                 format="JPEG",

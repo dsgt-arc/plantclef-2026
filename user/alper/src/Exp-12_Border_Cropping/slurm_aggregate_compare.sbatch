@@ -12,10 +12,14 @@
 #SBATCH --mail-user=aerten3@gatech.edu
 
 # Exp-12: Border Cropping — Aggregate + temporal fusion + submission CSVs.
-# Runs 4x4-only aggregation for baseline (no crop) + 3 crop levels (3%, 5%, 7%).
+# Runs 4x4-only aggregation for:
+#   - Baseline (no crop)
+#   - 3 crop levels (3%, 5%, 7%) — original dimension-changing crops
+#   - 3 crop+resize levels (3%, 5%, 7%) — resized back to original dimensions
 # Sweeps thresholds: 0.04, 0.07, 0.10 at alpha=0.6 (Exp-7 4x4 params).
 #
-# Prerequisites: slurm_crop_extract.sbatch must have completed.
+# Prerequisites: slurm_crop_extract.sbatch AND slurm_crop_extract_resized.sbatch
+#                must have completed.
 
 set -euo pipefail
 
@@ -94,6 +98,36 @@ for CROP_PCT in 3 5 7; do
     --species-map "${SPECIES_MAP}" \
     --class-mask-npy "${GEO_MASK}" \
     --out-dir "${OUT_DIR}/crop_${CROP_PCT}pct" \
+    --temperature ${TEMPERATURE} \
+    --alpha ${ALPHA} \
+    --topk ${TOPK} \
+    --image-topk ${IMAGE_TOPK} \
+    --tile-filter-k 0 \
+    --schemes A \
+    --thresholds "${THRESHOLDS}"
+done
+
+# --------------------------------------------------------------------------
+# Run each crop percentage with resize-back (control: same dimensions as baseline)
+# --------------------------------------------------------------------------
+for CROP_PCT in 3 5 7; do
+  PARQUET_FILE="${CROPPED_PARQUET_DIR}/scale_4x4_crop${CROP_PCT}pct_resized.parquet"
+
+  if [ ! -f "${PARQUET_FILE}" ]; then
+    echo "WARNING: ${PARQUET_FILE} not found, skipping crop ${CROP_PCT}% resized"
+    continue
+  fi
+
+  echo ""
+  echo "=== [crop ${CROP_PCT}% resized back] ==="
+  echo "Parquet: ${PARQUET_FILE}"
+
+  python "${EXP7_SRC}/multiscale_aggregate.py" \
+    --scale4-dir "${PARQUET_FILE}" \
+    --model-path "${MODEL_PATH}" \
+    --species-map "${SPECIES_MAP}" \
+    --class-mask-npy "${GEO_MASK}" \
+    --out-dir "${OUT_DIR}/crop_${CROP_PCT}pct_resized" \
     --temperature ${TEMPERATURE} \
     --alpha ${ALPHA} \
     --topk ${TOPK} \
