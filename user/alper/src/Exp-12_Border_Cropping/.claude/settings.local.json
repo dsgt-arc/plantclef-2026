@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/**)",
+      "Read(//c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/**)",
+      "Bash(find \"/c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src\"/Exp-*/docs -type f -name \"*.md\" -o -name \"*.txt\")",
+      "Bash(xargs head:*)",
+      "Bash(xargs grep:*)",
+      "Bash(sed 's/-[0-9]*\\\\.jpg//')",
+      "Bash(sed 's/-.*//')",
+      "Bash(where python:*)",
+      "Bash(where python3:*)",
+      "Bash(where py:*)",
+      "Bash(/c/Users/alper/anaconda3/python:*)",
+      "Bash(kill 1981:*)"
+    ]
+  }
+}
