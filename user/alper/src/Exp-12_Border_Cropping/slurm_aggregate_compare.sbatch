@@ -34,6 +34,7 @@ echo "Job: ${SLURM_JOB_NAME}  JobID: ${SLURM_JOB_ID}"
 BASELINE_4x4="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/phase1_tiles_test_jpeg85"
 CROPPED_PARQUET_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/exp12_border_crop"
 
+MODEL_PATH="${PLANTCLEF_ROOT}/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth"
 SPECIES_MAP="${PLANTCLEF_ROOT}/data/raw/class_id_to_species_mapping/class_to_species_id.json"
 GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
 
@@ -60,6 +61,7 @@ echo ""
 echo "=== [0/4] Baseline (no crop) ==="
 python "${EXP7_SRC}/multiscale_aggregate.py" \
   --scale4-dir "${BASELINE_4x4}" \
+  --model-path "${MODEL_PATH}" \
   --species-map "${SPECIES_MAP}" \
   --class-mask-npy "${GEO_MASK}" \
   --out-dir "${OUT_DIR}/baseline" \
@@ -88,6 +90,7 @@ for CROP_PCT in 3 5 7; do
 
   python "${EXP7_SRC}/multiscale_aggregate.py" \
     --scale4-dir "${PARQUET_FILE}" \
+    --model-path "${MODEL_PATH}" \
     --species-map "${SPECIES_MAP}" \
     --class-mask-npy "${GEO_MASK}" \
     --out-dir "${OUT_DIR}/crop_${CROP_PCT}pct" \
