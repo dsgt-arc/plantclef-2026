@@ -11,7 +11,7 @@ input_size:
   - 518
 
 # Training
-epochs: 100
+epochs: 20
 batch_size: 144
 opt: adamw
 lr: 5.0e-5
