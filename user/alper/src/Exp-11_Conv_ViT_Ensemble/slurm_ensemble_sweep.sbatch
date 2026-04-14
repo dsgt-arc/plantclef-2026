@@ -43,9 +43,23 @@ echo "ViT tiles: ${VIT_TILES}"
 echo "Output: ${OUT_DIR}"
 echo "Date: $(date)"
 
+# Use pre-aggregated parquets if available, otherwise tiles
+CNXT_AGG="${OUT_DIR}/convnext_agg.parquet"
+VIT_AGG="${OUT_DIR}/vit_agg.parquet"
+
+if [ -f "${CNXT_AGG}" ] && [ -f "${VIT_AGG}" ]; then
+    echo "Using pre-aggregated parquets"
+    CNXT_ARG="--convnext-agg ${CNXT_AGG}"
+    VIT_ARG="--vit-agg ${VIT_AGG}"
+else
+    echo "Aggregating from tiles"
+    CNXT_ARG="--convnext-tiles ${CNXT_TILES}"
+    VIT_ARG="--vit-tiles ${VIT_TILES}"
+fi
+
 python "${EXP11_DIR}/ensemble_sweep.py" \
-    --convnext-tiles "${CNXT_TILES}" \
-    --vit-tiles "${VIT_TILES}" \
+    ${CNXT_ARG} \
+    ${VIT_ARG} \
     --species-map "${SPECIES_MAP}" \
     --class-mask-npy "${CLASS_MASK}" \
     --out-dir "${OUT_DIR}" \

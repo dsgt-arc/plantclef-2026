@@ -130,6 +130,53 @@ def blend_probabilities(
     return results
 
 
+def confidence_gated_blend(
+    probs_vit: Dict[str, np.ndarray],
+    probs_cnxt: Dict[str, np.ndarray],
+    tau: float,
+    w_low: float,
+) -> Dict[str, np.ndarray]:
+    """Confidence-gated: use more ConvNeXt when ViT is uncertain.
+
+    If max(P_vit) < tau:
+        P = w_low * P_vit + (1-w_low) * P_cnxt
+    Else:
+        P = P_vit
+    """
+    common = set(probs_vit.keys()) & set(probs_cnxt.keys())
+    results = {}
+    n_low = 0
+    for name in common:
+        p_v = probs_vit[name].astype(np.float32)
+        p_c = probs_cnxt[name].astype(np.float32)
+
+        if p_v.max() < tau:
+            blended = w_low * p_v + (1 - w_low) * p_c
+            n_low += 1
+        else:
+            blended = p_v
+
+        results[name] = blended.astype(np.float16)
+
+    print(f"  Gated: {n_low}/{len(common)} images below tau={tau:.2f} -> blended with w_low={w_low:.1f}")
+    return results
+
+
+def per_class_max(
+    probs_a: Dict[str, np.ndarray],
+    probs_b: Dict[str, np.ndarray],
+) -> Dict[str, np.ndarray]:
+    """Per-class max: P[c] = max(P_a[c], P_b[c])."""
+    common = set(probs_a.keys()) & set(probs_b.keys())
+    results = {}
+    for name in common:
+        p_a = probs_a[name].astype(np.float32)
+        p_b = probs_b[name].astype(np.float32)
+        results[name] = np.maximum(p_a, p_b).astype(np.float16)
+
+    return results
+
+
 def generate_submission(
     image_probs: Dict[str, np.ndarray],
     species_map: list,
@@ -263,6 +310,38 @@ def main():
                 ensemble, species_map, class_mask,
                 topk=args.topk, threshold=thr, out_csv=csv_path,
             )
+
+    # ---- Confidence-gated blending ----
+    print(f"\n=== Confidence-Gated Ensemble ===")
+    gate_taus = [0.15, 0.25, 0.35]
+    gate_w_lows = [0.4, 0.5, 0.6]
+    gate_thresholds = [0.03, 0.04, 0.05]
+
+    for tau in gate_taus:
+        for w_low in gate_w_lows:
+            ensemble = confidence_gated_blend(vit_probs, cnxt_probs, tau=tau, w_low=w_low)
+            tag = f"gate_tau{tau:.2f}_wlow{w_low:.1f}"
+
+            for thr in gate_thresholds:
+                csv_name = f"submission_{tag}_thr{thr:.3f}_top{args.topk}.csv"
+                csv_path = os.path.join(args.out_dir, csv_name)
+                print(f"\n  tau={tau:.2f}, w_low={w_low:.1f}, thr={thr:.3f}:")
+                generate_submission(
+                    ensemble, species_map, class_mask,
+                    topk=args.topk, threshold=thr, out_csv=csv_path,
+                )
+
+    # ---- Per-class max ----
+    print(f"\n=== Per-Class Max Ensemble ===")
+    ensemble = per_class_max(vit_probs, cnxt_probs)
+    for thr in gate_thresholds:
+        csv_name = f"submission_perclass_max_thr{thr:.3f}_top{args.topk}.csv"
+        csv_path = os.path.join(args.out_dir, csv_name)
+        print(f"\n  per-class max, thr={thr:.3f}:")
+        generate_submission(
+            ensemble, species_map, class_mask,
+            topk=args.topk, threshold=thr, out_csv=csv_path,
+        )
 
     print(f"\n=== Done. Results in {args.out_dir} ===")
 
