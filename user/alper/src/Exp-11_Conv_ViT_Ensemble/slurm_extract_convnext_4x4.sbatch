@@ -2,7 +2,7 @@
 #SBATCH --job-name=cnxt-ext
 #SBATCH --account=paceship-clef2026_plantclef
 #SBATCH --partition=gpu-rtx6000
-#SBATCH --qos=embers
+#SBATCH --qos=inferno
 #SBATCH --gres=gpu:rtx_6000:1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=6
