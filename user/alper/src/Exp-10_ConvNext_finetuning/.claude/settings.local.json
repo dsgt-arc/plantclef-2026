@@ -39,7 +39,8 @@
       "Bash(git -C \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\" show user/alper-Exp3_SSL_phases_1_2:.git/refs/heads/user/alper-Exp3_SSL_phases_1_2)",
       "Bash(git -C \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\" log --oneline user/alper-Exp3_SSL_phases_1_2)",
       "Bash(git -C \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\" ls-tree -r user/alper-Exp3_SSL_phases_1_2 -- \"*phase2*\")",
-      "Bash(ls -d \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\"/Exp-*)"
+      "Bash(ls -d \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\"/Exp-*)",
+      "Bash(sacct:*)"
     ]
   }
 }
