@@ -5,7 +5,7 @@
 #SBATCH --qos=embers
 #SBATCH --gres=gpu:rtx_6000:1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=6
 #SBATCH --mem=64G
 #SBATCH --time=02:00:00
 #SBATCH --output=logs/extract_cnxt_%A.out
