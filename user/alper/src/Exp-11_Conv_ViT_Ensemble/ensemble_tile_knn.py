@@ -225,8 +225,8 @@ def main():
         index_path=args.faiss_index,
         labels_path=args.faiss_labels,
         num_classes=NUM_CLASSES,
-        default_k=args.knn_k,
-        default_tau=args.knn_tau,
+        k=args.knn_k,
+        tau=args.knn_tau,
     )
     print(f"  Index loaded: {knn_retriever.index.ntotal} vectors")
 
