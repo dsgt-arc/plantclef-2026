@@ -28,10 +28,9 @@ source "${REPO_ROOT}/user/alper/experiments/001-embedding-extraction/.venv/bin/a
 mkdir -p "${EXP11_DIR}/logs"
 mkdir -p "${OUT_DIR}"
 
-echo "=== Scheme: 2+3+4+5+6+7+8 ==="
+echo "=== Scheme: 3+4+5+6+7+8 ==="
 python "${EXP11_DIR}/convnext_3x3_test.py" \
     --scale-files \
-        "${CNXT_DIR}/scale_2x2.parquet" \
         "${CNXT_DIR}/scale_3x3.parquet" \
         "${CNXT_DIR}/scale_4x4.parquet" \
         "${CNXT_DIR}/scale_5x5.parquet" \
@@ -41,7 +40,7 @@ python "${EXP11_DIR}/convnext_3x3_test.py" \
     --species-map "${SPECIES_MAP}" \
     --class-mask-npy "${CLASS_MASK}" \
     --out-dir "${OUT_DIR}" \
-    --tag "2345678" \
+    --tag "345678" \
     --thresholds "0.100"
 
 echo "=== Done ==="
