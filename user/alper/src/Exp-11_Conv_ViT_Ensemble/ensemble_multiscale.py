@@ -280,7 +280,7 @@ def main():
             tag = "vit_only"
         else:
             ensemble = blend_probabilities(vit_fused, cnxt_fused, weight_a=w)
-            tag = f"w{w:.1f}"
+            tag = f"w{w:.2f}"
 
         print(f"\n  --- {tag} ---")
         for thr in thresholds:
