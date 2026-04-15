@@ -55,7 +55,7 @@ python "${EXP11_DIR}/ensemble_multiscale.py" \
     --out-dir "${OUT_DIR}" \
     --temperature 1.5 \
     --alpha 0.05 \
-    --weights "0.82,0.85,0.87,0.9,0.93,0.95" \
+    --weights "0.75,0.78,0.80" \
     --thresholds "0.075,0.100,0.125" \
     --topk 10
 
