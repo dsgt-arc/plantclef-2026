@@ -108,6 +108,8 @@ def main():
     ap.add_argument("--weights", default="0.75,0.78,0.80,0.82,0.85")
     ap.add_argument("--thresholds", default="0.090,0.100,0.110,0.120")
     ap.add_argument("--topk", type=int, default=10)
+    ap.add_argument("--prefix", default="ens",
+                    help="Prefix for output CSV filenames")
     args = ap.parse_args()
 
     weights = [float(w) for w in args.weights.split(",")]
@@ -158,7 +160,7 @@ def main():
 
         print(f"\n  --- {tag} ---")
         for thr in thresholds:
-            csv = os.path.join(args.out_dir, f"ens_{tag}_thr{thr:.3f}_top{args.topk}.csv")
+            csv = os.path.join(args.out_dir, f"{args.prefix}_{tag}_thr{thr:.3f}_top{args.topk}.csv")
             generate_csv(ens, species_map, class_mask, args.topk, thr, csv)
 
     print(f"\n=== Done ===")
