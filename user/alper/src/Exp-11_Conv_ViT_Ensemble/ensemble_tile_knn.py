@@ -75,14 +75,20 @@ def load_and_merge_tiles(vit_paths, cnxt_paths, blend_w):
     )
     print(f"  Merged: {len(merged)} tiles, {merged['image_name'].nunique()} images")
 
-    # Blend logits
+    # Blend logits (vectorized)
     print(f"  Blending logits (w_vit={blend_w:.2f})...")
-    blended_logits = []
-    for _, row in merged.iterrows():
-        vit_logits = np.frombuffer(row["teacher_logits_f16_vit"], dtype=np.float16).astype(np.float32)
-        cnxt_logits = np.frombuffer(row["teacher_logits_f16_cnxt"], dtype=np.float16).astype(np.float32)
-        blended = blend_w * vit_logits + (1 - blend_w) * cnxt_logits
-        blended_logits.append(blended.astype(np.float16).tobytes())
+    n = len(merged)
+    vit_logits_all = np.stack([
+        np.frombuffer(b, dtype=np.float16).astype(np.float32)
+        for b in merged["teacher_logits_f16_vit"].values
+    ])  # [N, 7806]
+    cnxt_logits_all = np.stack([
+        np.frombuffer(b, dtype=np.float16).astype(np.float32)
+        for b in merged["teacher_logits_f16_cnxt"].values
+    ])  # [N, 7806]
+    blended_all = (blend_w * vit_logits_all + (1 - blend_w) * cnxt_logits_all).astype(np.float16)
+    blended_logits = [blended_all[i].tobytes() for i in range(n)]
+    del vit_logits_all, cnxt_logits_all, blended_all
 
     # Build result with blended logits + ViT embeddings
     result = pd.DataFrame({

@@ -5,11 +5,11 @@
 #SBATCH --job-name=ens-tile-knn
 #SBATCH --account=paceship-clef2026_plantclef
 #SBATCH --partition=cpu-medium
-#SBATCH --qos=embers
+#SBATCH --qos=inferno
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --time=02:00:00
+#SBATCH --mem=96G
+#SBATCH --time=04:00:00
 #SBATCH --output=logs/ens_tile_knn_%A.out
 #SBATCH --error=logs/ens_tile_knn_%A.err
 #SBATCH --mail-type=FAIL,END
