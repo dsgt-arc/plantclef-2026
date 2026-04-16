@@ -9,7 +9,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=96G
-#SBATCH --time=04:00:00
+#SBATCH --time=08:00:00
 #SBATCH --output=logs/ens_tile_knn_%A.out
 #SBATCH --error=logs/ens_tile_knn_%A.err
 #SBATCH --mail-type=FAIL,END
