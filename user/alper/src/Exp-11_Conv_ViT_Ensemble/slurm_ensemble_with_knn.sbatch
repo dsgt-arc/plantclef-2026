@@ -6,11 +6,11 @@
 #SBATCH --job-name=ens-knn
 #SBATCH --account=paceship-clef2026_plantclef
 #SBATCH --partition=cpu-medium
-#SBATCH --qos=embers
+#SBATCH --qos=inferno
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --time=02:00:00
+#SBATCH --mem=96G
+#SBATCH --time=08:00:00
 #SBATCH --output=logs/ens_knn_%A.out
 #SBATCH --error=logs/ens_knn_%A.err
 #SBATCH --mail-type=FAIL,END
@@ -24,7 +24,8 @@ EXP9_DIR="${REPO_ROOT}/user/alper/src/Exp-9_kNN_Retrieval_Ensemble"
 EXP8_DIR="${REPO_ROOT}/user/alper/src/Exp-8_Quantile_Aggregation_SS"
 EXP11_DIR="${REPO_ROOT}/user/alper/src/Exp-11_Conv_ViT_Ensemble"
 
-export PYTHONPATH="${EXP9_DIR}:${EXP8_DIR}:${PYTHONPATH:-}"
+EXP8_DIR_ALT="${REPO_ROOT}/user/alper/src/Exp-8_Quantile_Aggregation"
+export PYTHONPATH="${EXP9_DIR}:${EXP8_DIR}:${EXP8_DIR_ALT}:${PYTHONPATH:-}"
 
 source "${REPO_ROOT}/user/alper/experiments/001-embedding-extraction/.venv/bin/activate"
 
