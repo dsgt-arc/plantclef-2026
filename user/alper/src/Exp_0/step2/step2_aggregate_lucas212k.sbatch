@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=lucas212k-step2
-#SBATCH --account=paceship-dsgt_clef2026
+#SBATCH --account=paceship-clef2026_plantclef
 #SBATCH --partition=cpu-medium
 #SBATCH --qos=embers
 #SBATCH --cpus-per-task=6

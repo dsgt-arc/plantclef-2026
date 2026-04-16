@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep *)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:zenodo.org)",
+      "Bash(sed -i 's/paceship-dsgt_clef2026/paceship-clef2026_plantclef/g' user/alper/src/Exp-10_ConvNext_finetuning/docs/Exp10_ConvNext_Finetuning_Plan.md)",
+      "Bash(grep -rl \"paceship-dsgt_clef2026\" user/alper/)"
+    ]
+  }
+}

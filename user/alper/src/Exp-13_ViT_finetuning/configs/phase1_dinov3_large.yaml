@@ -1,0 +1,56 @@
+# Phase 1: Head-only training for ViT-Large DINOv3 -- backbone frozen
+# Input 512x512 (not 518) because patch16 requires divisibility: 512/16 = 32
+# Mirrors PlantNet reference ViT-B recipe: adam, lr=0.01, wd=0, no warmup
+model: vit_large_patch16_dinov3.lvd1689m
+pretrained: true
+num_classes: 7806
+class_map: /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_mapping.txt
+freeze_backbone: true
+freeze_backbone_prefix: head
+
+# Input (patch16 at 512 -> 32x32=1024 patches + 1 CLS = 1025 tokens)
+input_size:
+  - 3
+  - 512
+  - 512
+
+# Training
+epochs: 100
+batch_size: 192
+opt: adam
+lr: 0.01
+weight_decay: 0.0
+sched: cosine
+warmup_lr: 1.0e-5
+warmup_epochs: 0
+min_lr: 0
+
+# Regularization
+smoothing: 0.1
+drop: 0.0
+drop_path: 0.05
+aa: rand-m9-mstd0.5-inc1
+mixup: 0.8
+cutmix: 1.0
+
+# Precision & performance
+amp: true
+amp_dtype: float16
+channels_last: false  # ViT doesn't benefit from NHWC (no conv blocks); matches PlantNet reference
+
+# EMA
+model_ema: true
+model_ema_decay: 0.9998
+
+# Data loading
+workers: 8
+pin_mem: true
+
+# Output & logging
+checkpoint_hist: 1
+log_interval: 10
+eval_metric: top1
+patience_epochs: 10
+
+# Reproducibility
+seed: 42

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=exp4-extract-views
-#SBATCH --account=paceship-dsgt_clef2026
+#SBATCH --account=paceship-clef2026_plantclef
 #SBATCH --partition=gpu-rtx6000
 #SBATCH --qos=inferno
 #SBATCH --gres=gpu:rtx_6000:1

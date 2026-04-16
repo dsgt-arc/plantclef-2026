@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=exp12-crop-extract
-#SBATCH --account=paceship-dsgt_clef2026
+#SBATCH --account=paceship-clef2026_plantclef
 #SBATCH --partition=gpu-rtx6000
 #SBATCH --qos=embers
 #SBATCH --gres=gpu:rtx_6000:1
