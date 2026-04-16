@@ -31,7 +31,7 @@ Reference configs consulted:
 | Patch size | 14 | 16 |
 | Pretraining data | LVD-142M | LVD-1689M (distilled from ViT-7B) |
 | Native input | 518×518 | 256×256 |
-| Register tokens | 4 | 0 |
+| Extra tokens | 4 register | 4 storage |
 | Embedding dim | 1024 | 1024 |
 | Params | 304M | 303M |
 

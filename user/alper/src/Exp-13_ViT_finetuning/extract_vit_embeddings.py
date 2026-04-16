@@ -143,9 +143,10 @@ def extract_embeddings_batch(
         batch_tiles = tiles[start : start + batch_size]
         tensors = torch.stack([transform(t) for t in batch_tiles]).to(device)
 
-        # ViT forward_features returns [B, 1 + reg + N, D]
-        #   DINOv2 (reg4): [B, 1 + 4 + N_patches, 1024]  -- CLS at index 0
-        #   DINOv3:        [B, 1 + N_patches, 1024]      -- CLS at index 0
+        # ViT forward_features returns [B, 1 + extra + N, D]
+        #   DINOv2 (reg4): [B, 1 + 4 + N_patches, 1024]  -- 4 register tokens
+        #   DINOv3:        [B, 1 + 4 + N_patches, 1024]  -- 4 storage tokens
+        # CLS is at index 0 in both cases.
         features = model.forward_features(tensors)
         cls_tokens = features[:, 0, :]  # [B, 1024]
 

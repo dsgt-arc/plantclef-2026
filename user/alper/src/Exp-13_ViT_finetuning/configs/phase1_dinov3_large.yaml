@@ -8,7 +8,7 @@ class_map: /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class
 freeze_backbone: true
 freeze_backbone_prefix: head
 
-# Input (patch16 at 512 -> 32x32=1024 patches + 1 CLS = 1025 tokens)
+# Input (patch16 at 512 -> 32x32=1024 patches + 1 CLS + 4 storage = 1029 tokens)
 input_size:
   - 3
   - 512
