@@ -262,6 +262,12 @@ group.add_argument('--min-lr', type=float, default=0, metavar='LR',
                    help='lower lr bound for cyclic schedulers that hit 0 (default: 0)')
 group.add_argument('--epochs', type=int, default=300, metavar='N',
                    help='number of epochs to train (default: 300)')
+group.add_argument('--max-epoch', type=int, default=None, metavar='N',
+                   help='Stop training after this many epochs (exclusive upper bound); '
+                        'LR scheduler still uses --epochs as its horizon. Useful for '
+                        'tournament-style races where you want the full 100-epoch cosine '
+                        'shape but only train 20 epochs, then resume later with --resume '
+                        'and a higher --max-epoch value.')
 group.add_argument('--epoch-repeats', type=float, default=0., metavar='N',
                    help='epoch repeat multiplier (number of times to repeat dataset epoch per train epoch).')
 group.add_argument('--start-epoch', default=None, type=int, metavar='N',
@@ -1071,6 +1077,20 @@ def main():
     results = []
     try:
         for epoch in range(start_epoch, num_epochs):
+            # Custom early stop: break before running this epoch if we've hit
+            # --max-epoch. LR schedule horizon stays at --epochs so a later
+            # resume with a larger --max-epoch continues the same cosine curve
+            # seamlessly. Semantics: --max-epoch N = train epochs [0..N-1].
+            if args.max_epoch is not None and epoch >= args.max_epoch:
+                if utils.is_primary(args):
+                    _logger.info(
+                        f'Reached --max-epoch={args.max_epoch} '
+                        f'(LR horizon is --epochs={args.epochs}). '
+                        f'Stopping before epoch {epoch}. Resume with a larger '
+                        f'--max-epoch (or remove it) to continue the schedule.'
+                    )
+                break
+
             if hasattr(dataset_train, 'set_epoch'):
                 dataset_train.set_epoch(epoch)
             elif args.distributed and hasattr(loader_train.sampler, 'set_epoch'):
