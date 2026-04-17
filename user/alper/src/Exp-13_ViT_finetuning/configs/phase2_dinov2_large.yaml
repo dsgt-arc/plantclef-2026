@@ -18,7 +18,7 @@ input_size:
 # To continue the winner: re-submit with --resume and --max-epoch 100 (or omit max_epoch).
 epochs: 100
 max_epoch: 20
-batch_size: 24
+batch_size: 64  # 64 * 4 GPUs * 4 grad_accum = 1024 effective, close to ViT-B ref (~1152). ~51 GB/GPU est.
 opt: adamw
 lr: 5.0e-5
 weight_decay: 0.05

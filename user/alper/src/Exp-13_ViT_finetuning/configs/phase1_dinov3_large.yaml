@@ -16,7 +16,8 @@ input_size:
 
 # Training
 epochs: 100
-batch_size: 192
+batch_size: 512  # Bumped from 192: job 6576730 showed only 27/141 GB used on H200, tons of headroom.
+                 # 512/GPU * 4 GPUs = 2048 effective batch, ~683 updates/epoch (vs ViT-B ref 137).
 opt: adam
 lr: 0.01
 weight_decay: 0.0

@@ -19,7 +19,7 @@ input_size:
 # To continue the winner: re-submit with --resume and --max-epoch 100 (or omit max_epoch).
 epochs: 100
 max_epoch: 20
-batch_size: 24  # Matches DINOv2 P2 for fair 20-epoch tournament: 24 * 4 GPUs * 4 grad_accum = 384 effective
+batch_size: 64  # Matches DINOv2 P2 for fair 20-epoch tournament: 64 * 4 GPUs * 4 grad_accum = 1024 effective
 opt: adamw
 lr: 5.0e-5
 weight_decay: 0.05
