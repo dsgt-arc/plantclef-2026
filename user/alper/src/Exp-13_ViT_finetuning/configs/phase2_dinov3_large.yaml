@@ -15,7 +15,7 @@ input_size:
 
 # Training
 epochs: 100
-batch_size: 48
+batch_size: 24  # Matches DINOv2 P2 for fair 20-epoch tournament: 24 * 4 GPUs * 4 grad_accum = 384 effective
 opt: adamw
 lr: 5.0e-5
 weight_decay: 0.05
