@@ -31,7 +31,14 @@
       "Bash(grep -E \"\\\\.\\(py|md|txt\\)$\")",
       "Bash(ls -d /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp*)",
       "Bash(pip list:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(grep -E \"\\\\.py$\")",
+      "Bash(git -C /c/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026 log --oneline --all -- \"user/alper/src/Exp-10_ConvNext_finetuning\")",
+      "Bash(grep -E '\\\\.png$')",
+      "Bash(grep -E '\\\\.\\(py|sbatch\\)$')",
+      "Bash(git *)",
+      "Bash(python -c \"import matplotlib; print\\('matplotlib', matplotlib.__version__\\)\")",
+      "Bash(python generate_figures.py)"
     ]
   }
 }
