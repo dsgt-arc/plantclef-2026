@@ -103,7 +103,7 @@ torchrun --nproc_per_node=NUM_GPUS train_convnext.py --batch-size BATCH_PER_GPU 
 | Partition | `gpu-h200` |
 | GRES | `gpu:h200:4` (4 GPUs per job; max 8 per node) |
 | QoS | `inferno` |
-| Account | `paceship-dsgt_clef2026` |
+| Account | `paceship-clef2026_plantclef` |
 | Nodes | 12 available (96 H200s total) |
 | CPUs per node | 64 |
 | Memory per node | ~2TB |
@@ -113,7 +113,7 @@ torchrun --nproc_per_node=NUM_GPUS train_convnext.py --batch-size BATCH_PER_GPU 
 #SBATCH --partition=gpu-h200
 #SBATCH --gres=gpu:h200:4
 #SBATCH --qos=inferno
-#SBATCH --account=paceship-dsgt_clef2026
+#SBATCH --account=paceship-clef2026_plantclef
 #SBATCH --cpus-per-task=32    # 8 workers/GPU * 4 GPUs
 #SBATCH --mem=256G
 ```
@@ -272,7 +272,7 @@ patience-epochs: 10
 ```bash
 #!/bin/bash
 #SBATCH --job-name=cnxt-p1-${VARIANT}
-#SBATCH --account=paceship-dsgt_clef2026
+#SBATCH --account=paceship-clef2026_plantclef
 #SBATCH --partition=gpu-h200
 #SBATCH --qos=inferno
 #SBATCH --gres=gpu:h200:4
@@ -310,7 +310,7 @@ torchrun --nproc_per_node=${NGPUS} "${EXP_DIR}/train_convnext.py" \
 ```bash
 #!/bin/bash
 #SBATCH --job-name=cnxt-p2-${VARIANT}
-#SBATCH --account=paceship-dsgt_clef2026
+#SBATCH --account=paceship-clef2026_plantclef
 #SBATCH --partition=gpu-h200
 #SBATCH --qos=inferno
 #SBATCH --gres=gpu:h200:4

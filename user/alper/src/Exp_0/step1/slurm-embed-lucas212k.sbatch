@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=lucas212k-emb
-#SBATCH --account=paceship-dsgt_clef2026
+#SBATCH --account=paceship-clef2026_plantclef
 #SBATCH --partition=gpu-rtx6000
 #SBATCH --qos=embers
 #SBATCH --gres=gpu:rtx_6000:1

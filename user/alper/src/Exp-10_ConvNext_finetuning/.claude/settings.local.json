@@ -31,7 +31,16 @@
       "Bash(mv phase2_small_518.yaml phase2_small.yaml)",
       "Bash(mv phase2_base_518.yaml phase2_base.yaml)",
       "Bash(mv phase2_large_518.yaml phase2_large.yaml)",
-      "Bash(python3)"
+      "Bash(python3)",
+      "Bash(grep:*)",
+      "Bash(git -C \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\" log --all --oneline --grep=\"vit.*phase\\\\|phase.*vit\")",
+      "Bash(git -C \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\" branch -a)",
+      "Bash(git -C \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\" log --all --oneline)",
+      "Bash(git -C \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\" show user/alper-Exp3_SSL_phases_1_2:.git/refs/heads/user/alper-Exp3_SSL_phases_1_2)",
+      "Bash(git -C \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\" log --oneline user/alper-Exp3_SSL_phases_1_2)",
+      "Bash(git -C \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\" ls-tree -r user/alper-Exp3_SSL_phases_1_2 -- \"*phase2*\")",
+      "Bash(ls -d \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\"/Exp-*)",
+      "Bash(sacct:*)"
     ]
   }
 }

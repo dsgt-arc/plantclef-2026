@@ -1,0 +1,61 @@
+# Phase 2: Full fine-tuning for ViT-Large DINOv3
+# Input 512x512 (patch16 divisibility)
+# Hybrid recipe: PlantNet reference base + MAE/DINOv2-official ViT-L refinements
+# (AdamW, weight_decay=0.05, layer_decay=0.75, warmup=5ep, drop_path=0.2)
+# Weights loaded via --initial-checkpoint from Phase 1 best model
+model: vit_large_patch16_dinov3.lvd1689m
+num_classes: 7806
+class_map: /storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0/data/raw/class_id_to_species_mapping/class_mapping.txt
+
+# Input
+input_size:
+  - 3
+  - 512
+  - 512
+
+# Training
+# epochs=100 defines the cosine LR schedule horizon.
+# max_epoch=20 stops training after 20 epochs for the tournament race.
+# To continue the winner: re-submit with --resume and --max-epoch 100 (or omit max_epoch).
+epochs: 100
+max_epoch: 20
+batch_size: 24  # Matches DINOv2 P2 for fair 20-epoch tournament: 24 * 4 GPUs * 4 grad_accum = 384 effective
+opt: adamw
+lr: 5.0e-5
+weight_decay: 0.05
+layer_decay: 0.75
+sched: cosine
+warmup_lr: 1.0e-6
+warmup_epochs: 5
+min_lr: 1.0e-7
+
+# Regularization
+smoothing: 0.1
+drop: 0.0
+drop_path: 0.2
+aa: rand-m9-mstd0.5-inc1
+mixup: 0.8
+cutmix: 1.0
+
+# Precision & performance
+amp: true
+amp_dtype: float16
+channels_last: false  # ViT doesn't benefit from NHWC (no conv blocks); matches PlantNet reference
+
+# EMA
+model_ema: true
+model_ema_decay: 0.9998
+
+# Data loading
+workers: 8
+pin_mem: true
+
+# Output & logging
+checkpoint_hist: 5
+recovery_interval: 500
+log_interval: 100
+eval_metric: top1
+patience_epochs: 10
+
+# Reproducibility
+seed: 42

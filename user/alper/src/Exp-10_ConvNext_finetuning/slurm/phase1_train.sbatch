@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=cnxt-p1
-#SBATCH --account=paceship-dsgt_clef2026
+#SBATCH --account=paceship-clef2026_plantclef
 #SBATCH --partition=gpu-h200
 #SBATCH --qos=inferno
-#SBATCH --gres=gpu:h200:2
+#SBATCH --gres=gpu:h200:4
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=128G
+#SBATCH --cpus-per-task=32
+#SBATCH --mem=256G
 #SBATCH --time=72:00:00
 #SBATCH --output=logs/phase1_%x_%A.out
 #SBATCH --error=logs/phase1_%x_%A.err
@@ -17,7 +17,7 @@ set -euo pipefail
 
 # ---- Configuration ----
 VARIANT="${VARIANT:-base}"
-NGPUS="${NGPUS:-2}"
+NGPUS="${NGPUS:-4}"
 
 PLANTCLEF_ROOT="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0"
 REPO_ROOT="/storage/home/hcoda1/2/aerten3/plantclef-2026"
