@@ -25,6 +25,9 @@ set -euo pipefail
 MODEL="${MODEL:-dinov2_large}"
 NGPUS="${NGPUS:-4}"
 GRAD_ACCUM="${GRAD_ACCUM:-4}"
+# USE_EMA_INIT=1 loads state_dict_ema from Phase 1 best checkpoint when starting
+# (recommended when P1 was stopped before full convergence; default on).
+USE_EMA_INIT="${USE_EMA_INIT:-1}"
 
 PLANTCLEF_ROOT="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0"
 REPO_ROOT="/storage/home/hcoda1/2/aerten3/plantclef-2026"
@@ -71,6 +74,14 @@ if [ -f "${LAST_CKPT}" ]; then
 else
     echo "Starting from Phase 1 checkpoint: ${PHASE1_BEST}"
     CHECKPOINT_ARG="--initial-checkpoint ${PHASE1_BEST}"
+    # Load EMA head weights from Phase 1 (much better than instantaneous weights
+    # when P1 stopped early with high LR). Default: on. Disable with USE_EMA_INIT=0.
+    if [ "${USE_EMA_INIT}" = "1" ]; then
+        CHECKPOINT_ARG="${CHECKPOINT_ARG} --initial-checkpoint-use-ema"
+        echo "Will load EMA weights (state_dict_ema) from Phase 1 checkpoint"
+    else
+        echo "Will load regular weights (state_dict) from Phase 1 checkpoint"
+    fi
 fi
 
 ${CMD} "${EXP_DIR}/train_vit.py" \

@@ -128,6 +128,10 @@ group.add_argument('--pretrained-path', default=None, type=str,
                    help='Load this checkpoint as if they were the pretrained weights (with adaptation).')
 group.add_argument('--initial-checkpoint', default='', type=str, metavar='PATH',
                    help='Load this checkpoint into model after initialization (default: none)')
+group.add_argument('--initial-checkpoint-use-ema', action='store_true', default=False,
+                   help='When loading --initial-checkpoint, pull state_dict_ema instead of '
+                        'state_dict. Useful when Phase 1 is stopped early with a high LR and '
+                        'the EMA weights are substantially better than the instantaneous ones.')
 group.add_argument('--resume', default='', type=str, metavar='PATH',
                    help='Resume full model and optimizer state from checkpoint (default: none)')
 group.add_argument('--no-resume-opt', action='store_true', default=False,
@@ -537,6 +541,10 @@ def main():
             num_classes=-1,  # force head adaptation
         )
 
+    # If we want to load EMA weights from --initial-checkpoint, skip timm's built-in
+    # load (which always uses state_dict, not state_dict_ema) and do it manually below.
+    _defer_initial_checkpoint = bool(args.initial_checkpoint) and args.initial_checkpoint_use_ema
+
     model = create_model(
         args.model,
         pretrained=args.pretrained,
@@ -549,10 +557,16 @@ def main():
         bn_momentum=args.bn_momentum,
         bn_eps=args.bn_eps,
         scriptable=args.torchscript,
-        checkpoint_path=args.initial_checkpoint,
+        checkpoint_path='' if _defer_initial_checkpoint else args.initial_checkpoint,
         **factory_kwargs,
         **args.model_kwargs,
     )
+    if _defer_initial_checkpoint:
+        load_checkpoint(model, args.initial_checkpoint, use_ema=True, strict=False)
+        if utils.is_primary(args):
+            _logger.info(
+                f'Loaded EMA weights from --initial-checkpoint: {args.initial_checkpoint}'
+            )
     if args.head_init_scale is not None:
         with torch.no_grad():
             model.get_classifier().weight.mul_(args.head_init_scale)
