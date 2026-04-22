@@ -16,16 +16,16 @@ input_size:
 # epochs=100 defines the cosine LR schedule horizon.
 # max_epoch=20 stops training after 20 epochs for the tournament race.
 # To continue the winner: re-submit with --resume and --max-epoch 100 (or omit max_epoch).
-epochs: 100
+epochs: 80
 max_epoch: 20
 batch_size: 64  # 64 * 4 GPUs * 4 grad_accum = 1024 effective, close to ViT-B ref (~1152). ~51 GB/GPU est.
 opt: adamw
-lr: 5.0e-5
+lr: 8.0e-5
 weight_decay: 0.05
-layer_decay: 0.75
+layer_decay: 0.85
 sched: cosine
-warmup_lr: 1.0e-6
-warmup_epochs: 5
+warmup_lr: 3.0e-5
+warmup_epochs: 2
 min_lr: 1.0e-7
 
 # Regularization (more stochastic depth for larger ViT)
