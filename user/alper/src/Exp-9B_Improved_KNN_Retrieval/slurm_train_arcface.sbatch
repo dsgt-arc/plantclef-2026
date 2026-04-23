@@ -44,11 +44,11 @@ python "${SRC_ROOT}/train_arcface_head.py" \
   --train-emb-dir "${TRAIN_EMB_DIR}" \
   --species-map "${SPECIES_MAP}" \
   --out-dir "${OUT_DIR}" \
-  --epochs 5 \
+  --epochs 15 \
   --batch-size 16384 \
   --lr 1e-3 \
   --weight-decay 1e-4 \
-  --warmup-steps 500 \
+  --warmup-steps 100 \
   --margin 0.30 \
   --scale 30.0 \
   --k-sub 3 \
