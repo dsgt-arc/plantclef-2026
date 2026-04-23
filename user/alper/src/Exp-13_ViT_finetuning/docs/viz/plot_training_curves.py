@@ -16,6 +16,8 @@ VITB_CSV = Path(
 )
 DINOV2_LOG = Path(r"C:/Users/alper/Desktop/phase2_vit-p2_6744298.err")
 DINOV3_LOG = Path(r"C:/Users/alper/Desktop/phase2_vit-p2_6744244.err")
+DINOV2_V2_LOG = Path(r"C:/Users/alper/Desktop/phase2_vit-p2_7164569.err")
+DINOV2_V2_OFFSET = 20  # v2 epoch 0 == global epoch 20
 
 
 def parse_vitb_summary(path):
@@ -72,28 +74,35 @@ def parse_vitl_log(path):
     return epochs, raw, ema
 
 
-def plot_combined(vitb, dv2, dv3, outfile):
+def plot_combined(vitb, dv2, dv3, dv2_v2, outfile):
     vitb_ep, vitb_top1 = vitb
     dv2_ep, dv2_raw, dv2_ema = dv2
     dv3_ep, dv3_raw, dv3_ema = dv3
+    dv2_v2_ep, dv2_v2_raw, dv2_v2_ema = dv2_v2
 
     fig, ax = plt.subplots(figsize=(11, 6.5))
 
     ax.plot(vitb_ep, vitb_top1, color="#888888", lw=2.0,
             label="ViT-B DINOv2 (reference, 100 ep)", zorder=2)
     ax.plot(dv2_ep, dv2_raw, color="#1f77b4", lw=2.2, marker="o", ms=4.5,
-            label="ViT-L DINOv2 (raw)", zorder=4)
+            label="ViT-L DINOv2 v1 (raw)", zorder=4)
     ax.plot(dv2_ep, dv2_ema, color="#1f77b4", lw=1.4, ls="--", marker="o", ms=3,
-            label="ViT-L DINOv2 (EMA)", zorder=3, alpha=0.75)
+            label="ViT-L DINOv2 v1 (EMA)", zorder=3, alpha=0.75)
     ax.plot(dv3_ep, dv3_raw, color="#d62728", lw=2.2, marker="s", ms=4.5,
-            label="ViT-L DINOv3 (raw)", zorder=4)
+            label="ViT-L DINOv3 v1 (raw)", zorder=4)
     ax.plot(dv3_ep, dv3_ema, color="#d62728", lw=1.4, ls="--", marker="s", ms=3,
-            label="ViT-L DINOv3 (EMA)", zorder=3, alpha=0.75)
+            label="ViT-L DINOv3 v1 (EMA)", zorder=3, alpha=0.75)
+    if dv2_v2_ep:
+        ax.plot(dv2_v2_ep, dv2_v2_raw, color="#2ca02c", lw=2.2, marker="^", ms=5,
+                label="ViT-L DINOv2 v2 (raw, lr=8e-5)", zorder=5)
+        ax.plot(dv2_v2_ep, dv2_v2_ema, color="#2ca02c", lw=1.4, ls="--", marker="^", ms=3,
+                label="ViT-L DINOv2 v2 (EMA)", zorder=5, alpha=0.75)
 
     last_vitb_ep = vitb_ep[-1] if vitb_ep else 0
     max_ep = max(last_vitb_ep,
                  dv2_ep[-1] if dv2_ep else 0,
-                 dv3_ep[-1] if dv3_ep else 0)
+                 dv3_ep[-1] if dv3_ep else 0,
+                 dv2_v2_ep[-1] if dv2_v2_ep else 0)
     ax.set_xlim(-1, max_ep + 2)
     ax.set_xticks(range(0, max_ep + 2, 5))
 
@@ -125,20 +134,25 @@ def plot_combined(vitb, dv2, dv3, outfile):
     print(f"Wrote {outfile.with_suffix('.pdf')}")
 
 
-def plot_raw_only(vitb, dv2, dv3, outfile):
+def plot_raw_only(vitb, dv2, dv3, dv2_v2, outfile):
     vitb_ep, vitb_top1 = vitb
     dv2_ep, dv2_raw, _ = dv2
     dv3_ep, dv3_raw, _ = dv3
+    dv2_v2_ep, dv2_v2_raw, _ = dv2_v2
 
     fig, ax = plt.subplots(figsize=(11, 6.5))
     ax.plot(vitb_ep, vitb_top1, color="#888888", lw=2.2,
             label="ViT-B DINOv2 (reference, 100 ep)")
     ax.plot(dv2_ep, dv2_raw, color="#1f77b4", lw=2.4, marker="o", ms=5,
-            label="ViT-L DINOv2")
+            label="ViT-L DINOv2 v1 (lr=5e-5)")
     ax.plot(dv3_ep, dv3_raw, color="#d62728", lw=2.4, marker="s", ms=5,
-            label="ViT-L DINOv3")
+            label="ViT-L DINOv3 v1 (lr=5e-5)")
+    if dv2_v2_ep:
+        ax.plot(dv2_v2_ep, dv2_v2_raw, color="#2ca02c", lw=2.4, marker="^", ms=6,
+                label="ViT-L DINOv2 v2 (lr=8e-5, resumed from E19)")
 
-    max_ep = max(vitb_ep[-1], dv2_ep[-1], dv3_ep[-1])
+    max_ep = max(vitb_ep[-1], dv2_ep[-1], dv3_ep[-1],
+                 dv2_v2_ep[-1] if dv2_v2_ep else 0)
     ax.set_xlim(-1, max_ep + 2)
     ax.set_xticks(range(0, max_ep + 2, 5))
     ax.set_xlabel("Epoch", fontsize=12)
@@ -163,14 +177,27 @@ def main():
     dv2 = parse_vitl_log(DINOV2_LOG)
     dv3 = parse_vitl_log(DINOV3_LOG)
 
-    print(f"ViT-B reference: {len(vitb[0])} epochs (0..{vitb[0][-1]})")
-    print(f"ViT-L DINOv2:    {len(dv2[0])} epochs (0..{dv2[0][-1] if dv2[0] else '?'}),"
-          f" raw final={dv2[1][-1]:.2f}, ema final={dv2[2][-1]:.2f}")
-    print(f"ViT-L DINOv3:    {len(dv3[0])} epochs (0..{dv3[0][-1] if dv3[0] else '?'}),"
-          f" raw final={dv3[1][-1]:.2f}, ema final={dv3[2][-1]:.2f}")
+    dv2_v2_raw_list, dv2_v2_ema_list = [], []
+    dv2_v2_ep_list = []
+    if DINOV2_V2_LOG.exists():
+        v2_ep, v2_raw, v2_ema = parse_vitl_log(DINOV2_V2_LOG)
+        dv2_v2_ep_list = [e + DINOV2_V2_OFFSET for e in v2_ep]
+        dv2_v2_raw_list = v2_raw
+        dv2_v2_ema_list = v2_ema
+    dv2_v2 = (dv2_v2_ep_list, dv2_v2_raw_list, dv2_v2_ema_list)
 
-    plot_combined(vitb, dv2, dv3, OUT_DIR / "training_curves.png")
-    plot_raw_only(vitb, dv2, dv3, OUT_DIR / "training_curves_raw.png")
+    print(f"ViT-B reference: {len(vitb[0])} epochs (0..{vitb[0][-1]})")
+    print(f"ViT-L DINOv2 v1: {len(dv2[0])} epochs (0..{dv2[0][-1] if dv2[0] else '?'}),"
+          f" raw final={dv2[1][-1]:.2f}, ema final={dv2[2][-1]:.2f}")
+    print(f"ViT-L DINOv3 v1: {len(dv3[0])} epochs (0..{dv3[0][-1] if dv3[0] else '?'}),"
+          f" raw final={dv3[1][-1]:.2f}, ema final={dv3[2][-1]:.2f}")
+    if dv2_v2_ep_list:
+        print(f"ViT-L DINOv2 v2: {len(dv2_v2_ep_list)} epochs"
+              f" (global {dv2_v2_ep_list[0]}..{dv2_v2_ep_list[-1]}),"
+              f" raw final={dv2_v2_raw_list[-1]:.2f}, ema final={dv2_v2_ema_list[-1]:.2f}")
+
+    plot_combined(vitb, dv2, dv3, dv2_v2, OUT_DIR / "training_curves.png")
+    plot_raw_only(vitb, dv2, dv3, dv2_v2, OUT_DIR / "training_curves_raw.png")
 
 
 if __name__ == "__main__":

@@ -7,7 +7,10 @@
       "Bash(sed -i 's/paceship-dsgt_clef2026/paceship-clef2026_plantclef/g' user/alper/src/Exp-10_ConvNext_finetuning/docs/Exp10_ConvNext_Finetuning_Plan.md)",
       "Bash(grep -rl \"paceship-dsgt_clef2026\" user/alper/)",
       "Bash(grep -nE \"\\(Best metric|Test \\\\\\(EMA\\\\\\): \\\\[[ ]*[0-9]+/[ ]*[0-9]+\\\\]$|Current checkpoints|Train: [0-9]+ \\\\[[ ]*0/\\)\" \"C:/Users/alper/Desktop/phase1_vit-p1_6567862.err\")",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(awk -F\"'\" '{print $2\" \"$3}')",
+      "Bash(awk '{gsub\\(\",\",\"\",$2\\); n=split\\($1,a,\"-\"\\); split\\(a[n],b,\".\"\\); print b[1], $2}')",
+      "Bash(sort -u -k1 -n)"
     ]
   }
 }

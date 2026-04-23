@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-9\"* -name \"*.py\")",
+      "Bash(xargs grep *)",
+      "Bash(find \"C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-9\"* -name \"README*\" -o -name \"*.md\")",
+      "Bash(find *)"
+    ]
+  }
+}
