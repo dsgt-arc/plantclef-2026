@@ -95,11 +95,11 @@ case ${SLURM_ARRAY_TASK_ID} in
     python "${SRC_ROOT}/multiscale_aggregate_knn.py" "${COMMON_ARGS[@]}" \
       --faiss-index "${NEW_INDEX}" \
       --faiss-labels "${NEW_LABELS}" \
-      --out-dir "${OUT_BASE}/new_knn_arcface_512d" \
+      --out-dir "${OUT_BASE}/new_knn_arcface_768d" \
       --embedding-col "emb_arcface_f16" \
-      --embedding-dim 512
+      --embedding-dim 768
     echo ""
-    echo "Output CSV dir: ${OUT_BASE}/new_knn_arcface_512d"
+    echo "Output CSV dir: ${OUT_BASE}/new_knn_arcface_768d"
     ;;
 esac
 

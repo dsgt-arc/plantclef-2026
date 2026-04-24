@@ -52,7 +52,7 @@ python "${SRC_ROOT}/train_arcface_head.py" \
   --margin 0.30 \
   --scale 30.0 \
   --k-sub 3 \
-  --out-dim 512 \
+  --out-dim 768 \
   --label-smoothing 0.10 \
   --num-workers 4 \
   --log-every 20 \

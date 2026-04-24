@@ -74,7 +74,7 @@ python "${SRC_ROOT}/multiscale_aggregate_knn.py" \
   --scales "4,5,6" \
   --beta-singles "${BETA_S}" \
   --embedding-col "emb_arcface_f16" \
-  --embedding-dim 512
+  --embedding-dim 768
 
 echo "=== Done: beta_multi=${BETA_M}, beta_single=${BETA_S} ==="
 echo "Exp-9 control (768-d retriever): beta_multi=0.80, beta_single=1.0 -> F1=0.41754"

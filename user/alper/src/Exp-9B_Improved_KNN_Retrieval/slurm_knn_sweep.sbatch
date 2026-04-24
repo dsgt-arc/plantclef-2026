@@ -79,7 +79,7 @@ python "${SRC_ROOT}/multiscale_aggregate_knn.py" \
   --thresholds "0.040,0.060,0.070,0.080,0.090,0.100,0.110" \
   --scales "4,5,6" \
   --embedding-col "emb_arcface_f16" \
-  --embedding-dim 512
+  --embedding-dim 768
 
 echo ""
 echo "=== Exp-9B sweep complete ==="

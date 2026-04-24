@@ -76,7 +76,7 @@ COMMON_ARGS=(
   --thresholds "0.100"
   --scales "4,5,6"
   --embedding-col "emb_arcface_f16"
-  --embedding-dim 512
+  --embedding-dim 768
 )
 
 case ${SLURM_ARRAY_TASK_ID} in

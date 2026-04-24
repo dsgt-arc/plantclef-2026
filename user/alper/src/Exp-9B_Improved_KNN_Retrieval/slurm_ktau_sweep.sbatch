@@ -75,6 +75,6 @@ python "${SRC_ROOT}/multiscale_aggregate_knn.py" \
   --knn-ks "${KNN_K}" \
   --knn-taus "${KNN_TAU}" \
   --embedding-col "emb_arcface_f16" \
-  --embedding-dim 512
+  --embedding-dim 768
 
 echo "=== Done: k=${KNN_K}, tau=${KNN_TAU} ==="
