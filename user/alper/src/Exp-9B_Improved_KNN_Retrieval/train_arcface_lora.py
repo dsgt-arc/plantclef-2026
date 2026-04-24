@@ -152,27 +152,46 @@ class ImageFolderWithSpeciesId(ImageFolder):
 
     def __init__(self, root: str, transform=None, species_to_class: dict[int, int] | None = None):
         super().__init__(root, transform=transform)
+        print(f"[data] ImageFolder scan: root={root}")
+        print(f"[data]   found {len(self.classes)} subdirectories and {len(self.samples)} total images")
+        if self.classes:
+            print(f"[data]   first 5 subdir names: {self.classes[:5]}")
+            print(f"[data]   last 5 subdir names:  {self.classes[-5:]}")
         if species_to_class is None:
             self._remap = None
-        else:
-            new_samples = []
-            n_skipped = 0
-            for path, local_idx in self.samples:
-                dir_name = self.classes[local_idx]
-                try:
-                    sid = int(dir_name)
-                except ValueError:
-                    n_skipped += 1
-                    continue
-                if sid not in species_to_class:
-                    n_skipped += 1
-                    continue
-                new_samples.append((path, species_to_class[sid]))
-            self.samples = new_samples
-            self.targets = [t for _, t in new_samples]
-            self._remap = True
-            print(f"[data] remapped ImageFolder to canonical class indices, "
-                  f"skipped {n_skipped} samples")
+            return
+
+        new_samples: list[tuple[str, int]] = []
+        n_skipped_nonint = 0
+        n_skipped_unmapped = 0
+        for path, local_idx in self.samples:
+            dir_name = self.classes[local_idx]
+            try:
+                sid = int(dir_name)
+            except ValueError:
+                n_skipped_nonint += 1
+                continue
+            if sid not in species_to_class:
+                n_skipped_unmapped += 1
+                continue
+            new_samples.append((path, species_to_class[sid]))
+
+        self.samples = new_samples
+        self.targets = [t for _, t in new_samples]
+        self._remap = True
+        print(f"[data] remap: kept={len(new_samples)}  "
+              f"skipped_nonint_dirname={n_skipped_nonint}  "
+              f"skipped_unmapped_species={n_skipped_unmapped}")
+
+        if len(new_samples) == 0:
+            raise RuntimeError(
+                f"After remap, 0 samples remain under {root}. "
+                f"Subdirectory names (first 5): {self.classes[:5]}. "
+                f"Expected integer species_id folder names (e.g. '1353932'). "
+                f"Either (a) --data-dir points to the wrong level of the tree, "
+                f"or (b) subdirectories use scientific names instead of species_ids. "
+                f"In case (b) the remap logic needs a name->species_id lookup."
+            )
 
 
 @dataclass
