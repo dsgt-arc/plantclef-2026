@@ -35,7 +35,7 @@ echo "host: $(hostname)"
 echo "job:  ${SLURM_JOB_NAME}  id: ${SLURM_JOB_ID}"
 nvidia-smi || true
 
-DATA_DIR="${PLANTCLEF_ROOT}/train/PlantCLEF2024"
+DATA_DIR="${PLANTCLEF_ROOT}/train/PlantCLEF2024/train"
 BACKBONE_PATH="${PLANTCLEF_ROOT}/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth"
 CHECKPOINT="${PLANTCLEF_ROOT}/aerten3/exp9b_knn/arcface_lora/lora_head_final.pt"
 SPECIES_MAP="${PLANTCLEF_ROOT}/data/raw/class_id_to_species_mapping/class_to_species_id.json"
