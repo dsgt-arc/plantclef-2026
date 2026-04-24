@@ -38,8 +38,8 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-EXP8_DIR = os.path.join(os.path.dirname(__file__), "..", "Exp-8_Quantile_Aggregation")
-sys.path.insert(0, os.path.abspath(EXP8_DIR))
+EXP7_DIR = os.path.join(os.path.dirname(__file__), "..", "Exp-7_Multiscale_tiling")
+sys.path.insert(0, os.path.abspath(EXP7_DIR))
 
 from aggregate_tiles import (
     AggregationConfig,
