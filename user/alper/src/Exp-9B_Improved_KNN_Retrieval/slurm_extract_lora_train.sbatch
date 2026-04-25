@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=exp9b-extract-lora-train
 #SBATCH --account=paceship-clef2026_plantclef
-#SBATCH --partition=gpu-h200
+#SBATCH --partition=gpu-rtx6000
 #SBATCH --qos=inferno
-#SBATCH --gres=gpu:h200:1
+#SBATCH --gres=gpu:rtx_6000:1
 #SBATCH --cpus-per-task=6
-#SBATCH --mem=96G
-#SBATCH --time=04:00:00
+#SBATCH --mem=64G
+#SBATCH --time=06:00:00
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 #SBATCH --mail-type=END,FAIL
@@ -52,7 +52,7 @@ python "${SRC_ROOT}/extract_embeddings_lora_train.py" \
   --checkpoint "${CHECKPOINT}" \
   --species-map "${SPECIES_MAP}" \
   --out-dir "${OUT_DIR}" \
-  --batch-size 128 \
+  --batch-size 96 \
   --num-workers 6 \
   --shard-size 70000 \
   --jpeg-quality 0
