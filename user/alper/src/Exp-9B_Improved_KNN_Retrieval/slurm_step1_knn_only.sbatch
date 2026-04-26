@@ -44,8 +44,11 @@ source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-
 echo "Running on host: $(hostname)"
 echo "Job: ${SLURM_JOB_NAME}  ArrayTask: ${SLURM_ARRAY_TASK_ID}"
 
-# Shared test tile parquets (projected; carry both embedding columns)
-TEST_DIR="${PLANTCLEF_ROOT}/aerten3/exp9b_knn/embeddings_arcface/test"
+# Shared test tile parquets — Tier 2 LoRA outputs.
+# These preserve the original embedding_orig_f16 (768-d frozen DINOv2) column
+# AND carry the new emb_arcface_f16 (768-d Tier 2 LoRA+ArcFace) column. Both
+# branches read the same files; only the column they read differs.
+TEST_DIR="${PLANTCLEF_ROOT}/aerten3/exp9b_knn/embeddings_arcface_lora/test"
 SCALE4_DIR="${TEST_DIR}"
 SCALE5_DIR="${TEST_DIR}"
 SCALE6_DIR="${TEST_DIR}"
