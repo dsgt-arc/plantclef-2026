@@ -43,7 +43,7 @@ source /storage/home/hcoda1/2/aerten3/plantclef-2026/user/alper/experiments/001-
 echo "Running on host: $(hostname)"
 echo "Job: ${SLURM_JOB_NAME}  ArrayTask: ${SLURM_ARRAY_TASK_ID}"
 
-TEST_DIR="${PLANTCLEF_ROOT}/aerten3/exp9b_knn/embeddings_arcface/test"
+TEST_DIR="${PLANTCLEF_ROOT}/aerten3/exp9b_knn/embeddings_arcface_lora/test"
 SCALE4_DIR="${TEST_DIR}"
 SCALE5_DIR="${TEST_DIR}"
 SCALE6_DIR="${TEST_DIR}"

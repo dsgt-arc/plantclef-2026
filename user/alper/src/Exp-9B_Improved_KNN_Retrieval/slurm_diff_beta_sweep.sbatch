@@ -40,7 +40,7 @@ BETA_S=1.00
 echo "Running on host: $(hostname)"
 echo "Job: ${SLURM_JOB_NAME}  ArrayTask: ${SLURM_ARRAY_TASK_ID}  beta_multi=${BETA_M}  beta_single=${BETA_S}"
 
-TEST_DIR="${PLANTCLEF_ROOT}/aerten3/exp9b_knn/embeddings_arcface/test"
+TEST_DIR="${PLANTCLEF_ROOT}/aerten3/exp9b_knn/embeddings_arcface_lora/test"
 SCALE4_DIR="${TEST_DIR}"
 SCALE5_DIR="${TEST_DIR}"
 SCALE6_DIR="${TEST_DIR}"

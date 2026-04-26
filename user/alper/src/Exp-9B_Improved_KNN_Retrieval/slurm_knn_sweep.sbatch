@@ -37,7 +37,7 @@ echo "Job: ${SLURM_JOB_NAME}  JobID: ${SLURM_JOB_ID}"
 # Projected test parquets — produced by project_embeddings.py --mode test.
 # Flat layout: scale_{4x4,5x5,6x6}.parquet all under this directory with
 # the original columns preserved plus the new emb_arcface_f16 column.
-TEST_DIR="${PLANTCLEF_ROOT}/aerten3/exp9b_knn/embeddings_arcface/test"
+TEST_DIR="${PLANTCLEF_ROOT}/aerten3/exp9b_knn/embeddings_arcface_lora/test"
 SCALE4_DIR="${TEST_DIR}"
 SCALE5_DIR="${TEST_DIR}"
 SCALE6_DIR="${TEST_DIR}"
