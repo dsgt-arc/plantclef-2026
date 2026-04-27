@@ -16,7 +16,10 @@ VITB_CSV = Path(
 )
 DINOV2_LOG = Path(r"C:/Users/alper/Desktop/phase2_vit-p2_6744298.err")
 DINOV3_LOG = Path(r"C:/Users/alper/Desktop/phase2_vit-p2_6744244.err")
-DINOV2_V2_LOG = Path(r"C:/Users/alper/Desktop/phase2_vit-p2_7164569.err")
+DINOV2_V2_LOGS = [
+    Path(r"C:/Users/alper/Desktop/phase2_vit-p2_7164569.err"),  # v2 E0-E19
+    Path(r"C:/Users/alper/Desktop/phase2_vit-p2_7394494.err"),  # v2 E20+ continuation
+]
 DINOV2_V2_OFFSET = 20  # v2 epoch 0 == global epoch 20
 
 
@@ -177,13 +180,17 @@ def main():
     dv2 = parse_vitl_log(DINOV2_LOG)
     dv3 = parse_vitl_log(DINOV3_LOG)
 
-    dv2_v2_raw_list, dv2_v2_ema_list = [], []
-    dv2_v2_ep_list = []
-    if DINOV2_V2_LOG.exists():
-        v2_ep, v2_raw, v2_ema = parse_vitl_log(DINOV2_V2_LOG)
-        dv2_v2_ep_list = [e + DINOV2_V2_OFFSET for e in v2_ep]
-        dv2_v2_raw_list = v2_raw
-        dv2_v2_ema_list = v2_ema
+    raw_by_ep, ema_by_ep = {}, {}
+    for log_path in DINOV2_V2_LOGS:
+        if not log_path.exists():
+            continue
+        v2_ep, v2_raw, v2_ema = parse_vitl_log(log_path)
+        for e, r, m in zip(v2_ep, v2_raw, v2_ema):
+            raw_by_ep[e + DINOV2_V2_OFFSET] = r
+            ema_by_ep[e + DINOV2_V2_OFFSET] = m
+    dv2_v2_ep_list = sorted(raw_by_ep.keys())
+    dv2_v2_raw_list = [raw_by_ep[e] for e in dv2_v2_ep_list]
+    dv2_v2_ema_list = [ema_by_ep[e] for e in dv2_v2_ep_list]
     dv2_v2 = (dv2_v2_ep_list, dv2_v2_raw_list, dv2_v2_ema_list)
 
     print(f"ViT-B reference: {len(vitb[0])} epochs (0..{vitb[0][-1]})")
