@@ -79,7 +79,7 @@ python "${SRC_ROOT}/multiscale_aggregate.py" \
     --alpha 0.15 \
     --topk 10 \
     --image-topk 64 \
-    --schemes "E,J,K,L" \
+    --schemes "A,E,J,K,L" \
     --thresholds "0.075,0.100,0.125,0.150"
 
 # To compare fairly against ViT-B, run aggregate_vitB_standalone.sbatch

@@ -75,11 +75,12 @@ python "${SRC_ROOT}/multiscale_aggregate.py" \
     --alpha 0.15 \
     --topk 10 \
     --image-topk 64 \
-    --schemes "E,J,K,L" \
+    --schemes "A,E,J,K,L" \
     --thresholds "0.075,0.100,0.125,0.150"
 
 echo "=== Done. Submit CSVs in ${OUT_DIR} to Kaggle. ==="
 echo "Existing Exp-7 ViT-B published numbers (different alpha tunings, NOT matched):"
+echo "  Scheme A (4x4 only, 16 tiles): 0.35698 (Exp-3/4 baseline)"
 echo "  Scheme E (4+5+6, 77 tiles)   : 0.39997 @ thr=0.100, alpha=0.10 (Exp-8 best)"
 echo "                                 0.40100 @ thr=0.100, alpha=0.05 (Exp-8 final)"
 echo "  Scheme J (3+4+5+6, 86 tiles) : 0.38227 @ thr=0.075, alpha=0.6"

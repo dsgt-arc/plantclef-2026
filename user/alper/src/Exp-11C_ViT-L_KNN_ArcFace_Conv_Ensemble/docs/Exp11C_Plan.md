@@ -29,6 +29,7 @@ Run two parallel aggregations using identical parameters (alpha=0.15, T=1.5, ima
 
 | Scheme | Tiles | sbatch |
 |---|---|---|
+| **A (4)** = 4 only (single-scale baseline) | 16 | both |
 | **E (456)** = 4+5+6 | 77 | both |
 | **J (3456)** = 3+4+5+6 | 86 | both |
 | **K (4567)** = 4+5+6+7 | 126 | both |
@@ -45,6 +46,7 @@ Each generates 16 CSVs (4 schemes × 4 thresholds). Submit matching pairs to Kag
 **Existing ViT-B published numbers (from `Exp-7/docs/Exp7_Results_Summary.md`, NOT alpha-matched to this run):**
 | Scheme | Tiles | Published F1 (ViT-B) | Config |
 |---|---|---|---|
+| A (4 only) | 16 | 0.35698 | Exp-3/4 baseline |
 | E (456) | 77 | **0.40100** | thr=0.100, **alpha=0.05** |
 | J (3456) | 86 | 0.38227 | thr=0.075, **alpha=0.60** |
 | K (4567) | 126 | 0.38542 | thr=0.080, **alpha=0.60** |
