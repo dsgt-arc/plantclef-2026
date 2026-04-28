@@ -18,14 +18,16 @@ set -euo pipefail
 # MODEL: dinov2_large | dinov3_large
 MODEL="${MODEL:-dinov2_large}"
 SCALE="${SCALE:-9}"
+EXP_SUFFIX="${EXP_SUFFIX:-phase2}"  # e.g. phase2 or phase2v2 to pick the checkpoint dir
+OUTPUT_TAG="${OUTPUT_TAG:-${EXP_SUFFIX}}"  # output dir suffix; defaults to checkpoint suffix
 
 PLANTCLEF_ROOT="/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0"
 REPO_ROOT="/storage/home/hcoda1/2/aerten3/plantclef-2026"
 EXP_DIR="${REPO_ROOT}/user/alper/src/Exp-13_ViT_finetuning"
 IMAGE_DIR="${PLANTCLEF_ROOT}/data/raw/PlanCLEF_test_data/images"
-OUTPUT_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/exp13_vit_${MODEL}"
+OUTPUT_DIR="${PLANTCLEF_ROOT}/aerten3/parquet/exp13_vit_${MODEL}_${OUTPUT_TAG}"
 
-MODEL_PATH="${PLANTCLEF_ROOT}/aerten3/checkpoints/exp13_vit/vit_${MODEL}_phase2/model_best.pth.tar"
+MODEL_PATH="${PLANTCLEF_ROOT}/aerten3/checkpoints/exp13_vit/vit_${MODEL}_${EXP_SUFFIX}/model_best.pth.tar"
 
 # Map short model id to timm model name and tile size
 case "${MODEL}" in

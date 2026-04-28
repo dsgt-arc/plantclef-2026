@@ -10,7 +10,12 @@
       "Bash(python *)",
       "Bash(awk -F\"'\" '{print $2\" \"$3}')",
       "Bash(awk '{gsub\\(\",\",\"\",$2\\); n=split\\($1,a,\"-\"\\); split\\(a[n],b,\".\"\\); print b[1], $2}')",
-      "Bash(sort -u -k1 -n)"
+      "Bash(sort -u -k1 -n)",
+      "Bash(cp C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-7_Multiscale_tiling/aggregate_tiles.py C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-11C_ViT-L_KNN_ArcFace_Conv_Ensemble/)",
+      "Bash(cp C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-7_Multiscale_tiling/multiscale_aggregate.py C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-11C_ViT-L_KNN_ArcFace_Conv_Ensemble/)",
+      "Bash(cp C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-7_Multiscale_tiling/temporal_fusion.py C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-11C_ViT-L_KNN_ArcFace_Conv_Ensemble/)",
+      "Bash(cp C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-7_Multiscale_tiling/generate_submission.py C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-11C_ViT-L_KNN_ArcFace_Conv_Ensemble/)",
+      "Bash(cp C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-7_Multiscale_tiling/threshold_sweep.py C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-11C_ViT-L_KNN_ArcFace_Conv_Ensemble/)"
     ]
   }
 }
