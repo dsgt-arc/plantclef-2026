@@ -48,7 +48,8 @@
       "Bash(xargs -I {} basename {})",
       "Bash(sed 's/-[A-Z0-9]*$//')",
       "Bash(read p *)",
-      "Bash(sort -t: -k2 -rn)"
+      "Bash(sort -t: -k2 -rn)",
+      "Bash(python -c ' *)"
     ]
   }
 }
