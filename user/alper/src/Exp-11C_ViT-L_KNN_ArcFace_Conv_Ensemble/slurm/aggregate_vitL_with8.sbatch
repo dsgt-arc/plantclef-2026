@@ -56,7 +56,12 @@ mkdir -p "${SRC_ROOT}/logs" "${OUT_DIR}"
 
 echo "=== ViT-L aggregation including 8x8 (schemes M,N,O) ==="
 echo "Output: ${OUT_DIR}"
+echo ""
+echo "Threshold strategy:"
+echo "  M (no 3x3, has 8x8) -> thr in {0.075,0.080,0.085,0.090,0.100}"
+echo "  N,O (with 3x3+8x8)  -> thr in {0.080,0.090,0.100,0.115,0.130} (3x3 shifts optimum higher)"
 
+# Scheme M (no 3x3): tighter range around 0.080 (the no-3x3 ViT-L optimum)
 python "${SRC_ROOT}/multiscale_aggregate.py" \
     --scale3-dir "${PARQUET_ROOT}/scale_3x3.parquet" \
     --scale4-dir "${PARQUET_ROOT}/scale_4x4.parquet" \
@@ -72,10 +77,30 @@ python "${SRC_ROOT}/multiscale_aggregate.py" \
     --alpha 0.15 \
     --topk 10 \
     --image-topk 64 \
-    --schemes "M,N,O" \
-    --thresholds "0.075,0.080,0.085,0.100" \
+    --schemes "M" \
+    --thresholds "0.075,0.080,0.085,0.090,0.100" \
     --csv-prefix "vitL_"
 
-echo "=== Done. 12 CSVs in ${OUT_DIR} (3 schemes × 4 thresholds). ==="
+# Schemes N, O (with 3x3): expanded range up through 0.130
+python "${SRC_ROOT}/multiscale_aggregate.py" \
+    --scale3-dir "${PARQUET_ROOT}/scale_3x3.parquet" \
+    --scale4-dir "${PARQUET_ROOT}/scale_4x4.parquet" \
+    --scale5-dir "${PARQUET_ROOT}/scale_5x5.parquet" \
+    --scale6-dir "${PARQUET_ROOT}/scale_6x6.parquet" \
+    --scale7-dir "${PARQUET_ROOT}/scale_7x7.parquet" \
+    --scale8-dir "${PARQUET_ROOT}/scale_8x8.parquet" \
+    --model-path "${MODEL_PATH}" \
+    --species-map "${SPECIES_MAP}" \
+    --class-mask-npy "${GEO_MASK}" \
+    --out-dir "${OUT_DIR}" \
+    --temperature 1.5 \
+    --alpha 0.15 \
+    --topk 10 \
+    --image-topk 64 \
+    --schemes "N,O" \
+    --thresholds "0.080,0.090,0.100,0.115,0.130" \
+    --csv-prefix "vitL_"
+
+echo "=== Done. 15 CSVs in ${OUT_DIR} (M:5 + N:5 + O:5 = 15). ==="
 echo "Reference: vitL scheme L thr=0.080 alpha=0.15 = 0.40945 (best so far without 8x8)."
 echo "Note: still using alpha=0.15. If alpha sweep finds a better alpha, re-run this with that value."

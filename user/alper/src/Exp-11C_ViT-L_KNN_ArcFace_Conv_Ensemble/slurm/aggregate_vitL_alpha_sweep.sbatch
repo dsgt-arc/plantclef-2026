@@ -46,13 +46,18 @@ done
 source "${REPO_ROOT}/user/alper/experiments/001-embedding-extraction/.venv/bin/activate"
 mkdir -p "${SRC_ROOT}/logs" "${OUT_DIR}"
 
-echo "=== ViT-L alpha sweep at schemes J,K,L (thr=0.080, T=1.5) ==="
+echo "=== ViT-L alpha sweep at schemes J,K,L (T=1.5) ==="
 echo "Output: ${OUT_DIR}"
+echo ""
+echo "Threshold strategy:"
+echo "  K (no 3x3) -> thr=0.080 (matches scheme E optimum)"
+echo "  J,L (with 3x3) -> thr in {0.080, 0.100, 0.115} (3x3 shifts optimum higher)"
 
 # multiscale_aggregate.py runs one alpha at a time → invoke per alpha
+# Scheme K (no 3x3) at thr=0.080 only
 for ALPHA in 0.05 0.10 0.15 0.20 0.30; do
     echo ""
-    echo "--- alpha=${ALPHA} ---"
+    echo "--- alpha=${ALPHA} | K @ thr=0.080 ---"
     python "${SRC_ROOT}/multiscale_aggregate.py" \
         --scale3-dir "${PARQUET_ROOT}/scale_3x3.parquet" \
         --scale4-dir "${PARQUET_ROOT}/scale_4x4.parquet" \
@@ -67,10 +72,33 @@ for ALPHA in 0.05 0.10 0.15 0.20 0.30; do
         --alpha "${ALPHA}" \
         --topk 10 \
         --image-topk 64 \
-        --schemes "J,K,L" \
+        --schemes "K" \
         --thresholds "0.080" \
         --csv-prefix "vitL_"
 done
 
-echo "=== Done. 15 CSVs in ${OUT_DIR} (3 schemes × 5 alphas × 1 thr). ==="
+# Schemes J, L (contain 3x3) at thr ∈ {0.080, 0.100, 0.115} — expanded range
+for ALPHA in 0.05 0.10 0.15 0.20 0.30; do
+    echo ""
+    echo "--- alpha=${ALPHA} | J,L @ thr in {0.080, 0.100, 0.115} ---"
+    python "${SRC_ROOT}/multiscale_aggregate.py" \
+        --scale3-dir "${PARQUET_ROOT}/scale_3x3.parquet" \
+        --scale4-dir "${PARQUET_ROOT}/scale_4x4.parquet" \
+        --scale5-dir "${PARQUET_ROOT}/scale_5x5.parquet" \
+        --scale6-dir "${PARQUET_ROOT}/scale_6x6.parquet" \
+        --scale7-dir "${PARQUET_ROOT}/scale_7x7.parquet" \
+        --model-path "${MODEL_PATH}" \
+        --species-map "${SPECIES_MAP}" \
+        --class-mask-npy "${GEO_MASK}" \
+        --out-dir "${OUT_DIR}" \
+        --temperature 1.5 \
+        --alpha "${ALPHA}" \
+        --topk 10 \
+        --image-topk 64 \
+        --schemes "J,L" \
+        --thresholds "0.080,0.100,0.115" \
+        --csv-prefix "vitL_"
+done
+
+echo "=== Done. 35 CSVs in ${OUT_DIR} (5 alphas × [K@1thr + J,L@3thr] = 5*1 + 5*6 = 35). ==="
 echo "Reference: vitL scheme L thr=0.080 alpha=0.15 = 0.40945 (current best)."
