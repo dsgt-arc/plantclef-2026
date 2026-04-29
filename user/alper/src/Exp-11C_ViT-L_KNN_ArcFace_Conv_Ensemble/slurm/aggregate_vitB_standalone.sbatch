@@ -33,7 +33,7 @@ VITB_SCALE4="${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/phase1_tiles_
 
 SPECIES_MAP="${PLANTCLEF_ROOT}/data/raw/class_id_to_species_mapping/class_to_species_id.json"
 GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
-OUT_DIR="${SRC_ROOT}/submissions/vitB_standalone"
+OUT_DIR="${PLANTCLEF_ROOT}/aerten3/submissions/exp11c_vitB_standalone"
 
 # ViT-B model path (referenced by multiscale_aggregate.py for species map)
 MODEL_PATH="${PLANTCLEF_ROOT}/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth"
@@ -76,7 +76,8 @@ python "${SRC_ROOT}/multiscale_aggregate.py" \
     --topk 10 \
     --image-topk 64 \
     --schemes "A,E,J,K,L" \
-    --thresholds "0.075,0.100,0.125,0.150"
+    --thresholds "0.075,0.100,0.125,0.150" \
+    --csv-prefix "vitB_"
 
 echo "=== Done. Submit CSVs in ${OUT_DIR} to Kaggle. ==="
 echo "Existing Exp-7 ViT-B published numbers (different alpha tunings, NOT matched):"

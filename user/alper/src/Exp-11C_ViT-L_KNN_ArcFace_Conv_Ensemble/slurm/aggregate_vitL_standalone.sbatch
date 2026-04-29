@@ -38,7 +38,7 @@ export PYTHONPATH="${SRC_ROOT}:${PYTHONPATH:-}"
 PARQUET_ROOT="${PLANTCLEF_ROOT}/aerten3/parquet/exp13_vit_${MODEL}_${OUTPUT_TAG}"
 SPECIES_MAP="${PLANTCLEF_ROOT}/data/raw/class_id_to_species_mapping/class_to_species_id.json"
 GEO_MASK="${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy"
-OUT_DIR="${SRC_ROOT}/submissions/vitL_standalone_${MODEL}_${OUTPUT_TAG}"
+OUT_DIR="${PLANTCLEF_ROOT}/aerten3/submissions/exp11c_vitL_standalone_${MODEL}_${OUTPUT_TAG}"
 
 # Reuse pretrained ViT-B checkpoint just to load the species map header
 # (multiscale_aggregate.py requires --model-path but only uses it for the species map dim check)
@@ -80,7 +80,8 @@ python "${SRC_ROOT}/multiscale_aggregate.py" \
     --topk 10 \
     --image-topk 64 \
     --schemes "A,E,J,K,L" \
-    --thresholds "0.075,0.100,0.125,0.150"
+    --thresholds "0.075,0.100,0.125,0.150" \
+    --csv-prefix "vitL_"
 
 # To compare fairly against ViT-B, run aggregate_vitB_standalone.sbatch
 # (same alpha/thresholds/schemes) and submit the matching CSVs side-by-side.

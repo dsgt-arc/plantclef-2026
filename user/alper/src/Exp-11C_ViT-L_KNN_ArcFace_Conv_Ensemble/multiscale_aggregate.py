@@ -299,6 +299,7 @@ def run_sweep(
     image_topk: int = 64,
     tile_filter_k: int = 0,  # 0 = keep ALL tiles
     sweep_grid: Optional[List[Tuple[str, List[float]]]] = None,
+    csv_prefix: str = "",  # e.g. "vitL_" to disambiguate ViT-L vs ViT-B output filenames
 ) -> None:
     """Run the Phase 1 multi-scale sweep."""
 
@@ -367,7 +368,7 @@ def run_sweep(
         print(f"  -> {len(image_probs)} images in {time.time() - t0:.1f}s")
 
         # Save pre-fusion parquet
-        tag = f"scheme_{scheme_id}_T{temperature:.2f}"
+        tag = f"{csv_prefix}scheme_{scheme_id}_T{temperature:.2f}"
         prefusion_path = os.path.join(out_dir, f"{tag}_prefusion.parquet")
         save_aggregated(image_probs, prefusion_path)
 
@@ -488,6 +489,10 @@ def main() -> None:
     ap.add_argument("--thresholds", default=None,
                     help="Override thresholds (comma-separated). "
                          "If set, same thresholds for all schemes.")
+    ap.add_argument("--csv-prefix", default="",
+                    help="Optional prefix prepended to all output filenames "
+                         "(e.g., 'vitL_' or 'vitB_'). Useful for disambiguating "
+                         "outputs from multiple model runs in the same parent dir.")
 
     args = ap.parse_args()
 
@@ -532,6 +537,7 @@ def main() -> None:
         image_topk=args.image_topk,
         tile_filter_k=args.tile_filter_k,
         sweep_grid=sweep_grid,
+        csv_prefix=args.csv_prefix,
     )
 
 
