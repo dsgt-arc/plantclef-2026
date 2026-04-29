@@ -8,7 +8,7 @@
 #SBATCH --partition=gpu-rtx6000
 #SBATCH --qos=embers
 #SBATCH --gres=gpu:rtx_6000:1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=6
 #SBATCH --mem=48G
 #SBATCH --time=01:00:00
 #SBATCH --output=logs/p2v3_smoke_%A.out
