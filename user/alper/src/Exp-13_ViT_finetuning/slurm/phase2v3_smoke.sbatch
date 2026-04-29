@@ -42,11 +42,12 @@ python "${EXP_DIR}/train_vit.py" \
     --val-split train_full \
     --initial-checkpoint "${SRC_CKPT}" \
     --initial-checkpoint-use-ema \
-    --batch-size 16 \
-    --grad-accum-steps 1 \
+    --batch-size 8 \
+    --grad-accum-steps 2 \
+    --workers 6 \
     --epochs 1 \
-    --train-num-samples 5000 \
-    --val-num-samples 500 \
+    --train-num-samples 4000 \
+    --val-num-samples 400 \
     --log-interval 10 \
     --output "${OUTPUT_DIR}" \
     --experiment "vit_${MODEL}_phase2v3_smoke"
