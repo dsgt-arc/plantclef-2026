@@ -46,6 +46,7 @@ python "${EXP_DIR}/train_vit.py" \
     --grad-accum-steps 1 \
     --epochs 1 \
     --train-num-samples 5000 \
+    --val-num-samples 500 \
     --log-interval 10 \
     --output "${OUTPUT_DIR}" \
     --experiment "vit_${MODEL}_phase2v3_smoke"
