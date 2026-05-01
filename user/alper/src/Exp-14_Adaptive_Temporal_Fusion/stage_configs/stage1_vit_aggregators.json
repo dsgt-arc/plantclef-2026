@@ -1,0 +1,15 @@
+{
+  "stage_name": "stage1_vit_aggregators",
+  "axis": "vit_aggregator",
+  "variants": [
+    {"tag": "max",        "args": {"vit_aggregator": "max"}},
+    {"tag": "mean",       "args": {"vit_aggregator": "mean"}},
+    {"tag": "top2_mean",  "args": {"vit_aggregator": "top2_mean"}},
+    {"tag": "sim_w",      "args": {"vit_aggregator": "sim_w"}},
+    {"tag": "conf_w",     "args": {"vit_aggregator": "conf_w"}}
+  ],
+  "common_args": {
+    "cnxt_aggregator": "max"
+  },
+  "notes": "Stage 1 ViT — find best prior aggregator for the ViT branch. ConvNeXt held at max. Baseline alpha=0.15 ViT, 0.30 CNXT."
+}

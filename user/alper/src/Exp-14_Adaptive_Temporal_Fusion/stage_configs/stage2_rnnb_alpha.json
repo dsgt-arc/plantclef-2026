@@ -1,0 +1,16 @@
+{
+  "stage_name": "stage2_rnnb_alpha",
+  "axis": "alpha_src[RNNB] for ViT branch",
+  "variants": [
+    {"tag": "rnnb015", "args": {"vit_controller": "stage_configs/controllers/vit_rnnb015.json"}},
+    {"tag": "rnnb030", "args": {"vit_controller": "stage_configs/controllers/vit_rnnb030.json"}},
+    {"tag": "rnnb050", "args": {"vit_controller": "stage_configs/controllers/vit_rnnb050.json"}},
+    {"tag": "rnnb070", "args": {"vit_controller": "stage_configs/controllers/vit_rnnb070.json"}}
+  ],
+  "common_args": {
+    "vit_aggregator": "sim_w",
+    "cnxt_aggregator": "max",
+    "cnxt_controller": "stage_configs/controllers/cnxt_baseline.json"
+  },
+  "notes": "Stage 2 — only RNNB alpha varies. All other sources held at 0.15 ViT baseline. Mechanism-explicable: RNNB barren follow-ups need higher photo weight."
+}

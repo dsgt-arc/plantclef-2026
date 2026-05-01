@@ -35,7 +35,8 @@ EXP_DIR="${REPO_ROOT}/user/alper/src/Exp-13_ViT_finetuning"
 DATA_DIR="${PLANTCLEF_ROOT}/train/PlantCLEF2024"
 OUTPUT_DIR="${PLANTCLEF_ROOT}/aerten3/checkpoints/exp13_vit"
 
-PHASE1_BEST="${OUTPUT_DIR}/vit_${MODEL}_phase1/model_best.pth.tar"
+PHASE1_BEST="${PHASE1_BEST:-${OUTPUT_DIR}/vit_${MODEL}_phase1/model_best.pth.tar}"
+EXP_SUFFIX="${EXP_SUFFIX:-phase2}"
 
 # ---- Validate Phase 1 checkpoint exists ----
 if [ ! -f "${PHASE1_BEST}" ]; then
@@ -67,7 +68,7 @@ else
     CMD="python"
 fi
 
-LAST_CKPT="${OUTPUT_DIR}/vit_${MODEL}_phase2/last.pth.tar"
+LAST_CKPT="${OUTPUT_DIR}/vit_${MODEL}_${EXP_SUFFIX}/last.pth.tar"
 if [ -f "${LAST_CKPT}" ]; then
     echo "Resuming from ${LAST_CKPT}"
     CHECKPOINT_ARG="--resume ${LAST_CKPT}"
@@ -92,7 +93,7 @@ ${CMD} "${EXP_DIR}/train_vit.py" \
     ${CHECKPOINT_ARG} \
     --grad-accum-steps "${GRAD_ACCUM}" \
     --output "${OUTPUT_DIR}" \
-    --experiment "vit_${MODEL}_phase2"
+    --experiment "vit_${MODEL}_${EXP_SUFFIX}"
 
 echo "=== Phase 2 complete: ${MODEL} ==="
-echo "Best model: ${OUTPUT_DIR}/vit_${MODEL}_phase2/model_best.pth.tar"
+echo "Best model: ${OUTPUT_DIR}/vit_${MODEL}_${EXP_SUFFIX}/model_best.pth.tar"

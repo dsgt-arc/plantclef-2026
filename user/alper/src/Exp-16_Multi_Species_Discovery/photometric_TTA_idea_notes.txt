@@ -1,0 +1,4 @@
+ 2. Photometric TTA (Exp-15 unfreeze) — single best add. Already scaffolded; just needs the PACE Phase 1 run.
+  Different photometric variants surface different secondaries on the same dense quadrat — directly attacks the
+  count-bound failure mode at inference time, no model retraining. β=1.0 graceful fallback. Plausibly +0.003-0.010. Low
+   cost (~25 GPU-h, ~17 LB max).

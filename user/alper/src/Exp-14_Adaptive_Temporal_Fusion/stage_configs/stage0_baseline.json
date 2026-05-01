@@ -1,0 +1,12 @@
+{
+  "stage_name": "stage0_baseline",
+  "axis": "none (parity check)",
+  "variants": [
+    {"tag": "baseline", "args": {}}
+  ],
+  "common_args": {
+    "vit_aggregator": "max",
+    "cnxt_aggregator": "max"
+  },
+  "notes": "Stage 0 — must reproduce ens_knn_w0.77_thr0.100_top10.csv (F1=0.44428) with default ControllerConfig. Diff the produced CSV against the saved baseline; ≤0.001 numerical tolerance."
+}

@@ -38,7 +38,22 @@
       "Bash(grep -E '\\\\.\\(py|sbatch\\)$')",
       "Bash(git *)",
       "Bash(python -c \"import matplotlib; print\\('matplotlib', matplotlib.__version__\\)\")",
-      "Bash(python generate_figures.py)"
+      "Bash(python generate_figures.py)",
+      "Bash(find Exp-* -maxdepth 3 -name \"*.md\")",
+      "Bash(find \"C:\\\\Users\\\\alper\\\\Documents\\\\PlantCLEF_2026_Local\\\\_GitHub\\\\plantclef-2026\\\\user\\\\alper\\\\src\\\\Exp-9\"* -type f -name \"*.md\")",
+      "Bash(xargs ls *)",
+      "Bash(grep -E \"\\\\.\\(py|json|txt|csv\\)$\")",
+      "Bash(grep -E \"\\\\.md$\")",
+      "Bash(python3 *)",
+      "Bash(xargs -I {} basename {})",
+      "Bash(sed 's/-[A-Z0-9]*$//')",
+      "Bash(read p *)",
+      "Bash(sort -t: -k2 -rn)",
+      "Bash(python -c ' *)",
+      "Bash(mkdir -p ../Exp-16_Multi_Species_Discovery/outputs/n_floor_sweep)",
+      "Bash(python ../Exp-16_Multi_Species_Discovery/scripts/apply_n_floor_admission.py --ensemble-parquet outputs/stage11_avg/v_ld12RNNBonly_w0.77_ensemble.parquet --species-map pace_downloads/class_to_species_id.json --geo-mask pace_downloads/sw_europe_mask_bool.npy --habitat-mask outputs/signals/aquatic_blacklist_mask.npy --biogeo-npz outputs/signals/biogeo_per_source.npz --out-csv ../Exp-16_Multi_Species_Discovery/outputs/n_floor_sweep/sanity_n0.csv --n-floor 0 --ratio-floor 1000.0)",
+      "Bash(python diagnostics/sample_image_round2.py)",
+      "Bash(python \"C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-16_Multi_Species_Discovery/diagnostics/build_habitat_clusters.py\")"
     ]
   }
 }

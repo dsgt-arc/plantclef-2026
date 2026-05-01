@@ -191,12 +191,13 @@ def apply_prior_blend(
 def fuse_all(
     quadrat_probs: Dict[str, np.ndarray],
     location_groups: Dict[str, List[str]],
-    location_profiles: Dict[str, np.ndarray],
+    location_profiles,
     strategy: str,
     params: dict,
     site_groups: Optional[Dict[str, List[str]]] = None,
     site_profiles: Optional[Dict[str, np.ndarray]] = None,
     site_mode: str = "off",
+    alpha_map: Optional[Dict[str, float]] = None,
 ) -> Dict[str, np.ndarray]:
     """Apply a fusion strategy to all quadrats. Returns refined probs dict.
 
@@ -204,6 +205,16 @@ def fuse_all(
       "off"      — single-visit quadrats pass through unchanged (default)
       "fallback" — single-visit quadrats use site profile if available
       "always"   — all quadrats use site profile instead of location profile
+
+    location_profiles may be either a Dict[location, np.ndarray] (the
+    historical baseline form) OR a callable f(quadrat_id) -> np.ndarray
+    (used by per-image aggregators like sim_w). The dict form is
+    backward-compatible with all existing call sites.
+
+    alpha_map, when supplied, overrides params["alpha"] on a per-qid
+    basis for the prior_blend / blend_mask / blend_boost strategies.
+    Used by Exp-14's adaptive controller. Falls back to params["alpha"]
+    for any qid not present in the map.
     """
     refined = {}
     loc_for_qid = {}
@@ -217,10 +228,22 @@ def fuse_all(
             for qid in qids:
                 site_for_qid[qid] = site
 
+    profiles_is_callable = callable(location_profiles)
+
+    def _alpha_for(qid: str) -> float:
+        if alpha_map is not None and qid in alpha_map:
+            return float(alpha_map[qid])
+        return float(params["alpha"])
+
+    def _profile_for(qid: str, loc):
+        if profiles_is_callable:
+            return location_profiles(qid)
+        return location_profiles.get(loc) if loc else None
+
     for qid, p_q in quadrat_probs.items():
         loc = loc_for_qid.get(qid)
         loc_visit_count = len(location_groups.get(loc, []))
-        p_profile = location_profiles.get(loc) if loc else None
+        p_profile = _profile_for(qid, loc)
 
         # Determine which profile to use based on site_mode
         if site_mode == "always" and site_profiles:
@@ -251,15 +274,15 @@ def fuse_all(
                 p_q, p_profile, params["beta"], params["tau"]
             )
         elif strategy == "prior_blend":
-            refined[qid] = apply_prior_blend(p_q, p_profile, params["alpha"])
+            refined[qid] = apply_prior_blend(p_q, p_profile, _alpha_for(qid))
         elif strategy == "boost_mask":
             p = apply_cond_boost(p_q, p_profile, params["beta"], params["tau"])
             refined[qid] = apply_location_mask(p, p_profile, params["tau_loc"])
         elif strategy == "blend_mask":
-            p = apply_prior_blend(p_q, p_profile, params["alpha"])
+            p = apply_prior_blend(p_q, p_profile, _alpha_for(qid))
             refined[qid] = apply_location_mask(p, p_profile, params["tau_loc"])
         elif strategy == "blend_boost":
-            p = apply_prior_blend(p_q, p_profile, params["alpha"])
+            p = apply_prior_blend(p_q, p_profile, _alpha_for(qid))
             refined[qid] = apply_cond_boost(
                 p, p_profile, params["beta"], params["tau"]
             )
