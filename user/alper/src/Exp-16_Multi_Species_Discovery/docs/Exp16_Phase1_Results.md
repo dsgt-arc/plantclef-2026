@@ -1,9 +1,55 @@
-# Exp-16 Phase 1 — Vote-share rerank (closed: negative result)
+# Exp-16 Phase 1 — Vote-share rerank (CONFIRMED NEGATIVE 2026-04-30 after LB re-test)
 
-**Status:** closed 2026-04-27. Mechanism verified to be real (per-image
-species count rises monotonically with β on count-bound sources), but
-all three internal proxies regress monotonically. No (β, K) variant
-passes the gates. **0 LB submissions made.**
+**Status:** original closure 2026-04-27 (proxy-negative); re-tested
+2026-04-30 on LB after N3_r0.5's surprise win raised the question of
+whether proxies had under-predicted Phase 1 too. **LB conclusively
+disconfirmed any Phase 1 gain: all 4 β variants (0.10, 0.25, 0.50, 1.00)
+regress monotonically with β.** Even the most conservative β=0.10 loses
+0.019 LB. Compose with N-floor admission also loses 0.024 LB. The
+proxy-regime caveat does NOT extend to Phase 1.
+
+## LB results (post-blend formulation, byte-equivalent to Stage 13 at β=0)
+
+| Variant | LB F1 | Δ vs Stage 13 (0.45611) |
+|---|---|---|
+| postblend_K5_b0.10 | 0.43732 | −0.01879 |
+| postblend_K5_b0.25 | 0.41577 | −0.04034 |
+| postblend_K5_b0.50 | 0.38836 | −0.06775 |
+| postblend_K5_b1.00 | 0.35718 | −0.09893 |
+| compose_b0.10_N3r0.5 | 0.43203 | −0.02408 |
+| compose_b0.25_N3r0.5 | 0.40770 | −0.04841 |
+| compose_b0.50_N3r0.5 | 0.38029 | −0.07582 |
+
+## Why Phase 1 regresses where N3_r0.5 won
+
+Phase 1 vote-share rerank is **global** — it multiplies the entire
+ensemble probability vector by `(vote_share + ε)^β`, which reshuffles
+the alpine top-10 sets even at β=0.10 (CBN-PdlC: 639 / 816 set-diffs;
+CBN-Pla: 542 / 628 set-diffs at β=0.10 alone).
+
+Alpine drives 69 % of test set predictions (1444 / 2105 quadrats). Any
+disturbance there costs F1 heavily because the alpine pipeline was
+load-bearing for prior gains. The vote-share signal is not a clean
+discriminator on alpine quadrats — alpine vote_shares are dominated by
+the same site-typical species across paired visits, so multiplying by
+vote_share^β homogenizes alpine in a way that hurts the F1 score.
+
+N3_r0.5 won because it was **scoped to count-bound sources only**
+(GUARDEN, LISAH, OPTMix, RNNB) — alpine sources are untouched by N-floor
+admission (Δ stable_site_invariance was exactly +0.0000 across all
+N-floor variants).
+
+## Sharpened proxy-regime caveat
+
+The "proxies under-predict count-bound source uplift" caveat from N3_r0.5
+applies only when the mechanism is **scoped to where the proxies are
+saturated**. Mechanisms that ALSO affect alpine (where proxies are
+well-calibrated) cannot invoke this caveat. Future post-hoc admission
+mechanisms must be source-scoped to the count-bound sources to qualify
+for the caveat treatment.
+
+Lesson recorded: don't generalize one mechanism's proxy-disconfirmation
+to other mechanisms with different source scope.
 
 ## Wiring sanity
 
