@@ -281,7 +281,10 @@ def load_phase2v3_backbone(
     )
 
     print(f"[model] reading phase2v3 checkpoint: {backbone_path}")
-    ckpt = torch.load(backbone_path, map_location="cpu")
+    # weights_only=False because timm saves an argparse.Namespace alongside
+    # the state dict, which PyTorch 2.6's secure default refuses to unpickle.
+    # The checkpoint comes from our own training run, so trust is not an issue.
+    ckpt = torch.load(backbone_path, map_location="cpu", weights_only=False)
 
     sd = None
     if isinstance(ckpt, dict):
