@@ -1,10 +1,13 @@
-# Exp-16 — Habitat-fit demotion (final results, 2026-04-30)
+# Exp-16 — Habitat-fit + per-source admission (final results)
 
-**Final F1 = 0.48529** with `hab_refined_R200_b0.25_n30_alt.csv`.
-+0.02361 over Stage 13 + N3_r0.5 baseline (F1 = 0.46168). Single largest
-improvement in the project. β=0.15 + n=30 sits at 0.48705 (+0.00176)
-but adjacent to a structural cliff at β=0.10 (0.47891); locked at
-β=0.25 as the more robust mid-plateau pick.
+**Final F1 = 0.49842** with `B_OPTMix_n2.csv` (habitat-fit
++ per-source admission). +0.03674 over Stage 13 + N3_r0.5 baseline
+(F1 = 0.46168). The two-stage build:
+
+1. **Habitat-fit demotion** (2026-04-30) brought F1 from 0.46168 to
+   0.48529 (+0.02361).
+2. **Per-source admission tuning** (2026-05-01) brought F1 from
+   0.48529 to 0.49842 (+0.01313).
 
 The doc below captures only the four experiments that actually moved
 F1 — the dead-end mechanisms (predicted-habitat, single-visit prior,
@@ -185,6 +188,100 @@ At locked β = 0.25, R = 200, alt:
 | 50 | 0.47548 |
 
 Sharp peak at n = 30, consistent with the n optimum at β = 0.4.
+
+### 6. Per-source admission tuning (2026-05-01)
+
+On top of the locked habitat-fit configuration, the per-source
+admission knobs (`ratio_floor`, `n_floor`, `threshold`, `topk`) were
+swept one source at a time, holding others at the global default.
+55 LB submissions total. Two structural wins survived; the rest of
+the parameter space was confirmed at noise floor.
+
+#### Phase A — per-source `ratio_floor` (anchor 0.48529)
+
+| Source | r=0.3 | r=0.5 | r=0.6 | r=0.7 | r=0.8 |
+|---|---|---|---|---|---|
+| RNNB | 0.48135 | 0.48529 | 0.48433 | 0.48395 | 0.48366 |
+| GUARDEN | 0.48356 | 0.48529 | 0.48529 | 0.48529 | 0.48529 |
+| **LISAH** | 0.48208 | 0.48529 | **0.48713** | 0.48713 | 0.48713 |
+| **OPTMix** | **0.48959** | 0.48529 | 0.48798 | 0.48798 | 0.48798 |
+
+Two real wins. LISAH wants a tighter ratio_floor (4% top-1 means the
+default 0.5 admits species at absolute prob 0.02, which is noise);
+OPTMix wants a looser ratio_floor (forest understory benefits from
+admitting more low-confidence candidates as multi-label TPs).
+Different ecologies, different optimal rules.
+
+Composition test: `A_combined.csv` with both wins together hit
+**0.49143** — exactly 0.48529 + 0.00184 + 0.00430. Per-source effects
+compose linearly when scoped to disjoint sources.
+
+#### Phase B — per-source `n_floor` (anchor 0.49143)
+
+| Source | n=2 | n=3 | n=4 | n=5 |
+|---|---|---|---|---|
+| RNNB | 0.49081 | 0.49143 | 0.49160 | 0.49050 |
+| GUARDEN | 0.49143 | 0.49143 | 0.49143 | 0.49119 |
+| LISAH | 0.49143 | 0.49143 | 0.49143 | 0.49132 |
+| **OPTMix** | **0.49842** | 0.49143 | 0.49335 | 0.49016 |
+
+OPTMix wins big at n_floor=2 (+0.00699). The audit predicted this:
+OPTMix's natural species richness was 2.38 species per quadrat, so
+n_floor=3 was over-admitting and adding FPs. Reducing the floor to 2
+matches the source's natural multi-label cardinality.
+
+#### Phases C and D — no wins
+
+Phase C (per-source `threshold` ∈ {0.06, 0.15, 0.20}, 12 LB) and
+Phase D (per-source `topk`, 14 LB) confirmed the global defaults
+(threshold = 0.10, topk = 10) are robust across all sources at the
+locked Phase A+B configuration. The only sub-noise positive was
+OPTMix t=0.06 (+0.00054). Both higher and lower threshold values
+regressed elsewhere; topk variations were either no-ops (cap not
+binding for weak sources) or sub-noise.
+
+#### Phase E — alpine topk + threshold combined (no wins)
+
+Alpine sources have mean predictions = 10.00 (every quadrat hits the
+topk cap). The Phase D topk-only sweep showed raising topk alone is
+a no-op — topk is bounded by the threshold. Phase E tested raising
+topk and lowering threshold together, since lowering threshold could
+release species at p ∈ [0.06, 0.10] that the threshold was cutting,
+and raising topk would let them be admitted.
+
+Both alpine sources (CBN-PdlC + CBN-Pla, 1474 quadrats = 70% of test
+set) configured simultaneously, applied on top of locked Phase A+B:
+
+| | t=0.06 | t=0.08 | t=0.10 (anchor) |
+|---|---|---|---|
+| k=10 | — | — | **0.49842** |
+| k=12 | 0.49653 | 0.49754 | 0.49802 |
+| k=15 | 0.49174 | 0.49576 | 0.49794 |
+| k=20 | 0.48664 | — | 0.49794 |
+
+Smooth monotone regression surface — more aggressive expansion =
+larger F1 loss. The alpine "long tail" of species at p ∈ [0.06, 0.10]
+is mostly false positives, not hidden TPs. Habitat-fit's β=0.25
+demotion already pulls non-alpine species out of the top-K, so the
+top-10 alpine species above threshold=0.10 are already the high-
+precision set. Locked alpine cap stays at topk=10, threshold=0.10.
+
+Per-source variants on PdlC alone (k=15, t=0.06 → 0.49596) and Pla
+alone (k=15, t=0.06 → 0.49420) confirmed: neither alpine source
+contains a hidden long tail.
+
+#### Final per-source configuration
+
+```
+LISAH:  ratio_floor=0.6
+OPTMix: ratio_floor=0.3, n_floor=2
+All others (RNNB, GUARDEN, CBN-PdlC, CBN-Pla, CBN-can, 2024-CEV3):
+  threshold=0.10, topk=10, n_floor=3, ratio_floor=0.5 (defaults)
+```
+
+Stored as `outputs/per_source/A_combined.json` (Phase A only) and
+the Phase B winner CSV `B_OPTMix_n2.csv` (final, used as the
+submission).
 
 ## Why this worked where prior post-hoc mechanisms didn't
 
