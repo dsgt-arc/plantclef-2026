@@ -16,42 +16,91 @@ the spec is under review before any implementation begins. Competition ends
 Adapted from
 [Karpathy CLAUDE.md](https://github.com/forrestchang/andrej-karpathy-skills/blob/main/CLAUDE.md).
 These are the operating contract for any Claude session in this codebase —
-they apply *before* any specific task.
+they apply *before* any specific task. **Tradeoff**: bias toward caution
+over speed. For trivial tasks, use judgment.
 
-1. **Think before coding.** Surface assumptions and confusion explicitly. If
-   uncertain about scope, intent, or the right approach, **ask** rather than
-   proceed silently. When multiple plausible interpretations exist, list them
-   and ask Murilo to pick. The cost of one clarifying question is far below
-   the cost of a wrong direction taken in the last 5 days of a competition.
-2. **Simplicity first.** Write the minimum viable code that achieves the
-   goal. Skip speculative features, premature abstractions, retry loops for
-   internal-only code, defensive validation against bugs that can't actually
-   happen. The quality test: *"would a senior engineer say this is
-   overcomplicated?"* Three similar lines beat a premature abstraction.
-3. **Surgical changes.** Modify only what's necessary for the task. **Match
-   existing style**, even if a different approach would be your preference —
-   this codebase has conventions across `experiments/NNN-*`, `src/plantclef/`,
-   and the proposal/spec/tasks/results triplet. Don't rewrite working code
-   while fixing an unrelated bug. Remove only dead code your changes
-   created, not pre-existing dead code.
-4. **Goal-driven execution.** For *experiments*, define a falsifiable
-   hypothesis + Kaggle-measurable success criteria before writing the
-   training loop. For *bug fixes*, write the failing reproduction first;
-   "fix the bug" → "the test that currently fails passes". For *new features*,
-   state what observable behaviour proves the feature works before writing
-   it. Avoid commits whose verification is "looks right".
-5. **Independence boundary.** This workspace's experiments must NOT extend
-   Alper's pipeline. Do not consume artefacts from `aerten3/` (FAISS index,
-   ConvNeXt weights, geo mask, Exp-7 multiscale parquets, temporal-fusion
-   code). Use only Murilo's cached parquets, the team-shared train CLS
-   embeddings, the public ViT-B checkpoint, raw test/train images, and
-   public metadata. The independence boundary is a paper-contribution
-   requirement, not a technical one — see `proposal.md` for each experiment
-   for the rationale.
+### 1. Think before coding
 
-When following these guidelines would harm a trivial task, exercise judgment
-— a one-line typo fix doesn't need a hypothesis statement. But the default
-posture is the principles above, not "ship fast".
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, **ask**.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so. **Push back when warranted.**
+- If something is unclear, stop. Name what's confusing. Ask.
+
+In this 5-day-deadline context: the cost of one clarifying question is far
+below the cost of a wrong direction.
+
+### 2. Simplicity first
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- **If you write 200 lines and it could be 50, rewrite it.**
+
+Quality test: *"Would a senior engineer say this is overcomplicated?"* If
+yes, simplify.
+
+### 3. Surgical changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently. This codebase has
+  conventions across `experiments/NNN-*`, `src/plantclef/`, and the
+  `proposal.md`/`spec.md`/`tasks.md`/`results.md` quartet — follow them.
+- If you notice unrelated dead code, mention it — don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that **YOUR changes** made unused.
+- Don't remove pre-existing dead code unless asked.
+
+**The test**: every changed line should trace directly to the user's
+request. If a line in your diff can't be tied to what was asked, drop it.
+
+### 4. Goal-driven execution
+
+**Define success criteria. Loop until verified.**
+
+Transform vague tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+- "Run experiment 003" → "Hypothesis H1/H2 defined; A0a/A0b submitted;
+  A1/A2 F1 deltas vs A0b recorded in `results.md`"
+
+For multi-step tasks, state a brief plan:
+
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make
+it work") require constant clarification.
+
+### 5. Independence boundary (plantclef-specific)
+
+This workspace's experiments must **NOT** extend Alper's pipeline. Do not
+consume artefacts from `aerten3/` (FAISS index, ConvNeXt weights, geo mask,
+Exp-7 multiscale parquets, temporal-fusion code). Use only Murilo's cached
+parquets, the team-shared train CLS embeddings, the public ViT-B checkpoint,
+raw test/train images, and public metadata. The independence boundary is a
+paper-contribution requirement, not a technical one — see `proposal.md` for
+each experiment for the rationale.
+
+---
+
+**These guidelines are working if**: fewer unnecessary changes in diffs,
+fewer rewrites due to overcomplication, and clarifying questions come
+**before** implementation rather than after mistakes.
 
 ---
 
