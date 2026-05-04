@@ -3,14 +3,17 @@
 Session handoff document for Murilo's PlantCLEF 2026 experiments.
 Read this first, then read the referenced docs to get full context.
 
-**Last updated**: 2026-05-04 evening. **A0 derisk complete**: A0a (max-prob
-top-10) at LB **0.22986** ≈ expected; A0b (sorted-prob top-9) at LB **0.30810**
-exact-match reproduction of the validated 2025 baseline. Submission pipeline
-confirmed clean. **Workspace venv restructured to mirror birdclef** — root
-`.venv` now driven by `user/murilo/pyproject.toml` umbrella; root `pyproject.toml`
-+ `uv.lock` deleted. Per-experiment `pyproject.toml` files retained for sbatch
-`/tmp` venvs. **No decoder source files yet.** Next session: Priority 3
-(test-CLS extraction). Competition ends **2026-05-07** (3 days from this update).
+**Last updated**: 2026-05-04 late evening. **Priority 1 (spec review) closed**:
+H1 anchor explicitly tightened to **A0b = 0.30810**; inference now produces
+both k=9 (matches A0b) and k=10 (organizers' convention) from one forward
+pass. **Priority 3 (test-CLS extraction) done**: `cls_grid_4x4.parquet`
+(49.6 MB, 33,680 rows × float16[768]) cached at
+`shared/inference/dinov2-vit-base/`, validated, joinable to existing
+`grid_4x4.parquet` on `(image_name, tile_idx)`. **Still no decoder source
+files** (`tileq_decoder.py`, `asl_loss.py`, `samplers.py`,
+`build_train_lookup.py`, `build_faiss_background_map.py`). Next session:
+Priority 4 — library code + sanity checks. Competition ends **2026-05-07**
+(~2 days remaining).
 
 ---
 
@@ -139,10 +142,11 @@ exp 002) — exact-match reproduction of the 2025 reference CSV.
 F1 ∈ [0.20, 0.35]; Kaggle score is **not the bar**, ablation cleanliness is.
 A null result on H2 of exp 003 is publishable.
 
-**Competition deadline**: 2026-05-07 (3 days from last update).
+**Competition deadline**: 2026-05-07 (~2 days remaining).
 
 **Active branch**: `mg/tileq-decoder` — PR #15 open. Scaffold + A0 derisk +
-venv restructure landed; **no decoder source files yet**.
+venv restructure + spec review + test-CLS extraction landed; **no decoder
+source files yet** (Priority 4 — next).
 
 **Recent merges to main**:
 
@@ -163,6 +167,61 @@ venv restructure landed; **no decoder source files yet**.
 ---
 
 ## What happened recently
+
+### 2026-05-04 late evening — Priority 1 closed; Priority 3 done; sbatch convention finalized
+
+**Priority 1 (spec review) closed.** H1 success criteria in `proposal.md`
+explicitly tightened to **A0b = 0.30810** as the anchor (decoder must clear
+this). A0a (0.22986) is reference, not anchor — beating it is necessary
+but not sufficient. Inference produces **both k=9** (apples-to-apples vs
+A0b) **and k=10** (organizers' convention) from one decoder forward pass —
+4 decoder CSVs (A1@k9, A1@k10, A2@k9, A2@k10) instead of 2. Other
+questions ratified (no spec change): keep Sampler A as the naive contrast,
+fix `n_positives = 5` for v1, geo mask off for v1.
+`submissions/SUBMISSIONS.md` log added — kaggle CLI message convention +
+A0a/A0b backfilled. Commit `462134e`.
+
+**Priority 3 (test-CLS extraction) done.** `--save-cls` flag added to
+exp 001's `inference.py` (`forward_features` + `forward_head(pre_logits=True)`
+→ 768-d CLS, sibling parquet `cls_<grid_label>.parquet`). Sbatch
+`experiments/003-tileq-decoder/sbatch/extract_test_cls.{sh,sbatch}` runs
+the extraction (V100, 16 min, 0.46 s/image, data-loading-bound as in
+exp 001). Output:
+**`shared/inference/dinov2-vit-base/cls_grid_4x4.parquet` — 49.6 MB,
+33,680 rows × float16[768]**. External validation passed all checks: schema
+matches spec, 2,105 unique images each with exactly 16 tiles, joinable to
+`grid_4x4.parquet` on `(image_name, tile_idx)`.
+Commits `1811f94`, `442bc01`, `76ea227`, `8b61690`.
+
+**Test CLS L2 distribution observed** (sampled 2,000 tiles): mean **25.4**,
+std 2.8, range [13.3, 30.0], p10/p50/p90 = 21.3 / 26.1 / 28.3. **Higher
+than train CLS mean ~18.6** (vegetation-scene tiles vs single-plant
+images — different framing, content). Not a problem for the decoder
+(`proj_kv` linear adapts the absolute scale during training), but worth
+recording for FAISS τ tuning in §3.4 — when querying L2-normalized test
+tiles against L2-normalized train CLS, the cosine-sim histogram should
+still produce a clean shoulder for τ selection.
+
+**Sbatch convention finalized**: per-task `<task>.sh` (launcher) +
+`<task>.sbatch` (sbatch with `#SBATCH` directives + venv setup + job).
+Iterated through several layouts (single sbatch → birdclef-style
+`_job.sh+run.sh` → per-task explicit names). Final user-facing command:
+`bash sbatch/<task>.sh [--fast-dev-run|--gpu h100|--dry-run]`. Direct
+sbatch invocation (`sbatch sbatch/<task>.sbatch`) is also supported via
+positional-arg parsing in the sbatch. Future tasks (build-FAISS,
+train-A/B, infer) copy `extract_test_cls.{sh,sbatch}` and modify.
+
+**Two practical gotchas discovered:**
+1. **`paceship-clef2026_plantclef` account silently routes to `gpu-v100`**
+   even when `--partition=gpu-rtx6000` is set. Not blocking — V100 16 GB
+   is enough for ViT-B inference, and exp 001's data-loading bottleneck
+   means GPU choice doesn't move the needle. If RTX 6000 access is needed
+   later, check `sacctmgr show assoc account=paceship-clef2026_plantclef`.
+2. **Default-PyPI torch installs `2.11.0+cu130`**, but PACE driver supports
+   max CUDA 12.9 → silent CPU fallback. Fix in
+   `extract_test_cls.sbatch`: pin `"torch>=2.1.0,<2.11"` with
+   `--index-url cu121`. Resolves to `torch==2.5.1+cu121`. Bake this same
+   pin into all future exp 003 sbatchs.
 
 ### 2026-05-03 → 2026-05-04 — A0 derisk submitted; venv restructured to mirror birdclef
 
@@ -306,42 +365,36 @@ baseline F1 = 0.14506.
 
 ## What needs to happen next
 
-### Priority 1 — Spec review (no code) — STILL OPEN
+### Priority 1 — Spec review (no code) — DONE 2026-05-04
 
-**Decision needed before training**: is exp 003 spec correct as written, or
-does it need revision? Specifically:
+Closed. Outcomes:
 
-- Is the Sampler A / Sampler B contrast the right ablation? Or should A be
-  replaced by a stronger naive baseline (e.g. real-train-images with no
-  multi-label structure, single-positive-per-quadrat)?
-- Is `n_positives = 5` the right fixed value, or should it be sampled from a
-  distribution matching the inferred 2025 species-per-image (avg 5, but with
-  visible spread)?
-- A0b (sorted-prob top-9, F1=0.30810) confirmed as the comparison anchor —
-  decoder must clear this. A0a (max_prob top-10, F1=0.22986) is the
-  organizers' approach reference.
-- Is geo mask off (v1) the right call, or should the independent
-  LUCAS-rebuild go in v1?
+- **Sampler A as spec'd kept** — replacing it would conflate H1 and H2.
+- **`n_positives = 5` fixed** for v1 — variable distribution deferred to §8.
+- **A0b = 0.30810 confirmed as the H1 anchor** — `proposal.md` success
+  criteria tightened to drop A0a/A0b ambiguity. Reject H1 if A1 < 0.288.
+- **Geo mask off for v1** — keep ablation clean; LUCAS rebuild deferred
+  to v2.
 
-Spec review can run in parallel with Priority 3 (CLS extraction is a no-op
-preprocessing step regardless of which sampler design is chosen).
+Bonus side-effects:
+- Inference now produces both k=9 and k=10 from one forward pass
+  (4 decoder CSVs from 2 checkpoints).
+- `submissions/SUBMISSIONS.md` is the source-of-truth log for kaggle CLI
+  message convention + per-submission LB. A0a / A0b backfilled.
 
 ### Priority 2 — Derisk submission pipeline (A0a + A0b, no training) — DONE 2026-05-03
 
 A0a (LB 0.22986) and A0b (LB 0.30810) both submitted and accepted. Pipeline
 clean. Details in `experiments/003-tileq-decoder/results.md`.
 
-### Priority 3 — Test-CLS extraction (~2 GPU-h)  ← **next session**
+### Priority 3 — Test-CLS extraction (~2 GPU-h) — DONE 2026-05-04
 
-Add `--save-cls` flag to `experiments/001-dinov2-grid-ablation/inference.py`.
-Use `model.forward_features(...)` + `model.forward_head(..., pre_logits=True)`
-to extract the 768-d CLS instead of (or in addition to) probs. Run for
-grid_4×4 only on 2,105 test images → 33,680 rows → output at
-`shared/inference/dinov2-vit-base/cls_grid_4x4.parquet`.
+Job 7966845 on V100, 16 min. Output:
+`shared/inference/dinov2-vit-base/cls_grid_4x4.parquet` — 49.6 MB,
+33,680 rows × float16[768]. Schema as spec'd. Validation passed (2,105
+images, 16 tiles each, joinable to `grid_4x4.parquet`).
 
-Validate row count = 33,680 and per-image groups = 16 before training.
-
-### Priority 4 — Library code + sanity checks
+### Priority 4 — Library code + sanity checks  ← **next session**
 
 - `user/murilo/src/plantclef/tileq_decoder.py` — `TileQDecoder` class
   (spec §2.1).
@@ -406,6 +459,12 @@ stage for paper appendix. Note any failure modes hit (§7 of spec).
   retrieval / `IndexFlatIP`**. Raw scale is what TileQ-Decoder's input
   projection sees during training (no need to normalise there — let the
   LayerNorm + linear adapt).
+- **Test CLS L2 is higher than train** (verified 2026-05-04). Mean ≈ 25.4,
+  std 2.8, range [13.3, 30.0] across 2,000 sampled tiles. ~37 % higher
+  than train mean — vegetation-scene tiles vs single-plant images. The
+  `proj_kv` linear in TileQ-Decoder absorbs this scale shift during
+  training. After L2-normalization both distributions live on the unit
+  sphere; FAISS `IndexFlatIP` retrieval works as designed.
 - **Train data is hash-partitioned by `image_name`** (verified 2026-05-02).
   Every species spread across all 20 `sample_id={0..19}` partitions. Must
   read all 20 for species-level aggregation (centroids, prototypes, FAISS).
@@ -433,13 +492,15 @@ stage for paper appendix. Note any failure modes hit (§7 of spec).
 | `user/murilo/experiments/003-tileq-decoder/proposal.md` | H1/H2, success/reject criteria. |
 | `user/murilo/experiments/003-tileq-decoder/tasks.md` | Implementation checklist. |
 | `user/murilo/experiments/003-tileq-decoder/pyproject.toml` | Adds `torch`, `timm`, `faiss-cpu`, `pyyaml` on top of exp-001 deps. |
-| `user/murilo/experiments/001-dinov2-grid-ablation/inference.py` | **To be extended** with `--save-cls` flag for test-CLS extraction (Priority 3). |
+| `user/murilo/experiments/001-dinov2-grid-ablation/inference.py` | Extended with `--save-cls` flag (commit `1811f94`). Default behavior unchanged. |
+| `user/murilo/experiments/003-tileq-decoder/sbatch/extract_test_cls.{sh,sbatch}` | Per-task launcher + sbatch (template for future build_faiss / train / infer pairs). Pin `torch>=2.1.0,<2.11` cu121. |
+| `user/murilo/experiments/003-tileq-decoder/submissions/SUBMISSIONS.md` | Source-of-truth log for kaggle CLI message convention + per-submission LB. |
 | `user/murilo/experiments/002-classification-methods/classify.py` | **A0a/A0b producer** — no new code needed for baselines. |
 | `user/murilo/src/plantclef/{model.py, tiling.py, inference/dataset.py, gpu_monitor.py}` | Shared library — extend with `tileq_decoder.py`, `asl_loss.py`, `data/samplers.py`. |
 | `user/murilo/notes/deep-research-briefing.md` | Cached-data inventory (paths, schemas, stats, candidate angles). |
 | `user/alper/src/Final_pipeline_methods_Summary/Final_Pipeline_Methods_Summary.md` | Team best F1=0.4379 reference. Read but **do not consume** the artefacts it points to. |
 | `shared/inference/dinov2-vit-base/grid_NxN.parquet` | Murilo's cached test probs, 10 grids. Schema `(image_name, tile_idx, probs)`, float16 bytes. |
-| `shared/inference/dinov2-vit-base/cls_grid_4x4.parquet` | **TO BE CREATED** (Priority 3). Test CLS embeddings, schema `(image_name, tile_idx, cls_embedding)` float16[768]. |
+| `shared/inference/dinov2-vit-base/cls_grid_4x4.parquet` | ✓ **Created 2026-05-04** (49.6 MB, 33,680 rows). Schema `(image_name, tile_idx, cls_embedding (binary float16[768]))`. Decode via `np.frombuffer(blob, dtype=np.float16)`. Joinable to `grid_4x4.parquet` on `(image_name, tile_idx)`. |
 | `shared/embeddings/train/sample_id={0..19}/` | Team-shared 1.4 M train CLS embeddings, 4.39 GB. Schema `(image_name, species_id, cls_embedding)`. |
 | `shared/data/raw/class_id_to_species_mapping/{class_mapping.txt, class_to_species_id.json, species_id_to_name.txt}` | Index ↔ species_id ↔ Latin name. |
 | `shared/data/raw/PlanCLEF_test_data/{images/, PlantCLEF2025_test.csv}` | 2,105 test JPGs + quadrat metadata. |
