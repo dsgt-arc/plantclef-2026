@@ -241,14 +241,19 @@ At test time:
 3. Forward each through the trained decoder → 7806 logits.
 4. Sigmoid → per-class probabilities.
 5. *(Optional, see §2.6)* apply SW-Europe geo mask before top-k.
-6. Top-k decoding with `k = 10` (matches the existing baseline submission
-   format).
+6. Top-k decoding at **both `k=9` and `k=10`** from the same forward pass:
+   - `k=9` — apples-to-apples comparison with A0b's validated 2025 baseline
+     (the H1 anchor at F1=0.30810).
+   - `k=10` — matches A0a / organizers' notebook convention.
+
+   Two CSVs per trained decoder; marginal cost is the second CSV write.
 7. Map class indices → Pl@ntNet species IDs via `class_to_species_id.json`.
 8. Write CSV with columns `quadrat_id; species_ids` matching the Kaggle
    submission format used by exp 002.
 
-For v1, **do not** apply per-class thresholding — top-k=10 alone, optionally
-geo-masked. Per-class F1-optimal thresholding is listed as out-of-scope (§8).
+For v1, **do not** apply per-class thresholding — top-k decoding alone,
+optionally geo-masked. Per-class F1-optimal thresholding is listed as
+out-of-scope (§8).
 
 ### 2.5 Score-Blend (Bonus Ablation)
 
@@ -498,9 +503,9 @@ The paper's experiments table:
 |---|---|:---:|:---:|:---:|---|
 | **A0a** | Cached `max_prob` top-10, grid 4×4 | — | — | — | Generated **first** via `experiments/002-classification-methods/classify.py --grid-size 4 --method max-prob`. Validates submission pipeline. Expected ≈ 0.23. |
 | **A0b** | Cached sorted-prob top-9, grid 4×4 | — | — | — | Reproducible 2025 baseline. F1 = 0.30810 (validated, exp 002). |
-| **A1** | TileQ-Decoder, Sampler A | ✓ | A | 1.0 (decoder only) | Tests **H1**: does the decoder beat the cached aggregators without test-side knowledge? |
-| **A2** | TileQ-Decoder, Sampler B | ✓ | B | 1.0 (decoder only) | Tests **H2**: does test-anchored sampling help? |
-| **A3** *(bonus)* | Score-blend, best of {A1,A2} + cached `max_prob` | ✓ | best | sweep α ∈ {0, 0.25, 0.5, 0.75, 1.0} | Tests complementarity. 5 CSVs. |
+| **A1** | TileQ-Decoder, Sampler A, top-k ∈ {9, 10} | ✓ | A | 1.0 (decoder only) | Tests **H1**. Two CSVs/run from one forward pass. **k=9 is the H1 anchor (matches A0b)**; k=10 matches A0a convention. |
+| **A2** | TileQ-Decoder, Sampler B, top-k ∈ {9, 10} | ✓ | B | 1.0 (decoder only) | Tests **H2**. Two CSVs/run; H2 contrast taken at the same k as A1. |
+| **A3** *(bonus)* | Score-blend, best of {A1,A2} + cached `max_prob` | ✓ | best | sweep α ∈ {0, 0.25, 0.5, 0.75, 1.0} | Tests complementarity. 5 CSVs at k=10. α=0 / α=1 are sanity duplicates of the source baselines. |
 
 **A0a/A0b must be produced before training starts** to derisk the submission
 pipeline. A1 and A2 are the headline rows. A3 is run only if the schedule
@@ -565,11 +570,12 @@ user/murilo/
     │       ├── decoder_samplerA.pt
     │       └── decoder_samplerB.pt
     │
-    ├── submissions/                   # Kaggle CSVs
+    ├── submissions/                   # Kaggle CSVs + log
+    │   ├── SUBMISSIONS.md             # filename / kaggle msg / date / LB log
     │   ├── A0a_max_prob_grid4.csv
     │   ├── A0b_sorted_prob_topk9_grid4.csv
-    │   ├── A1_samplerA_seed42.csv
-    │   ├── A2_samplerB_seed42.csv
+    │   ├── A1_samplerA_topk{9,10}_seed42.csv
+    │   ├── A2_samplerB_topk{9,10}_seed42.csv
     │   └── A3_alpha{0p00,0p25,0p50,0p75,1p00}.csv
     │
     └── results.md                     # filled out post-execution

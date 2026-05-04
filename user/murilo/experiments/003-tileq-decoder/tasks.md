@@ -93,11 +93,15 @@ each other can be parallelised across compute nodes / sessions.
 ## 9. Inference + headline submissions
 - [ ] 9.1 `infer.py --checkpoint artifacts/checkpoints/decoder_samplerA.pt
       --tile-cls shared/inference/dinov2-vit-base/cls_grid_4x4.parquet
-      --topk 10 --output submissions/A1_samplerA_seed42.csv`.
-- [ ] 9.2 Same for Sampler B → `submissions/A2_samplerB_seed42.csv`.
+      --topk 9,10 --output-prefix submissions/A1_samplerA_seed42`
+      → produces both `A1_samplerA_topk9_seed42.csv` (H1 anchor) and
+      `A1_samplerA_topk10_seed42.csv` from a single forward pass.
+- [ ] 9.2 Same for Sampler B →
+      `submissions/A2_samplerB_topk{9,10}_seed42.csv`.
 - [ ] 9.3 *(If §3.3 mask was built)* re-run with `--geo-mask artifacts/sw_europe_mask.npy`
       and add `_geo` suffix to filenames.
-- [ ] 9.4 Submit A1 + A2 to Kaggle. Record scores.
+- [ ] 9.4 Submit all four CSVs (A1@k9, A1@k10, A2@k9, A2@k10) to Kaggle.
+      Record messages + LB scores in `submissions/SUBMISSIONS.md`.
 
 ## 10. A3 score-blend (bonus, §2.5)
 - [ ] 10.1 Pick best of {A1, A2} as decoder source. Load decoder probs (per-image)

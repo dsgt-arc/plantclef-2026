@@ -114,7 +114,7 @@ Logical-dependency order (sections in `spec.md` are numbered to match):
 6. **Sanity checks.** Overfit-one-batch (loss → 0 in 1000 steps), shape audit, sampler unit tests for both A and B.
 7. **Train Run 1 (Sampler A).** 80 k steps, AdamW, ASL. Save `artifacts/checkpoints/decoder_samplerA.pt`.
 8. **Train Run 2 (Sampler B).** Same config, different sampler. Save `artifacts/checkpoints/decoder_samplerB.pt`.
-9. **Inference.** Forward each test quadrat through both decoders → top-10 per image → submission CSVs `submissions/A1.csv`, `submissions/A2.csv`.
+9. **Inference.** Forward each test quadrat through both decoders → top-k decoding at **both k=9 (H1 anchor, matches A0b) and k=10 (organizers' convention)** from one forward pass → submission CSVs `submissions/A1_samplerA_topk{9,10}_seed42.csv` and `submissions/A2_samplerB_topk{9,10}_seed42.csv`.
 10. **A3 (bonus).** α-blend decoder probs with cached `max_prob` baseline for α ∈ {0, 0.25, 0.5, 0.75, 1.0}; produces 5 CSVs.
 
 ### Variables
@@ -140,9 +140,13 @@ Logical-dependency order (sections in `spec.md` are numbered to match):
 
 ### Success Criteria
 
-- **Confirm H1 if**: A1 (Sampler A) ≥ A0a or A0b (whichever is the proposal's chosen baseline).
+H1 anchor is **A0b = 0.30810** (validated 2025 sorted-prob top-9 baseline). A0a
+(`max_prob` top-10 = 0.22986) is the organizers'-approach reference, not the
+anchor — beating A0a is necessary but not sufficient.
+
+- **Confirm H1 if**: A1 (Sampler A) ≥ **0.30810** (A0b). Decoder beats the best-known aggregator on the same per-tile signal.
 - **Confirm H2 if**: A2 (Sampler B) − A1 (Sampler A) ≥ +0.01 absolute F1.
-- **Reject H1 if**: A1 < min(A0a, A0b) − 0.02. Decoder fails to capture useful multi-label signal.
+- **Reject H1 if**: A1 < **0.288** (A0b − 0.02). Decoder fails to capture useful multi-label signal beyond the aggregator baseline.
 - **Reject H2 if**: |A2 − A1| ≤ 0.005. Test-anchored sampling does not produce a more useful training distribution than naive sampling. **Publishable null result.**
 
 ## Limitations
