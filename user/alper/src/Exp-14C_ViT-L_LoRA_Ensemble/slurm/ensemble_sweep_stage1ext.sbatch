@@ -7,11 +7,18 @@
 #   - Higher threshold wins monotonically (0.090 > 0.075)
 #   - w=0.80 best, w=0.75 close
 #
-# Stage 1ext sweep:
+# REVISED 2026-05-03: standalone phase2v3 K optimization landed at thr=0.085
+# (alpha=0.30 win = 0.41186). Standalone curve at alpha=0.20 was sharp:
+#   thr 0.080→0.40003 / 0.085→0.41097 / 0.090→0.40951 / 0.095→0.41037 / 0.100→0.40230
+# That collapses the previous "higher threshold" intuition — Stage 1 only saw
+# 0.090 > 0.075 because we missed 0.085. Ensemble likely peaks 0.080-0.100,
+# NOT 0.100-0.130 (which the old sweep was extending toward).
+#
+# Stage 1ext sweep (revised):
 #   beta_multi  ∈ {0.55, 0.60, 0.65, 0.70, 0.75}    (4 NEW + Stage 1's best)
 #   weight w    ∈ {0.77, 0.80, 0.83}               (narrowed around peak)
-#   threshold   ∈ {0.090, 0.100, 0.115, 0.130}     (extended HIGHER from 0.090)
-# Total: 5 × 3 × 4 = 60 CSVs.
+#   threshold   ∈ {0.075, 0.085, 0.095, 0.100, 0.115}  (centered on 0.085 with cushion)
+# Total: 5 × 3 × 5 = 75 CSVs.
 #
 # Don't submit all 60 to LB — pick a representative subset (e.g., diagonal
 # scan along the peak ridge) for the first round, then expand.
@@ -74,7 +81,8 @@ done
 
 echo "host: $(hostname)"
 echo "job:  ${SLURM_JOB_NAME}  id: ${SLURM_JOB_ID}"
-echo "=== Exp-14C Stage 1ext-b: extended ensemble sweep (5 betas × 3 weights × 4 thresholds = 60 CSVs) ==="
+echo "=== Exp-14C Stage 1ext-b: ensemble sweep (5 betas × 3 weights × 5 thresholds = 75 CSVs) ==="
+echo "Threshold range revised based on standalone result: K, T=1.5, alpha=0.30, thr=0.085 = 0.41186"
 
 for BETA in 0.55 0.60 0.65 0.70 0.75; do
     PREFUSION="${PREFUSION_DIR}/vitL_prefusion_b${BETA}.parquet"
@@ -98,7 +106,7 @@ for BETA in 0.55 0.60 0.65 0.70 0.75; do
         --out-dir "${OUT_DIR}" \
         --temperature 1.5 \
         --weights "0.77,0.80,0.83" \
-        --thresholds "0.090,0.100,0.115,0.130" \
+        --thresholds "0.075,0.085,0.095,0.100,0.115" \
         --topk 10 \
         --vit-aggregator max \
         --cnxt-aggregator max \
@@ -120,13 +128,15 @@ done
 
 echo ""
 echo "=== Stage 1ext-b done ==="
-echo "All 60 CSVs under ${OUT_BASE}/b{0.55,0.60,0.65,0.70,0.75}/"
+echo "All 75 CSVs under ${OUT_BASE}/b{0.55,0.60,0.65,0.70,0.75}/"
 echo ""
-echo "Submission strategy (~10–15 LB submissions):"
-echo "  Round 1 (5 LB): one CSV per beta at the Stage 1 peak (w=0.80, thr=0.090)"
-echo "                  to map the beta dimension cleanly"
-echo "  Round 2 (5 LB): at the winning beta, sweep thr at w=0.80"
-echo "  Round 3 (3-5 LB): at winning (beta, thr), sweep w"
+echo "Submission strategy (~12 LB submissions):"
+echo "  Round 1 (5 LB): one CSV per beta at (w=0.80, thr=0.085 — standalone optimum)"
+echo "                  → identifies winning beta"
+echo "  Round 2 (4 LB): at winning beta, sweep thr {0.075, 0.095, 0.100, 0.115} at w=0.80"
+echo "                  → confirms threshold optimum"
+echo "  Round 3 (3 LB): at winning (beta, thr), sweep w {0.77, 0.83}"
+echo "                  → fine-tunes weight"
 echo ""
 echo "Decision rules (same as Stage 1):"
 echo "  - best CSV >= 0.456: success, proceed to Exp-14D (stack Exp-16 mechanisms)"

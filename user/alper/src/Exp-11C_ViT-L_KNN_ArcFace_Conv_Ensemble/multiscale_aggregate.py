@@ -136,6 +136,11 @@ SCHEMES = {
         "scales": [3, 4, 5, 6, 8],
         "tiles": 150,
     },
+    "P": {
+        "label": "5x5+6x6+7x7",
+        "scales": [5, 6, 7],
+        "tiles": 110,
+    },
 }
 
 # Phase 1 sweep grid: (scheme_id, thresholds)
