@@ -19,14 +19,14 @@
 #   schema: image_name (str), tile_idx (int32), cls_embedding (binary float16[768])
 #   expected rows: 33,680 (2,105 × 16)
 #
-# Usage (via run.sh — preferred):
+# Usage (via extract_test_cls.sh launcher — preferred, prints nice header):
 #   cd user/murilo/experiments/003-tileq-decoder
-#   bash sbatch/run.sh --fast-dev-run    # 5-image smoke test
-#   bash sbatch/run.sh                   # full run (~2 GPU-h on RTX 6000)
+#   bash sbatch/extract_test_cls.sh --fast-dev-run    # 5-image smoke test
+#   bash sbatch/extract_test_cls.sh                   # full run (~2 GPU-h on RTX 6000)
 #
 # Usage (direct sbatch — also supported):
-#   sbatch sbatch/_job.sh --fast-dev-run
-#   sbatch sbatch/_job.sh
+#   sbatch sbatch/extract_test_cls.sbatch --fast-dev-run
+#   sbatch sbatch/extract_test_cls.sbatch
 
 set -eu
 
@@ -35,8 +35,8 @@ FAST_DEV_RUN="${FAST_DEV_RUN:-false}"
 NUM_WORKERS="${NUM_WORKERS:-}"
 GRID_SIZE=4
 
-# Positional flag passthrough (sbatch sbatch/_job.sh --fast-dev-run).
-# run.sh sets FAST_DEV_RUN via --export so doesn't pass positional args.
+# Positional flag passthrough (sbatch sbatch/extract_test_cls.sbatch --fast-dev-run).
+# The extract_test_cls.sh launcher sets FAST_DEV_RUN via --export and doesn't pass positional args.
 for arg in "$@"; do
     case "$arg" in
         --fast-dev-run) FAST_DEV_RUN=true ;;

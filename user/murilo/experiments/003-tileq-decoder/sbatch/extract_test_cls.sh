@@ -4,11 +4,11 @@
 # Usage:
 #   cd user/murilo/experiments/003-tileq-decoder
 #
-#   bash sbatch/run.sh                   # full run (~2 GPU-h on RTX 6000)
-#   bash sbatch/run.sh --fast-dev-run    # 5-image smoke test (~5 min)
-#   bash sbatch/run.sh --gpu h100        # use H100 partition instead of RTX 6000
-#   bash sbatch/run.sh --num-workers 16  # override DataLoader workers
-#   bash sbatch/run.sh --dry-run         # preview the sbatch command
+#   bash sbatch/extract_test_cls.sh                   # full run (~2 GPU-h on RTX 6000)
+#   bash sbatch/extract_test_cls.sh --fast-dev-run    # 5-image smoke test (~5 min)
+#   bash sbatch/extract_test_cls.sh --gpu h100        # use H100 partition instead of RTX 6000
+#   bash sbatch/extract_test_cls.sh --num-workers 16  # override DataLoader workers
+#   bash sbatch/extract_test_cls.sh --dry-run         # preview the sbatch command
 
 set -eu
 
@@ -93,7 +93,7 @@ echo ""
 LOG_DIR="${EXPERIMENT_DIR}/logs"
 mkdir -p "${LOG_DIR}"
 
-JOB_SCRIPT="${SCRIPT_DIR}/_job.sh"
+JOB_SCRIPT="${SCRIPT_DIR}/extract_test_cls.sbatch"
 
 CPUS_OVERRIDE=""
 if [[ -n "$NUM_WORKERS" ]]; then

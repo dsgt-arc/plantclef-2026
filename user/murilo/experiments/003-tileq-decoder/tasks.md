@@ -31,12 +31,12 @@ each other can be parallelised across compute nodes / sessions.
       (commit on `mg/tileq-decoder`). Uses `forward_features` +
       `forward_head(..., pre_logits=True)`; writes
       `cls_<grid_label>.parquet` next to the existing probs parquet.
-- [ ] 2.2 Smoke test (5 images): `bash sbatch/run.sh --fast-dev-run`.
+- [ ] 2.2 Smoke test (5 images): `bash sbatch/extract_test_cls.sh --fast-dev-run`.
       Verify dev-mode prints shape=(16, 768), L2_norm ≈ 18 (matches train).
-- [ ] 2.3 Full run (~2 GPU-h on RTX 6000): `bash sbatch/run.sh`. Output:
-      `shared/inference/dinov2-vit-base/cls_grid_4x4.parquet`. Schema:
+- [ ] 2.3 Full run (~2 GPU-h on RTX 6000): `bash sbatch/extract_test_cls.sh`.
+      Output: `shared/inference/dinov2-vit-base/cls_grid_4x4.parquet`. Schema:
       `image_name, tile_idx, cls_embedding (binary float16[768])`. Expected ~50 MB.
-- [ ] 2.4 Validation tail embedded in `_job.sh` — row count = 33,680,
+- [ ] 2.4 Validation tail embedded in `extract_test_cls.sbatch` — row count = 33,680,
       unique images = 2,105, per-image groups = 16. Job exits non-zero on mismatch.
 
 ## 3. Train-side data preparation
