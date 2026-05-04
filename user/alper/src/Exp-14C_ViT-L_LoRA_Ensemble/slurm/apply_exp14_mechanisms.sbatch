@@ -15,10 +15,12 @@
 #   B) apply_habitat_mask.py on the ensemble parquet → CSV with sim_w + habitat
 #   C) apply_biogeo_mask.py on the same parquet → CSV with sim_w + habitat + biogeo
 #
-# Configurable via env vars (default to current best from cnxt_optimization_sweep):
-#   W=0.90 (current peak; update if cnxt_w_extend finds higher)
-#   THR=0.085 (current peak; update if cnxt_w_extend finds different)
+# Configurable via env vars (defaults are the locked Exp-14C optimum):
+#   W=0.90    (locked from cnxt_optimization_sweep)
+#   THR=0.085 (locked across standalone, kNN-only, and ensemble sweeps)
 #   BETA=0.70 (locked from kNN-only sweep)
+#   ConvNeXt scheme: P (5+6+7) — locked from cnxt_scheme_sweep
+#       (P narrowly beat K by +0.0007 at this config; cleaner and 13% fewer tiles)
 #
 # Usage:
 #   sbatch slurm/apply_exp14_mechanisms.sbatch
@@ -94,7 +96,6 @@ echo "--- Step A: ensemble with sim_w on RNNB ---"
 python "${EXP14_SCRIPTS}/ensemble_v2.py" \
     --vit-prefusion-parquet "${PREFUSION}" \
     --convnext-scales \
-        "${CNXT_PARQUET_ROOT}/scale_4x4.parquet" \
         "${CNXT_PARQUET_ROOT}/scale_5x5.parquet" \
         "${CNXT_PARQUET_ROOT}/scale_6x6.parquet" \
         "${CNXT_PARQUET_ROOT}/scale_7x7.parquet" \
@@ -169,7 +170,7 @@ echo "  2. sim_w + habitat      → adds aquatic blacklist (+0.0016 expected)"
 echo "  3. sim_w + habitat + biogeo → full Exp-14 raw recipe (+0.0004 more)"
 echo ""
 echo "Reference points:"
-echo "  Current best (max aggregator, no masks): 0.44830"
+echo "  Current best (CNXT scheme P, no masks):  0.44900"
 echo "  Exp-11B production:                       0.44428"
 echo "  Exp-14 raw best (target to beat):         0.45611"
-echo "  Predicted with all 3 mechanisms:          ~0.460 (+0.005 over Exp-14)"
+echo "  Predicted with all 3 mechanisms:          ~0.461 (+0.005 over Exp-14)"
