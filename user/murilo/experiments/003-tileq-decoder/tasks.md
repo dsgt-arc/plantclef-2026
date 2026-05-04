@@ -23,18 +23,22 @@ each other can be parallelised across compute nodes / sessions.
       (used by `_job.sh` via `uv pip install -e "$EXPERIMENT_DIR"`).
 - [x] 1.2 `src` symlink → `../../src` resolves; `from plantclef.model import load_model`
       verified inside root `.venv`.
-- [ ] 1.3 Confirm GPU access on PACE (RTX 6000 or H100); record allocation
-      command in `sbatch/`.
+- [x] 1.3 GPU access on PACE confirmed (user 2026-05-04). Allocation pattern
+      lives in each `sbatch/*.sbatch` (`gpu-rtx6000` partition, qinferno).
 
 ## 2. Test-side CLS extraction (§3.1)
-- [ ] 2.1 Add `--save-cls` flag to `experiments/001-dinov2-grid-ablation/inference.py`.
-      Use `forward_features` + `forward_head(..., pre_logits=True)` to extract CLS.
-- [ ] 2.2 Smoke test on 5 images (`--fast-dev-run`) — verify output shape (5, 16, 768) for grid 4×4.
-- [ ] 2.3 Full run: grid 4×4 only, 2,105 images. Output:
+- [x] 2.1 Added `--save-cls` flag to `experiments/001-dinov2-grid-ablation/inference.py`
+      (commit on `mg/tileq-decoder`). Uses `forward_features` +
+      `forward_head(..., pre_logits=True)`; writes
+      `cls_<grid_label>.parquet` next to the existing probs parquet.
+- [ ] 2.2 Smoke test (5 images): `sbatch sbatch/extract_test_cls.sbatch --fast-dev-run`.
+      Verify dev-mode prints shape=(16, 768), L2_norm ≈ 18 (matches train).
+- [ ] 2.3 Full run (~2 GPU-h on RTX 6000):
+      `sbatch sbatch/extract_test_cls.sbatch`. Output:
       `shared/inference/dinov2-vit-base/cls_grid_4x4.parquet`. Schema:
-      `image_name, tile_idx, cls_embedding (binary float16[768])`. Expected
-      ~50 MB, ~2 GPU-h on RTX 6000.
-- [ ] 2.4 Validate row count = 33,680 and per-image-name groups = 16.
+      `image_name, tile_idx, cls_embedding (binary float16[768])`. Expected ~50 MB.
+- [ ] 2.4 Validation tail embedded in the sbatch — row count = 33,680,
+      unique images = 2,105, per-image groups = 16. Job exits non-zero on mismatch.
 
 ## 3. Train-side data preparation
 - [ ] 3.1 Build per-class-idx lookup (§3.2): load 1.4 M train CLS via
