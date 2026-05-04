@@ -15,12 +15,12 @@
 #   B) apply_habitat_mask.py on the ensemble parquet → CSV with sim_w + habitat
 #   C) apply_biogeo_mask.py on the same parquet → CSV with sim_w + habitat + biogeo
 #
-# Configurable via env vars (defaults are the locked Exp-14C optimum):
-#   W=0.90    (locked from cnxt_optimization_sweep)
+# Configurable via env vars (defaults are the fully-locked Exp-14C optimum):
+#   W=0.88    (locked from cnxtP_w_sweep — peak shifted down 0.02 from K's 0.90)
 #   THR=0.085 (locked across standalone, kNN-only, and ensemble sweeps)
 #   BETA=0.70 (locked from kNN-only sweep)
 #   ConvNeXt scheme: P (5+6+7) — locked from cnxt_scheme_sweep
-#       (P narrowly beat K by +0.0007 at this config; cleaner and 13% fewer tiles)
+#       Locked baseline F1 (no Exp-14 mechanisms): 0.44969
 #
 # Usage:
 #   sbatch slurm/apply_exp14_mechanisms.sbatch
@@ -41,7 +41,7 @@
 
 set -euo pipefail
 
-W="${W:-0.90}"
+W="${W:-0.88}"
 THR="${THR:-0.085}"
 BETA="${BETA:-0.70}"
 
@@ -170,7 +170,7 @@ echo "  2. sim_w + habitat      → adds aquatic blacklist (+0.0016 expected)"
 echo "  3. sim_w + habitat + biogeo → full Exp-14 raw recipe (+0.0004 more)"
 echo ""
 echo "Reference points:"
-echo "  Current best (CNXT scheme P, no masks):  0.44900"
+echo "  Current best (CNXT P, w=0.88, no masks): 0.44969"
 echo "  Exp-11B production:                       0.44428"
 echo "  Exp-14 raw best (target to beat):         0.45611"
-echo "  Predicted with all 3 mechanisms:          ~0.461 (+0.005 over Exp-14)"
+echo "  Predicted with all 3 mechanisms:          ~0.462 (+0.006 over Exp-14)"
