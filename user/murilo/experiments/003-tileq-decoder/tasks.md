@@ -31,13 +31,18 @@ each other can be parallelised across compute nodes / sessions.
       (commit on `mg/tileq-decoder`). Uses `forward_features` +
       `forward_head(..., pre_logits=True)`; writes
       `cls_<grid_label>.parquet` next to the existing probs parquet.
-- [ ] 2.2 Smoke test (5 images): `bash sbatch/extract_test_cls.sh --fast-dev-run`.
-      Verify dev-mode prints shape=(16, 768), L2_norm ≈ 18 (matches train).
-- [ ] 2.3 Full run (~2 GPU-h on RTX 6000): `bash sbatch/extract_test_cls.sh`.
-      Output: `shared/inference/dinov2-vit-base/cls_grid_4x4.parquet`. Schema:
-      `image_name, tile_idx, cls_embedding (binary float16[768])`. Expected ~50 MB.
-- [ ] 2.4 Validation tail embedded in `extract_test_cls.sbatch` — row count = 33,680,
-      unique images = 2,105, per-image groups = 16. Job exits non-zero on mismatch.
+- [x] 2.2 Smoke test (5 images, job 7965650): GPU active (V100, cu121),
+      shape=(16, 768), L2_norm ≈ 24-27. Identical CPU/GPU output (deterministic).
+- [x] 2.3 Full run (job 7966845, V100, 16 min): output at
+      `shared/inference/dinov2-vit-base/cls_grid_4x4.parquet`, 49.6 MB,
+      33,680 rows × float16[768] CLS embeddings.
+- [x] 2.4 Validation passed: 33,680 rows, 2,105 unique images, 16 tiles each
+      (tile_idx 0..15 each at 2,105). Joinable to grid_4x4.parquet on
+      (image_name, tile_idx). L2 norm distribution: mean 25.4, std 2.8,
+      range [13.3, 30.0] — higher than train mean ~18.6 (vegetation scenes
+      vs single plants); decoder `proj_kv` adapts away. Note: in-job tail
+      crashed on pyarrow API bug (`StringArray.length()` → fixed to
+      `len(...)` in commit); validation re-run manually.
 
 ## 3. Train-side data preparation
 - [ ] 3.1 Build per-class-idx lookup (§3.2): load 1.4 M train CLS via

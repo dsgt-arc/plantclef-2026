@@ -144,7 +144,7 @@ expected_rows = expected_images * expected_tiles_per_image  # 33,680
 
 table = pq.read_table(path)
 n_rows = table.num_rows
-unique_images = pc.unique(table["image_name"]).length()
+unique_images = len(pc.unique(table["image_name"]))
 
 print(f"Path:          {path}")
 print(f"Rows:          {n_rows} (expected {expected_rows})")
