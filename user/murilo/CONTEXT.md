@@ -3,11 +3,14 @@
 Session handoff document for Murilo's PlantCLEF 2026 experiments.
 Read this first, then read the referenced docs to get full context.
 
-**Last updated**: 2026-05-02 PM. Exp 003 (TileQ-Decoder) scaffolded —
-`proposal.md` + `spec.md` + `tasks.md` + `pyproject.toml` committed on
-`mg/tileq-decoder` and opened as PR #15. **No source files written yet** —
-the spec is under review before any implementation begins. Competition ends
-**2026-05-07** (5 calendar days from this update).
+**Last updated**: 2026-05-04 evening. **A0 derisk complete**: A0a (max-prob
+top-10) at LB **0.22986** ≈ expected; A0b (sorted-prob top-9) at LB **0.30810**
+exact-match reproduction of the validated 2025 baseline. Submission pipeline
+confirmed clean. **Workspace venv restructured to mirror birdclef** — root
+`.venv` now driven by `user/murilo/pyproject.toml` umbrella; root `pyproject.toml`
++ `uv.lock` deleted. Per-experiment `pyproject.toml` files retained for sbatch
+`/tmp` venvs. **No decoder source files yet.** Next session: Priority 3
+(test-CLS extraction). Competition ends **2026-05-07** (3 days from this update).
 
 ---
 
@@ -136,10 +139,10 @@ exp 002) — exact-match reproduction of the 2025 reference CSV.
 F1 ∈ [0.20, 0.35]; Kaggle score is **not the bar**, ablation cleanliness is.
 A null result on H2 of exp 003 is publishable.
 
-**Competition deadline**: 2026-05-07 (5 days from last update).
+**Competition deadline**: 2026-05-07 (3 days from last update).
 
-**Active branch**: `mg/tileq-decoder` — PR #15 open, scaffold only, no source
-files yet. Spec under review.
+**Active branch**: `mg/tileq-decoder` — PR #15 open. Scaffold + A0 derisk +
+venv restructure landed; **no decoder source files yet**.
 
 **Recent merges to main**:
 
@@ -150,15 +153,57 @@ files yet. Spec under review.
 | Submission | F1 | Status |
 |---|---|---|
 | **Alper exp 11 final ensemble** | **0.4379** | Public LB, 2026-04-17 |
+| **A0b** sorted-prob top-9, grid_4x4 (exp 003 derisk) | **0.30810** | Public LB, 2026-05-03 (exact reproduction of 2025 reference) |
 | Sorted-prob top-9, grid_4x4 (Murilo exp 002 — 2025 reproduction) | 0.30810 | validated 2026-03-13 |
 | Expanded-list top-5 max-20, grid_4x4 (exp 002) | 0.23 | |
-| max-prob top-10 (organisers' approach) | ~0.23 | reference, not yet submitted by Murilo |
+| **A0a** max-prob top-10, grid_4x4 (exp 003 derisk) | **0.22986** | Public LB, 2026-05-03 |
 | Union top-5 (exp 002) | 0.21313 | |
 | No-grid baseline (exp 001) | 0.14506 | |
 
 ---
 
 ## What happened recently
+
+### 2026-05-03 → 2026-05-04 — A0 derisk submitted; venv restructured to mirror birdclef
+
+**A0 baselines submitted to Kaggle**, both via existing
+`experiments/002-classification-methods/classify.py` against the cached
+`shared/inference/dinov2-vit-base/grid_4x4.parquet` — no new code:
+
+- **A0a** (`max-prob` top-10, `--max-species 10`): LB **0.22986**, matches
+  expected ~0.23 from organizers' notebook approach.
+- **A0b** (`sorted-prob` top-9): LB **0.30810**, exact-match reproduction of
+  the validated 2025 baseline. Avg 5.0 species/image as documented.
+
+CSV format accepted by Kaggle on first submission. Submission pipeline
+**derisked** for the headline runs (A1/A2). A0b is the comparison anchor
+for H1 in `proposal.md` (decoder must clear 0.30810 to confirm the
+hypothesis). Results in `experiments/003-tileq-decoder/results.md`.
+
+**Workspace venv restructured** to mirror birdclef's pattern. Driver was
+needing `kaggle` CLI in the project venv:
+
+- Old layout: root `pyproject.toml` declared a uv workspace with
+  `members = ["user/*/experiments/*"]`. Per-experiment pyprojects auto-
+  discovered. Root `.venv` had no umbrella source of truth.
+- New layout: root `pyproject.toml` + `uv.lock` **deleted**. New
+  `user/murilo/pyproject.toml` is the umbrella (torch, timm, faiss-cpu,
+  pillow, pandas, pyarrow, kaggle, tqdm, matplotlib, pyyaml, nvidia-ml-py +
+  dev extras `pytest`/`ruff`/`ipython`). Single `.venv` at
+  `clef/plantclef-2026/.venv` populated via `uv pip install -e user/murilo`.
+- Per-experiment `pyproject.toml` files (001, 002, 003) **retained
+  unchanged** — they remain the source of truth for `/tmp` sbatch venvs
+  built by `_job.sh` via `uv pip install -e "$EXPERIMENT_DIR"`. Independent
+  of the umbrella.
+- Activation pattern: `source .venv/bin/activate` from project root, then
+  `cd user/murilo`. Identical to birdclef.
+- Caveat: `uv sync --package <experiment>` from project root is gone (no
+  workspace). To install an experiment's deps, `cd` into its directory and
+  use its pyproject. Sbatch already works that way.
+
+`uv.lock` files are gitignored (line 36 of `.gitignore`); CSVs are
+gitignored (line 115). Submission CSVs are reproducible from `classify.py`,
+so not in repo.
 
 ### 2026-05-02 PM — exp 003 scaffolded; PR #15 opened
 
@@ -261,10 +306,10 @@ baseline F1 = 0.14506.
 
 ## What needs to happen next
 
-### Priority 1 — Spec review (no code)
+### Priority 1 — Spec review (no code) — STILL OPEN
 
-**Decision needed before any implementation**: is exp 003 spec correct as
-written, or does it need revision? Specifically:
+**Decision needed before training**: is exp 003 spec correct as written, or
+does it need revision? Specifically:
 
 - Is the Sampler A / Sampler B contrast the right ablation? Or should A be
   replaced by a stronger naive baseline (e.g. real-train-images with no
@@ -272,27 +317,21 @@ written, or does it need revision? Specifically:
 - Is `n_positives = 5` the right fixed value, or should it be sampled from a
   distribution matching the inferred 2025 species-per-image (avg 5, but with
   visible spread)?
-- Should A0b (sorted-prob top-9) be the comparison anchor instead of A0a
-  (max_prob)? A0b is the validated F1=0.30810 baseline; A0a is the
-  organizers' notebook approach (~0.23 from Alper's notes).
+- A0b (sorted-prob top-9, F1=0.30810) confirmed as the comparison anchor —
+  decoder must clear this. A0a (max_prob top-10, F1=0.22986) is the
+  organizers' approach reference.
 - Is geo mask off (v1) the right call, or should the independent
   LUCAS-rebuild go in v1?
 
-If the spec is approved, move to Priority 2.
+Spec review can run in parallel with Priority 3 (CLS extraction is a no-op
+preprocessing step regardless of which sampler design is chosen).
 
-### Priority 2 — Derisk submission pipeline (A0a + A0b, no training)
+### Priority 2 — Derisk submission pipeline (A0a + A0b, no training) — DONE 2026-05-03
 
-Free F1 baselines that validate the Kaggle submission format **before**
-spending 4–8 GPU-h on decoder training. Both producible from existing
-`experiments/002-classification-methods/classify.py`:
+A0a (LB 0.22986) and A0b (LB 0.30810) both submitted and accepted. Pipeline
+clean. Details in `experiments/003-tileq-decoder/results.md`.
 
-- A0a: `python classify.py --grid-size 4 --method max-prob --output-dir submissions/`
-- A0b: `python classify.py --grid-size 4 --method sorted-prob --top-k 9 --output-dir submissions/`
-
-Submit both; confirm Kaggle accepts them. Reproduces F1=0.30810 for A0b.
-**Block training until this passes.**
-
-### Priority 3 — Test-CLS extraction (~2 GPU-h)
+### Priority 3 — Test-CLS extraction (~2 GPU-h)  ← **next session**
 
 Add `--save-cls` flag to `experiments/001-dinov2-grid-ablation/inference.py`.
 Use `model.forward_features(...)` + `model.forward_head(..., pre_logits=True)`

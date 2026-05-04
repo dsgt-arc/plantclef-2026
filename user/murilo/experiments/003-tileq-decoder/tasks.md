@@ -5,18 +5,24 @@ Order is by **logical dependency**, not by day. Sections that don't depend on
 each other can be parallelised across compute nodes / sessions.
 
 ## 0. Submission pipeline derisk (do FIRST, no training required)
-- [ ] 0.1 Generate **A0a** (`max_prob` top-10 on `grid_4x4.parquet`) via
-      `experiments/002-classification-methods/classify.py --grid-size 4 --method max-prob`
+- [x] 0.1 Generate **A0a** (`max_prob` top-10 on `grid_4x4.parquet`) via
+      `experiments/002-classification-methods/classify.py --grid-size 4 --method max-prob --max-species 10`
       → `submissions/A0a_max_prob_grid4.csv`. Validate Kaggle accepts the format.
-- [ ] 0.2 Generate **A0b** (sorted-prob top-9 on `grid_4x4.parquet`) via
+      **DONE 2026-05-03** — Kaggle LB **F1 = 0.22986** (matches expected ~0.23).
+- [x] 0.2 Generate **A0b** (sorted-prob top-9 on `grid_4x4.parquet`) via
       `classify.py --grid-size 4 --method sorted-prob --top-k 9`
       → `submissions/A0b_sorted_prob_topk9_grid4.csv`. Confirm reproduces F1=0.30810.
+      **DONE 2026-05-03** — Kaggle LB **F1 = 0.30810** (exact match).
 
 ## 1. Environment + scaffolding
-- [ ] 1.1 `pyproject.toml` with `torch>=2.1`, `timm>=1.0`, `faiss-cpu>=1.7`,
-      `pandas`, `pyarrow`, `numpy`, `tqdm`, `matplotlib`, `pyyaml`. Run
-      `uv sync --package 003-tileq-decoder`.
-- [ ] 1.2 Verify `src` symlink → `../../src` works; `from plantclef.model import load_model` resolves.
+- [x] 1.1 Workspace venv now driven by `user/murilo/pyproject.toml` umbrella
+      (mirrors birdclef pattern; root `.venv` at `clef/plantclef-2026/.venv`).
+      Includes `torch`, `timm`, `faiss-cpu`, `pandas`, `pyarrow`, `numpy`,
+      `tqdm`, `matplotlib`, `pyyaml`, `pillow`, `nvidia-ml-py`, `kaggle`.
+      Per-experiment `pyproject.toml` files retained for sbatch `/tmp` venvs
+      (used by `_job.sh` via `uv pip install -e "$EXPERIMENT_DIR"`).
+- [x] 1.2 `src` symlink → `../../src` resolves; `from plantclef.model import load_model`
+      verified inside root `.venv`.
 - [ ] 1.3 Confirm GPU access on PACE (RTX 6000 or H100); record allocation
       command in `sbatch/`.
 
