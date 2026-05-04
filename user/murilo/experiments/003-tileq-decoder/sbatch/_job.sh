@@ -1,11 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=exp003-extract-cls
 #SBATCH --account=paceship-clef2026_plantclef
-# --partition is set by run.sh (default: gpu-rtx6000; override with --gpu)
+#SBATCH --partition=gpu-rtx6000
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=03:00:00
+#SBATCH --output=logs/slurm_extract_test_cls_%j.log
 #SBATCH -qinferno
 #SBATCH --mail-type=END,FAIL
 #SBATCH --mail-user=mgustineli3@gatech.edu
@@ -18,10 +19,14 @@
 #   schema: image_name (str), tile_idx (int32), cls_embedding (binary float16[768])
 #   expected rows: 33,680 (2,105 × 16)
 #
-# Usage (via run.sh):
+# Usage (via run.sh — preferred):
 #   cd user/murilo/experiments/003-tileq-decoder
 #   bash sbatch/run.sh --fast-dev-run    # 5-image smoke test
 #   bash sbatch/run.sh                   # full run (~2 GPU-h on RTX 6000)
+#
+# Usage (direct sbatch — also supported):
+#   sbatch sbatch/_job.sh --fast-dev-run
+#   sbatch sbatch/_job.sh
 
 set -eu
 
@@ -29,6 +34,15 @@ PROJECT_NAME="${PROJECT_NAME:-ps-clef2026_plantclef-0}"
 FAST_DEV_RUN="${FAST_DEV_RUN:-false}"
 NUM_WORKERS="${NUM_WORKERS:-}"
 GRID_SIZE=4
+
+# Positional flag passthrough (sbatch sbatch/_job.sh --fast-dev-run).
+# run.sh sets FAST_DEV_RUN via --export so doesn't pass positional args.
+for arg in "$@"; do
+    case "$arg" in
+        --fast-dev-run) FAST_DEV_RUN=true ;;
+        *) echo "Unknown arg: $arg" >&2; exit 1 ;;
+    esac
+done
 
 if [ -n "${SLURM_SUBMIT_DIR:-}" ]; then
     EXPERIMENT_DIR="$SLURM_SUBMIT_DIR"
@@ -73,8 +87,8 @@ source "$JOB_VENV/bin/activate"
 echo "  Installing exp 003 dependencies..."
 uv pip install -e "$EXPERIMENT_DIR"
 
-echo "  Installing PyTorch with CUDA..."
-uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+echo "  Installing PyTorch with CUDA (forces downgrade from default-index torch)..."
+uv pip install "torch>=2.1.0,<2.11" "torchvision>=0.16,<0.26" --index-url https://download.pytorch.org/whl/cu121
 
 echo "  Virtual environment ready!"
 echo ""
