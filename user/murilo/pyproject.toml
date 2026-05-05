@@ -32,6 +32,11 @@ dependencies = [
 
     # Visualization
     "matplotlib>=3.7.0",
+
+    # Logging / experiment tracking
+    "wandb>=0.16.0",
+    "tensorboard>=2.15.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]

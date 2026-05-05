@@ -1,0 +1,20 @@
+Top-1 cosine similarity distribution:
+  n_tiles=33680
+  min=0.2790 max=0.8850 mean=0.5126
+  percentiles:
+    p10 = 0.4109
+    p25 = 0.4547
+    p50 = 0.5076
+    p75 = 0.5626
+    p90 = 0.6175
+    p95 = 0.6552
+    p99 = 0.7511
+
+Label coverage at candidate thresholds:
+  tau=0.75 ->   1.0% of tiles labelled
+  tau=0.80 ->   0.3% of tiles labelled
+  tau=0.85 ->   0.1% of tiles labelled
+  tau=0.90 ->   0.0% of tiles labelled
+  tau=0.95 ->   0.0% of tiles labelled
+
+Chosen threshold: 0.6500 -> 5.5% coverage
