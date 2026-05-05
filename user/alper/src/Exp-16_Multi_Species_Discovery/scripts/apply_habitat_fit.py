@@ -127,6 +127,7 @@ def build_habitat_fit_table(
     use_refined: bool = False,
     refined_ref: Dict[str, dict] = None,
     radius_km: int = 0,  # 0 = use default columns; 150 or 500 = use _R150/_R500
+    beta_overrides: Dict[str, float] = None,
 ) -> Dict[str, np.ndarray]:
     """For each source, build a (NUM_CLASSES,) array of fit factors in [β,1].
 
@@ -137,6 +138,10 @@ def build_habitat_fit_table(
                   m = 0.5 * (alt_hi - alt_lo) tolerance.
 
     Species without training data (n_obs=0) default to fit=1.0.
+
+    beta_overrides: optional per-source β values. If a source key is present,
+    its β is used in place of the global β when building that source's fit
+    table. β=1.0 disables demotion entirely for that source.
     """
     sid_to_row: Dict[str, dict] = {
         str(r["species_id"]): r.to_dict() for _, r in geo_profile.iterrows()
@@ -153,6 +158,7 @@ def build_habitat_fit_table(
         col_suffix = ""
     fit_by_src: Dict[str, np.ndarray] = {}
     for src, ref in src_iter:
+        beta_src = (beta_overrides or {}).get(src, beta)
         fit = np.ones(NUM_CLASSES, dtype=np.float32)
         for cls_idx in range(NUM_CLASSES):
             sid = str(species_map[cls_idx])
@@ -160,7 +166,7 @@ def build_habitat_fit_table(
             if r is None or r.get("n_obs", 0) == 0:
                 continue  # no info -> 1.0 (neutral)
             n_near = r.get(f"n_near_{src}{col_suffix}", 0)
-            geo_score = beta + (1.0 - beta) * min(1.0, n_near / max(n_near_min, 1))
+            geo_score = beta_src + (1.0 - beta_src) * min(1.0, n_near / max(n_near_min, 1))
             if use_altitude and not pd.isna(r.get("alt_median", float("nan"))):
                 alt_med = r["alt_median"]
                 alt_lo = ref["alt_lo"]
@@ -174,7 +180,7 @@ def build_habitat_fit_table(
                         d = (alt_lo - margin) - alt_med
                     else:
                         d = alt_med - (alt_hi + margin)
-                    alt_score = max(beta, 1.0 - d / 1000.0)
+                    alt_score = max(beta_src, 1.0 - d / 1000.0)
             else:
                 alt_score = 1.0
             fit[cls_idx] = geo_score * alt_score
@@ -214,7 +220,7 @@ def main() -> None:
     ap.add_argument("--per-source-json", default=None,
                     help="JSON overrides per source. Keys: source prefix. "
                          "Values: dict with any of {threshold, topk, n_floor, "
-                         "ratio_floor, count_bound (bool)}.")
+                         "ratio_floor, count_bound (bool), beta}.")
     args = ap.parse_args()
 
     cb_sources = tuple(s.strip() for s in args.count_bound_sources.split(","))
@@ -262,12 +268,23 @@ def main() -> None:
             print(f"    {s:<12} lat={c['lat']:.2f}  lon={c['lon']:.2f}  "
                   f"alt=[{c.get('alt_lo','?')},{c.get('alt_hi','?')}]")
 
+    beta_overrides: Dict[str, float] = {}
+    if per_source_overrides:
+        for s, cfg in per_source_overrides.items():
+            if "beta" in cfg:
+                beta_overrides[s] = float(cfg["beta"])
+    if beta_overrides:
+        print(f"\n  per-source β overrides:")
+        for s, b in beta_overrides.items():
+            print(f"    {s:<12} β={b}")
+
     fit_by_src = build_habitat_fit_table(
         geo_profile, species_map,
         beta=args.beta, n_near_min=args.n_near_min,
         use_altitude=args.use_altitude,
         use_refined=use_refined, refined_ref=refined_ref,
         radius_km=args.radius_km,
+        beta_overrides=beta_overrides,
     )
     # Quick stats on fit distribution
     print(f"\n  habitat-fit table summary:")
@@ -303,7 +320,8 @@ def main() -> None:
 
         # Apply habitat-fit demotion
         in_scope = (scope is None) or (src in scope)
-        if in_scope and src in fit_by_src and args.beta < 1.0:
+        eff_beta = beta_overrides.get(src, args.beta)
+        if in_scope and src in fit_by_src and eff_beta < 1.0:
             p = p * fit_by_src[src]
             n_demoted_qids += 1
 
