@@ -75,11 +75,13 @@ def write_submission_csv(
     image_names: np.ndarray,
     species_id_lists: list[list[int]],
 ) -> None:
-    """Submission format: ``quadrat_id;species_ids`` with species_ids as
-    quoted ``"[id1, id2, ...]"`` — matches exp 002 / Kaggle 2026 schema."""
+    """Submission format: comma-separated, ALL fields quoted, species_ids
+    encoded as Python list-repr. Matches exp 002's
+    ``pandas.to_csv(sep=",", quoting=csv.QUOTE_ALL)`` writer byte-for-byte —
+    Kaggle parses with that schema (verified by A0a/A0b acceptance)."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", newline="") as f:
-        writer = csv.writer(f, delimiter=";")
+        writer = csv.writer(f, delimiter=",", quoting=csv.QUOTE_ALL)
         writer.writerow(["quadrat_id", "species_ids"])
         for name, sid_list in zip(image_names, species_id_lists):
             writer.writerow([name, str(list(sid_list))])

@@ -33,12 +33,19 @@ def test_load_class_to_species_id(tmp_path: Path):
 
 
 def test_write_submission_csv(tmp_path: Path):
+    """Schema must match exp 002's working CSV byte-for-byte: comma
+    delimiter, ALL fields quoted (Kaggle rejected semicolon-delimited)."""
     out = tmp_path / "submissions" / "x.csv"
     image_names = np.asarray(["img-a", "img-b"], dtype="<U64")
     species_id_lists = [[1, 2, 3], [4, 5]]
     infer_module.write_submission_csv(out, image_names, species_id_lists)
-    assert out.exists()
-    rows = list(csv_module.reader(out.open(), delimiter=";"))
+    # Verify raw bytes have the expected structure (quoted comma-separated)
+    raw = out.read_text()
+    assert raw.startswith('"quadrat_id","species_ids"\n')
+    assert '"img-a","[1, 2, 3]"\n' in raw
+    assert '"img-b","[4, 5]"\n' in raw
+    # And that csv.reader parses it as 3 rows × 2 fields
+    rows = list(csv_module.reader(out.open(), delimiter=","))
     assert rows[0] == ["quadrat_id", "species_ids"]
     assert rows[1] == ["img-a", "[1, 2, 3]"]
     assert rows[2] == ["img-b", "[4, 5]"]
