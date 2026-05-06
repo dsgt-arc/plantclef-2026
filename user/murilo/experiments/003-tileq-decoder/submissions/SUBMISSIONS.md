@@ -21,8 +21,9 @@ kaggle competitions submit \
   approach", "decoder@k=9 vs A0b", "α=0.50 blend".
 - Expected F1 always included so the LB delta vs expectation is logged.
 
-Kaggle slot budget: ~5 / day × 3 days (2026-05-04 → 2026-05-07) ≈ 15 slots.
-Plan submissions; don't burn slots on near-duplicates.
+Kaggle daily submission cap: **100/day** (verified 2026-05-05; earlier
+spec/CONTEXT note of "~5/day" was wrong). Plenty of headroom — exp 003's
+full plan (4 headlines + 12 k-sweep + 11 A3 = 27 submissions) fits in one day.
 
 ## Log
 
@@ -30,10 +31,10 @@ Plan submissions; don't burn slots on near-duplicates.
 |---|---|---|---|---:|
 | A0a | `A0a_max_prob_grid4.csv` | `A0a: max-prob top-10 grid_4x4 (organizers' approach, expect F1≈0.23)` | 2026-05-03 | **0.22986** |
 | A0b | `A0b_sorted_prob_topk9_grid4.csv` | `A0b: sorted-prob top-9 grid_4x4 (2025 reproduction, expect F1=0.30810)` | 2026-05-03 | **0.30810** |
-| A1@k9 | `A1_samplerA_topk9_seed42.csv` | _pending — H1 anchor row, k=9 matches A0b_ | — | — |
-| A1@k10 | `A1_samplerA_topk10_seed42.csv` | _pending — k=10 matches organizers' convention_ | — | — |
-| A2@k9 | `A2_samplerB_topk9_seed42.csv` | _pending — H2 contrast vs A1@k9_ | — | — |
-| A2@k10 | `A2_samplerB_topk10_seed42.csv` | _pending — H2 contrast vs A1@k10_ | — | — |
+| A1@k9 | `A1_samplerA_topk9_seed42.csv` | `A1: decoder samplerA topk9 seed42 (H1 anchor vs A0b 0.30810)` | 2026-05-05 | **0.12180** |
+| A1@k10 | `A1_samplerA_topk10_seed42.csv` | `A1: decoder samplerA topk10 seed42 (organizers' k)` | 2026-05-05 | **0.11640** |
+| A2@k9 | `A2_samplerB_topk9_seed42.csv` | `A2: decoder samplerB tau=0.65 topk9 seed42 (H2 contrast)` | 2026-05-05 | **0.09060** |
+| A2@k10 | `A2_samplerB_topk10_seed42.csv` | `A2: decoder samplerB tau=0.65 topk10 seed42` | 2026-05-05 | **0.08445** |
 | A3-α0.00 | `A3_alpha0p00.csv` | _pending — α=0, pure max_prob baseline (sanity check)_ | — | — |
 | A3-α0.25 | `A3_alpha0p25.csv` | _pending_ | — | — |
 | A3-α0.50 | `A3_alpha0p50.csv` | _pending_ | — | — |

@@ -139,27 +139,72 @@ each other can be parallelised across compute nodes / sessions.
       `results.md` § "What this offline gap does (and does NOT) tell us".
 
 ## 9. Inference + headline submissions
-- [ ] 9.1 `infer.py --checkpoint artifacts/checkpoints/decoder_samplerA.pt
-      --tile-cls shared/inference/dinov2-vit-base/cls_grid_4x4.parquet
-      --topk 9,10 --output-prefix submissions/A1_samplerA_seed42`
-      → produces both `A1_samplerA_topk9_seed42.csv` (H1 anchor) and
-      `A1_samplerA_topk10_seed42.csv` from a single forward pass.
-- [ ] 9.2 Same for Sampler B →
-      `submissions/A2_samplerB_topk{9,10}_seed42.csv`.
-- [ ] 9.3 *(If §3.3 mask was built)* re-run with `--geo-mask artifacts/sw_europe_mask.npy`
-      and add `_geo` suffix to filenames.
-- [ ] 9.4 Submit all four CSVs (A1@k9, A1@k10, A2@k9, A2@k10) to Kaggle.
-      Record messages + LB scores in `submissions/SUBMISSIONS.md`.
+- [x] 9.1 `infer.py --checkpoint artifacts/checkpoints/decoder_samplerA.pt
+      --tag A1_samplerA --topk 5,7,9,10,12,15` produces 6 CSVs from one
+      forward pass + persists `probs_A1_samplerA_seed42.npy` for blend.py.
+      One forward pass over 2105 quadrats took 7.4 s on login-node CPU.
+- [x] 9.2 Same for Sampler B → 6 CSVs +
+      `probs_A2_samplerB_seed42.npy`.
+- [ ] 9.3 *(Skipped per §3.3 decision)* — geo mask deferred to future work.
+- [x] 9.4 **Headline submissions to Kaggle 2026-05-05**:
+      | CSV | LB F1 |
+      |---|---:|
+      | A1_samplerA_topk9 (H1 anchor) | **0.12180** |
+      | A1_samplerA_topk10 | 0.11640 |
+      | A2_samplerB_topk9 (H2 contrast) | **0.09060** |
+      | A2_samplerB_topk10 | 0.08445 |
+      **H1 rejected** (A1 < 0.288 reject threshold by 0.166).
+      **H2 rejected, opposite direction** (A2 − A1 = −0.031, B significantly
+      worse than A). Both findings publishable per proposal.md.
+- [x] 9.5 **CSV format bug fixed**: initial submissions errored with
+      "ID column quadrat_id not found" — `infer.py`'s writer used `;`
+      delimiter (matched spec text but not exp 002's actual `pandas.to_csv(
+      sep=",", quoting=csv.QUOTE_ALL)` format). Fixed in commit `eab81f3`,
+      regenerated all 12 CSVs, resubmitted successfully.
 
 ## 10. A3 score-blend (bonus, §2.5)
-- [ ] 10.1 Pick best of {A1, A2} as decoder source. Load decoder probs (per-image)
-      and cached `max_prob` probs (per-image, from `grid_4x4.parquet`).
-- [ ] 10.2 `blend.py --alpha {0,0.25,0.5,0.75,1.0}` → 5 CSVs in `submissions/`.
-- [ ] 10.3 Submit each. Record α vs F1 curve.
+- [x] 10.1 `blend.py` written; expanded α grid from spec's 5 points to **11**
+      ({0.0, 0.1, …, 1.0}) given Kaggle 100/day cap. Per-image decoder probs
+      cached during `infer.py` so re-running is instant (no decoder forward).
+- [ ] 10.2 Run for the better-LB decoder source (A1 = 0.12180):
+      `python blend.py --decoder-probs artifacts/probs_A1_samplerA_seed42.npy
+      --decoder-tag A3_samplerA --topk 10` → 11 CSVs.
+- [ ] 10.3 Submit each. Record α vs F1 curve. α=0 should reproduce A0a
+      (0.22986); α=1.0 should reproduce A1@k10 (0.11640). Interesting
+      question: does any α > 0 **improve over α=0**? That's the
+      "decoder has complementary signal" verdict.
 
 ## 11. Analysis
-- [ ] 11.1 Compile ablation table in `results.md` (rows A0a, A0b, A1, A2, A3-α*).
-- [ ] 11.2 Document any failure modes hit (§7) and how they were resolved.
-- [ ] 11.3 Decide H1 / H2 outcomes per `proposal.md` success criteria.
-- [ ] 11.4 Note wall-clock per stage for paper appendix.
-- [ ] 11.5 Note any future-work directions confirmed by results (§8).
+- [ ] 11.1 Ablation table compiled in `results.md` (rows A0a, A0b, A1@k{9,10},
+      A2@k{9,10}). Pending: A3-α* rows once submitted.
+- [x] 11.2 Failure modes documented in `results.md` § "Mechanism analysis":
+      - Sampler A: spec §7.3 (synthetic-distribution overfit) — confirmed
+        but NOT the binding mode for our LB; A held up better than B.
+      - Sampler B: a **new** failure mode not in spec §7 —
+        FAISS-undersampling under-confidence. At τ=0.65 only 5.46 % of
+        test tiles get bg labels, so 94.5 % of pseudo-quadrats have 11
+        unlabelled-test-tile slots → decoder learns "test-shaped tile →
+        no species". At inference, all 16 tiles are test-shaped → uniformly
+        low logits → top-k picks noise. Worth a Discussion paragraph.
+- [x] 11.3 H1/H2 verdicts decided (above). Both rejected; H2 rejected in the
+      opposite direction predicted (a third state the success criteria didn't
+      enumerate explicitly).
+- [x] 11.4 Wall-clock per stage:
+      - test CLS extraction (P3, V100): 16 min
+      - build train lookup (P4, cpu-small): 2:14 (build alone 21 s + venv install)
+      - build FAISS background map (P4, cpu-small): 11:15 (FAISS query 9.8 min)
+      - sanity check (login-node CPU): 1:30
+      - train Sampler A (RTX 6000): 12:05 (9.4 min training + venv install)
+      - train Sampler B (RTX 6000): 11:46 (9.1 min training + venv install)
+      - inference both samplers (login-node CPU): 7-8 s each
+- [ ] 11.5 Future-work directions confirmed by results (§8):
+      - **DINOv2 attention-rollout for background tile selection** —
+        promising alternative to FAISS-undersampling under-confidence
+        failure mode; doesn't depend on cosine similarity to single-plant
+        train CLSs.
+      - **LUCAS land-cover priors** (`metadata_lucas/LUCAS_metadata_SWE_*`)
+        — could provide habitat-conditional priors over species, reducing
+        the need for FAISS labels at all.
+      - **Abstain query (K+1 logit)** — could let the decoder explicitly
+        predict "no species" without the implicit "low confidence on
+        everything" pathology.

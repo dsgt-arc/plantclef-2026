@@ -8,12 +8,26 @@ author: Murilo Gustineli
 
 # Experiment 003: TileQ-Decoder — Results
 
-## Status: IN PROGRESS
+## Status: IN PROGRESS — headlines submitted; H1 rejected, H2 rejected (opposite direction)
 
-A0 submission-pipeline derisk **complete**. Test-CLS extraction (P3), library
-code + sanity checks (P4), and both training runs (P5, Sampler A + Sampler B)
-**complete**. Inference + headline submissions A1/A2 (P6) is the next step;
-Kaggle LB is the only generalisation signal we have left.
+All four headline submissions to Kaggle (A1/A2 × k=9/10) returned LB scores
+2026-05-05. **The decoder underperforms every existing baseline**, including
+the no-grid full-image inference (F1=0.14506 from exp 001). H1's reject
+criterion (A1 < 0.288) is met decisively — A1@k9 = 0.12180 is **0.186 F1
+below the A0b anchor (0.30810)**. H2's predicted direction did not hold:
+A2 (Sampler B) is 0.031 F1 **lower** than A1, not higher.
+
+**This is a publishable null result**. The proposal explicitly stated:
+> "A null result on H2 is publishable" (proposal.md, Hypothesis section).
+
+Spec §7.3 anticipated synthetic-distribution overfit for Sampler A; we
+confirm it. We additionally find a *second* failure mode in Sampler B —
+test-distribution exposure to `proj_kv` did not transfer; if anything,
+training the decoder on majority-unlabelled test tiles taught it to under-
+predict at test time. Detailed mechanism analysis below.
+
+Remaining work (Priority 7 + 8): A3 score-blend (cheap, may quantify
+complementary vs redundant signal), and writeup.
 
 See [proposal.md](proposal.md) for hypothesis framing (H1/H2) and
 [spec.md](spec.md) for the technical specification.
@@ -32,6 +46,117 @@ Both submissions generated from
 against `shared/inference/dinov2-vit-base/grid_4x4.parquet`. No new code.
 
 A0b is the **H1 anchor**: the decoder must clear F1 = 0.30810 to confirm H1.
+
+## Kaggle Leaderboard Results — Headlines (P6)
+
+| # | Method | Avg species/img | Public LB | Δ vs A0b | Δ vs A0a |
+|---|--------|----------------:|----------:|---------:|---------:|
+| **A1@k9** | TileQ-Decoder Sampler A, top-9 (H1 anchor) | 9.0 | **0.12180** | −0.18630 | −0.10806 |
+| A1@k10 | TileQ-Decoder Sampler A, top-10 | 10.0 | **0.11640** | −0.19170 | −0.11346 |
+| **A2@k9** | TileQ-Decoder Sampler B (τ=0.65), top-9 (H2 contrast) | 9.0 | **0.09060** | −0.21750 | −0.13926 |
+| A2@k10 | TileQ-Decoder Sampler B (τ=0.65), top-10 | 10.0 | **0.08445** | −0.22365 | −0.14541 |
+
+For reference (full landscape — Murilo's experiments only, independence-respecting):
+
+| Reference | F1 |
+|---|---:|
+| Murilo no-grid baseline (exp 001, full-image inference) | 0.14506 |
+| **A1@k9 (this work)** | **0.12180** |
+| A0a max-prob top-10 grid_4x4 | 0.22986 |
+| A0b sorted-prob top-9 grid_4x4 (2025 reproduction) | 0.30810 |
+
+The decoder's best result (A1@k9 = 0.12180) is **below the no-grid baseline**
+(0.14506) — i.e., the decoder's per-image probability vector is less useful
+for top-k F1 than just running the frozen ViT-B on the whole image without
+any tiling. **The decoder is destroying signal that's already present in
+the cached per-tile probs.**
+
+### H1 / H2 verdicts (per proposal.md success criteria)
+
+| Hypothesis | Criterion | Outcome |
+|---|---|---|
+| **H1**: A1 ≥ 0.30810 (A0b anchor) | reject if A1 < 0.288 | **REJECTED** (A1=0.12180; 0.166 below reject threshold) |
+| **H2**: A2 − A1 ≥ +0.01 | reject if \|A2 − A1\| ≤ 0.005 | **REJECTED, opposite direction** (A2 − A1 = −0.0312; 6× outside the noise band, but **negative**) |
+
+H2 falls in a third state the proposal didn't enumerate explicitly: **B is
+significantly worse than A**, not "tied" (reject) and not "better"
+(confirm). Worth flagging in the paper as a sub-finding distinct from
+the simple null.
+
+### k-sensitivity (within sampler)
+
+For both samplers, k=10 underperforms k=9 by a small but consistent margin:
+
+| | k=9 | k=10 | Δ |
+|---|---:|---:|---:|
+| A1 (Sampler A) | 0.12180 | 0.11640 | −0.005 |
+| A2 (Sampler B) | 0.09060 | 0.08445 | −0.006 |
+
+The 10th class adds more false positives than true positives, consistent
+with the model already over-predicting at k=9. Lower k (k=5, 7 CSVs ready
+to submit) might score higher, but the headline picture won't change —
+A1 is below A0b at every k.
+
+## Mechanism analysis: why did Sampler B underperform Sampler A?
+
+The proposal's prior was that test-anchored Sampler B would *help* via
+two mechanisms: (1) `proj_kv` exposure to test-scale CLSs during training,
+(2) FAISS-discovered species labels on surviving (non-overwritten)
+backgrounds. Mechanism (1) clearly worked — both samplers trained
+cleanly without scale collapse and Sampler B's per-image prediction
+distribution is sharper and more diverse than Sampler A's
+(see "Pre-Kaggle prediction-distribution analysis" below). But the LB
+contradicts the prior anyway.
+
+**Likely mechanism**: at τ=0.65, only 5.46 % of test tiles get FAISS
+labels. The remaining 94.5 % of B's pseudo-quadrats have 11 untouched
+test-tile slots that contribute *zero* to the multi-hot label.
+Training-time, the decoder consistently sees: "test-shaped tile → no
+species in the label." It learns to output low logits everywhere on
+test-shaped inputs. At inference time, *all 16* tiles are test-shaped,
+so the decoder's per-class probabilities are uniformly low — and forced
+top-k decoding picks essentially noise from the bottom of the
+probability distribution. Sampler A's overconfident-on-OOD output
+happens to have more useful structure for top-k decoding because at
+least the predicted classes are confidently chosen Mediterranean plants
+(some of which are present in the real test set by the prior).
+
+Spec §7.3 ("synthetic-distribution overfit (Sampler A)") was not the
+binding failure mode here — Sampler A actually held up better than
+Sampler B did. The binding failure for B is a **new** failure mode not
+explicitly anticipated: *FAISS-undersampling-induced under-confidence on
+the dominant input distribution*. This is worth a Discussion-section
+paragraph in the paper.
+
+### Pre-Kaggle prediction-distribution analysis (foreshadowed it)
+
+Before submitting, we computed the per-image probability statistics
+across all 2,105 test images:
+
+| Metric | A1 (Sampler A) | A2 (Sampler B) |
+|---|---:|---:|
+| classes per img with prob > 0.1 | 6,988 (90 %) | 312 (4 %) |
+| classes per img with prob > 0.5 (median) | 10 | **0** |
+| unique classes in any top-9 | 1,874 (24 %) | 3,737 (48 %) |
+| max prob per image (mean) | 0.65 | 0.57 |
+
+At the time we read this as "B is sharp + diverse" — encouraging for H2.
+The LB now lets us reinterpret: B's median 0 classes > 0.5 was the
+warning sign. Forced top-k from a flat probability vector is
+near-random; A's overconfident vector had at least *informative*
+mode-collapse (collapse onto plausible Mediterranean species).
+
+Top species predicted (in any top-9) — mostly Mediterranean plants in
+both cases:
+- A1 (most-predicted, top-5): *Carex pyrenaica* (703/2105),
+  *Pinguicula nevadensis* (633), *Primula intricata* (630),
+  *Oreochloa elegans* (608), *Viola pyrenaica* (572)
+- A2 (most-predicted, top-5): *Helictochloa versicolor* (353),
+  *Carex distans* (259), *Agrostis canina* (245), *Ulmus pumila* (210),
+  *Festuca filiformis* (199)
+
+Both pick biologically plausible SW-Europe vegetation, just with
+different mode-collapse patterns.
 
 ## Priority 3 — Test-CLS extraction
 
@@ -250,17 +375,34 @@ cannot adjudicate it, by construction.
 
 - [x] **Priority 0** — A0a/A0b Kaggle pipeline derisk (LB 0.22986, 0.30810)
 - [x] **Priority 3** — Test-CLS extraction (`cls_grid_4x4.parquet`)
-- [x] **Priority 4** — Library code + sanity checks (80 tests pass; both
+- [x] **Priority 4** — Library code + sanity checks (88 tests pass; both
       samplers overfit-one-batch ratio > 13,000×)
 - [x] **Priority 5** — Train Run 1 (Sampler A) + Run 2 (Sampler B) at 80k
       steps each
-- [ ] **Priority 6** — Inference + headline submissions A1, A2:
-      `infer.py --checkpoint <ckpt> --topk 9,10 --output-prefix submissions/<tag>`
-      → 4 CSVs (A1@k9, A1@k10, A2@k9, A2@k10). Submit all 4 to Kaggle.
-- [ ] **Priority 7** — A3 score-blend bonus (5 α values, no retraining)
-- [ ] **Priority 8** — Writeup: decide H1, H2 outcomes per `proposal.md`
-      success criteria; document failure modes hit (§7); paper-appendix
-      wallclock per stage; future-work directions (§8)
+- [x] **Priority 6** — Inference + 4 headline submissions
+      (A1@k9, A1@k10, A2@k9, A2@k10) submitted to Kaggle 2026-05-05.
+      H1 rejected, H2 rejected (opposite direction).
+- [ ] **Priority 6.5 (k-sweep extras)** — 8 additional CSVs at k ∈
+      {5, 7, 12, 15} per sampler are already written to `submissions/`.
+      Cheap to submit (100/day cap); maps the k-sensitivity curve for
+      the paper's ablation table. Does not change the headline picture
+      (decoder < A0b at every k by construction — gap is too large to
+      close at any reasonable k).
+- [ ] **Priority 7** — A3 score-blend (`blend.py`):
+      `python blend.py --decoder-probs artifacts/probs_A1_samplerA_seed42.npy
+      --decoder-tag A3_samplerA --topk 10` → 11 CSVs over α ∈ {0, 0.1, …, 1.0}.
+      Likely outcome: best α near 0 (decoder probs add noise to max_prob).
+      Worth running anyway — α=0 sanity-duplicates A0a (0.22986); any α > 0
+      improving over that would mean decoder has *some* complementary signal
+      despite being worse standalone. Cheap (11 submissions, 100/day cap).
+- [ ] **Priority 8** — Writeup: H1/H2 verdict (above) → results.md → paper.
+      Document the *new* B failure mode (FAISS-undersampling under-
+      confidence) in spec §7 as a discovered mode beyond the original 7.
+      Wallclock per stage in the paper appendix (build train lookup 2:14;
+      build FAISS map 11:15; sanity check 1:30; train sampler{A,B} 12:05/11:46).
+      Future-work directions in spec §8 — particularly attention-rollout
+      tile selection or LUCAS land-cover priors as alternative to
+      FAISS-based label discovery.
 
 ## Files
 
