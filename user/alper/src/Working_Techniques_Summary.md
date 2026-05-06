@@ -1,19 +1,27 @@
-# PlantCLEF 2026 — Techniques That Worked (short summary)
+
+# PlantCLEF 2026 — Techniques That Worked 
 
 Cumulative progression: **F1 0.28093 (baseline) → 0.50623 (current best, Exp-16C lock 2026-05-05).**
 
 Below are the techniques that improved leaderboard score, in roughly the order they enter the pipeline. Negative experiments are omitted.
+
+All of the ideas listed below are proposed and performed by Alper Erten. Strategies tested by the other two teammates are excluded from this write-up; they weren't included in the final competition results submission either. 
+
+---
+
+### Project GitHub Repository: https://github.com/dsgt-arc/plantclef-2026
 
 ---
 
 ## Original Proposal (Exp-1, abandoned)
 
 - **Cross-Region Transformer with noisy-student distillation on the 212K LUCAS unlabeled set (Exp-1, original proposal)** — The original research plan was an end-to-end *cross-region transformer*: each quadrat would be sliced into region windows, each region encoded independently by a frozen pretrained ViT to produce region embeddings, and a lightweight self-attention transformer would learn inter-tile spatial / co-occurrence structure across regions and pool to a single quadrat-level multi-label prediction. A teacher-student / noisy-student loop would supervise the student on the ~212K unlabeled "pseudo-quadrat" LUCAS images that PlantCLEF provides for optional adaptation, with the teacher being a frozen ViT + simple tile-aggregation head. The expected gain was +0.01 to +0.03 macro-F1 over standard tiling-and-aggregation baselines.
-  - **Why it was abandoned.** The mechanism was sound, but the supervision signal was not: the 212K LUCAS unlabeled adaptation set comes from a substantially different sampling distribution and image-statistics regime than the actual 2105-image PlantCLEF test set (different sites, different camera setups, different ecological mix). Pseudo-labels distilled on LUCAS taught the student to model a distribution the leaderboard does not score against, so any in-domain transfer was washed out by the train↔test domain gap. Two related symptoms made the failure visible: KL/soft-distillation training over all 7806 classes caused mode collapse (the ~7742 near-zero targets per image overwhelmed the ~64 positive signals, F1 → 0); switching to BCE with negative sampling restored a working signal but only to F1≈0.143, well below what direct tiling on the test set was already achieving. The cross-region transformer idea was shelved and the project pivoted to the tiling-and-aggregation lineage that became Exp-2 onward.
+
+  - **Why it was abandoned.** The mechanism was sound, but the supervision signal was not: the 212K LUCAS unlabeled adaptation set comes from a substantially different sampling distribution and image-statistics regime than the actual 2105-image PlantCLEF test set (different sites, different camera setups, different ecological mix). Pseudo-labels distilled on LUCAS taught the student to model a distribution the leaderboard does not score against, so any in-domain transfer was washed out by the train vs. test domain gap. Two related symptoms made the failure visible: KL/soft-distillation training over all 7806 classes caused mode collapse (the ~7742 near-zero targets per image overwhelmed the ~64 positive signals, F1 → 0); switching to BCE with negative sampling restored a working signal but only to F1≈0.143, well below what direct tiling on the test set was already achieving. The cross-region transformer idea was shelved and the project pivoted to the tiling-and-aggregation lineage that became Exp-2 onward.
 
 ---
 
-## Preprocessing
+## Test Image Preprocessing
 
 - **JPEG round-trip preprocessing (Exp-2)** — After Lanczos-resizing each test image, re-encode it through PIL JPEG at quality=85, 4:2:2 chroma subsampling, then decode back to pixels before tiling. The DINO backbones were pretrained on JPEG-compressed natural images, so passing the test images through one round of compression matches the pixel-statistic distribution they expect. Cheap, no parameters to tune, downside is zero. Δ ≈ +0.002 standalone, compounds with downstream stages.
 
@@ -59,6 +67,6 @@ Below are the techniques that improved leaderboard score, in roughly the order t
 
 - **Habitat-fit retune at new ViT-L+ConvNeXt-P backbone (Exp-16C)** — When the production backbone changed, the habitat-fit hyperparameters needed re-tuning: n_near_min 30→40, β_global 0.10→0.15. R=200 km, k=10, thr=0.085 unchanged. Final lock 2026-05-05.
 
-## Submission
+## Final Submission
 
 - **Fixed global threshold = 0.085 + topK = 10 + SW Europe geo mask** — Hard-threshold per-class probabilities, then cap at 10 species per image. Adaptive per-image thresholds (Exp-6: max-gap, relative-ratio, elbow) all lost to a well-tuned fixed threshold. The geo mask zeroes ~3000 of the 7806 classes that don't occur in southwest Europe. Threshold value drifted across experiments (0.04 → 0.10 → 0.085) only because the probability scale shifts when the pipeline re-blends — the *rule* (fixed global threshold) is unchanged.
