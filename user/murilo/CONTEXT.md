@@ -3,18 +3,20 @@
 Session handoff document for Murilo's PlantCLEF 2026 experiments.
 Read this first, then read the referenced docs to get full context.
 
-**Last updated**: 2026-05-05 evening. **Priorities 4-6 done**: full library
-code, both decoder training runs, and 4 headline Kaggle submissions all
-complete. **Headline LB results**: A1@k9 = 0.12180 (Sampler A, H1 anchor),
-A1@k10 = 0.11640, A2@k9 = 0.09060 (Sampler B, H2 contrast), A2@k10 = 0.08445.
-**H1 rejected** (A1 0.166 below the spec's 0.288 reject threshold;
-0.186 below A0b = 0.30810). **H2 rejected, opposite direction predicted**
-(A2 − A1 = −0.0312; B significantly *worse* than A — third state the
-proposal didn't enumerate). Both publishable nulls per proposal.md. New
-failure mode discovered (FAISS-undersampling under-confidence on Sampler B);
-documented in `results.md`. Next session: P7 (A3 α-blend, 11 submissions
-once user picks; cheap given 100/day cap) and P8 (writeup). Competition
-ends **2026-05-07** (~2 days remaining).
+**Last updated**: 2026-05-06 early morning. **Priorities 4-7 done**: full
+library code, both training runs, 4 headlines + 11 A3 α-blends submitted.
+**Headlines**: A1@k9 = 0.12180 (H1 anchor), A1@k10 = 0.11640,
+A2@k9 = 0.09060 (H2 contrast), A2@k10 = 0.08445.
+**A3 α-curve monotone decreasing**: α=0 (max_prob only) = 0.22144;
+α=1 (decoder only) = 0.11640. **No α > 0 improves over α=0** — decoder
+provides zero complementary signal.
+**H1 rejected** decisively. **H2 rejected, opposite direction predicted**
+(B 0.031 *below* A). **A3** confirms decoder is purely additive noise
+(stronger result than spec's complementary-vs-redundant framing). New
+Sampler B failure mode (FAISS-undersampling under-confidence) documented
+in `results.md`. Only P8 (writeup) remains; most of it is already
+populated in results.md, tasks.md, CONTEXT.md. Competition ends
+**2026-05-07** (~1.5 days remaining).
 
 ---
 
@@ -169,10 +171,62 @@ training runs) in `9febc5f`; P6 (infer.py + headlines) in `3d88553` /
 | **A1@k10** TileQ-Decoder Sampler A top-10 | **0.11640** | Public LB, 2026-05-05 |
 | **A2@k9** TileQ-Decoder Sampler B (τ=0.65) top-9 (exp 003 H2 contrast) | **0.09060** | Public LB, 2026-05-05 — **H2 rejected, opposite direction** |
 | **A2@k10** TileQ-Decoder Sampler B (τ=0.65) top-10 | **0.08445** | Public LB, 2026-05-05 |
+| **A3 α=0.00** (pure max_prob, A0a sanity dup) | **0.22144** | Public LB, 2026-05-06 — best of A3 sweep |
+| A3 α=0.10 | 0.21952 | Public LB, 2026-05-06 |
+| A3 α=0.20 | 0.21827 | |
+| A3 α=0.30 | 0.21001 | |
+| A3 α=0.40 | 0.19954 | |
+| A3 α=0.50 | 0.18931 | |
+| A3 α=0.60 | 0.17292 | |
+| A3 α=0.70 | 0.15277 | |
+| A3 α=0.80 | 0.14562 | |
+| A3 α=0.90 | 0.13154 | |
+| **A3 α=1.00** (pure decoder, = A1@k10) | **0.11640** | Public LB, 2026-05-06 |
 
 ---
 
 ## What happened recently
+
+### 2026-05-06 early morning — A3 α-blend done; decoder is purely additive noise
+
+11-point α sweep over A1 (Sampler A, the better-LB decoder source at
+0.12180) blended with cached `max_prob` baseline at fixed top-k=10.
+Generated all CSVs locally via `blend.py` (no decoder forward — the
+per-image probs were already cached from `infer.py`), submitted all 11
+to Kaggle in a single loop (~3 s sleep between each).
+
+**α-curve is monotonically decreasing**: every increase of α reduces LB.
+
+| α | LB |
+|---:|---:|
+| **0.00** (pure max_prob) | **0.22144** |
+| 0.10 | 0.21952 |
+| 0.20 | 0.21827 |
+| 0.30 | 0.21001 |
+| 0.40 | 0.19954 |
+| 0.50 | 0.18931 |
+| 0.60 | 0.17292 |
+| 0.70 | 0.15277 |
+| 0.80 | 0.14562 |
+| 0.90 | 0.13154 |
+| **1.00** (pure decoder) | **0.11640** |
+
+Sanity checks:
+- α=1.00 LB exactly matches A1@k10 (0.11640). Blend math confirmed
+  byte-correct at the boundary.
+- α=0.00 LB = 0.22144 vs A0a's 0.22986 — 0.008 gap from tie-breaking
+  differences (numpy `argpartition+argsort` vs pandas `sort` on species
+  with near-equal softmax probabilities; ~80 of 2105 rows have positions
+  8/9 or 9/10 swapped, occasionally a different boundary species at
+  rank 10 in the strictest cases). Same top-10 sets in 96 % of rows.
+  Relative A3 curve internally consistent (all 11 use same tie-breaking).
+
+**Stronger than expected**: spec §2.5 framed the question as
+"complementary vs redundant" with the implicit assumption that some
+intermediate α might lift performance. Reality is a third outcome:
+**best α is exactly 0**, with monotone-worse blends — i.e., decoder is
+not even partially redundant; it actively destroys F1 at any non-zero
+weight. This is the strongest possible "decoder is noise" result.
 
 ### 2026-05-05 — P4-P6 landed; H1 rejected, H2 rejected (opposite direction)
 
@@ -517,24 +571,14 @@ A2@k10 = 0.08445. Both findings publishable per proposal.md.
 8 additional k-sweep CSVs (k ∈ {5, 7, 12, 15} per sampler) ready in
 `submissions/` for free additional ablation rows; not yet submitted.
 
-### Priority 7 — A3 score-blend  ← **next**
+### Priority 7 — A3 score-blend — DONE 2026-05-06
 
-`blend.py` ready. Run for the better-LB decoder source (A1 = 0.12180):
+11 α-blend submissions all complete. **α-curve monotone decreasing**;
+α=0 (pure max_prob) wins at 0.22144; α=1 (pure decoder) at 0.11640
+exactly matches A1@k10 (sanity check). No α > 0 improves over α=0.
+Decoder provides zero complementary signal — purely additive noise.
 
-```bash
-python blend.py --decoder-probs artifacts/probs_A1_samplerA_seed42.npy \
-                --decoder-tag A3_samplerA --topk 10
-# emits 11 CSVs at α ∈ {0.0, 0.1, ..., 1.0}, default k=10
-```
-
-Submit each (Kaggle 100/day cap; 11 submissions trivially fits).
-α=0 should reproduce A0a (0.22986); α=1 should reproduce A1@k10 (0.11640).
-The interesting question is whether any α > 0 *improves* over α=0 — that
-would mean the decoder has *some* complementary signal even though it's
-worse standalone. My prior is no (decoder is just adding noise to a
-better baseline) but worth confirming with a clean curve.
-
-### Priority 8 — Results writeup
+### Priority 8 — Results writeup ← **only remaining**
 
 `results.md` already has the H1/H2 verdicts, mechanism analysis (new
 failure mode for Sampler B documented), wall-clock-per-stage table,

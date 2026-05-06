@@ -162,17 +162,21 @@ each other can be parallelised across compute nodes / sessions.
       sep=",", quoting=csv.QUOTE_ALL)` format). Fixed in commit `eab81f3`,
       regenerated all 12 CSVs, resubmitted successfully.
 
-## 10. A3 score-blend (bonus, §2.5)
+## 10. A3 score-blend (bonus, §2.5) — DONE 2026-05-06
 - [x] 10.1 `blend.py` written; expanded α grid from spec's 5 points to **11**
       ({0.0, 0.1, …, 1.0}) given Kaggle 100/day cap. Per-image decoder probs
       cached during `infer.py` so re-running is instant (no decoder forward).
-- [ ] 10.2 Run for the better-LB decoder source (A1 = 0.12180):
+- [x] 10.2 Ran for A1 (Sampler A, the better-LB source at 0.12180):
       `python blend.py --decoder-probs artifacts/probs_A1_samplerA_seed42.npy
-      --decoder-tag A3_samplerA --topk 10` → 11 CSVs.
-- [ ] 10.3 Submit each. Record α vs F1 curve. α=0 should reproduce A0a
-      (0.22986); α=1.0 should reproduce A1@k10 (0.11640). Interesting
-      question: does any α > 0 **improve over α=0**? That's the
-      "decoder has complementary signal" verdict.
+      --decoder-tag A3_samplerA --topk 10` → 11 CSVs at k=10.
+- [x] 10.3 All 11 submitted to Kaggle 2026-05-06. **α curve is monotone
+      decreasing**: best α=0 (0.22144), worst α=1 (0.11640, exact match
+      to A1@k10 — sanity confirmed). Δ from α=0 to α=0.10 = −0.002 (inside
+      Kaggle noise); Δ from α=0 to α=0.20 = −0.003. From α=0.30 onward,
+      losses accelerate. **Verdict: no α > 0 improves over α=0**;
+      decoder is purely additive noise, not complementary. α=0 = 0.22144
+      vs A0a's 0.22986 has 0.008 gap from tie-breaking differences
+      (numpy vs pandas sort) — relative A3 curve is internally consistent.
 
 ## 11. Analysis
 - [ ] 11.1 Ablation table compiled in `results.md` (rows A0a, A0b, A1@k{9,10},

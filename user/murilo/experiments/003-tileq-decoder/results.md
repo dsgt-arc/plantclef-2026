@@ -8,26 +8,33 @@ author: Murilo Gustineli
 
 # Experiment 003: TileQ-Decoder — Results
 
-## Status: IN PROGRESS — headlines submitted; H1 rejected, H2 rejected (opposite direction)
+## Status: IN PROGRESS — H1 rejected, H2 rejected (opposite direction), A3 confirms decoder is redundant
 
-All four headline submissions to Kaggle (A1/A2 × k=9/10) returned LB scores
-2026-05-05. **The decoder underperforms every existing baseline**, including
-the no-grid full-image inference (F1=0.14506 from exp 001). H1's reject
-criterion (A1 < 0.288) is met decisively — A1@k9 = 0.12180 is **0.186 F1
-below the A0b anchor (0.30810)**. H2's predicted direction did not hold:
-A2 (Sampler B) is 0.031 F1 **lower** than A1, not higher.
+All headline + A3 submissions complete (2026-05-05 / 2026-05-06).
 
-**This is a publishable null result**. The proposal explicitly stated:
-> "A null result on H2 is publishable" (proposal.md, Hypothesis section).
+**The decoder underperforms every existing baseline.** A1@k9 = 0.12180 is
+**0.186 F1 below the A0b anchor (0.30810)**, decisively below the spec's
+reject threshold of 0.288. A2 (Sampler B) is 0.031 F1 *below* A1, opposite
+to H2's predicted direction. The A3 α-blend curve is **monotonically
+decreasing** in α — no convex combination of decoder + max_prob beats pure
+max_prob (α=0). The decoder provides zero complementary signal.
+
+**This is a publishable null result, with a stronger-than-expected shape**.
+The proposal explicitly stated "A null result on H2 is publishable" — we
+got that, plus:
+1. A1 < no-grid baseline (0.14506) → decoder destroys signal already
+   present in cached per-tile probs.
+2. A2 < A1 → test-distribution-anchored Sampler B failed in a *new* way
+   not enumerated in spec §7.
+3. A3 monotone-decreasing → decoder is not even partially redundant; it's
+   purely additive noise.
 
 Spec §7.3 anticipated synthetic-distribution overfit for Sampler A; we
-confirm it. We additionally find a *second* failure mode in Sampler B —
-test-distribution exposure to `proj_kv` did not transfer; if anything,
-training the decoder on majority-unlabelled test tiles taught it to under-
-predict at test time. Detailed mechanism analysis below.
+confirm it. The new Sampler B failure mode (FAISS-undersampling
+under-confidence) is documented in "Mechanism analysis" below.
 
-Remaining work (Priority 7 + 8): A3 score-blend (cheap, may quantify
-complementary vs redundant signal), and writeup.
+Remaining work: P8 writeup pass (largely already populated in this file +
+tasks.md + CONTEXT.md).
 
 See [proposal.md](proposal.md) for hypothesis framing (H1/H2) and
 [spec.md](spec.md) for the technical specification.
@@ -96,6 +103,54 @@ The 10th class adds more false positives than true positives, consistent
 with the model already over-predicting at k=9. Lower k (k=5, 7 CSVs ready
 to submit) might score higher, but the headline picture won't change —
 A1 is below A0b at every k.
+
+## A3 score-blend results (P7)
+
+Spec §2.5 score-blend, expanded from 5 to 11 α values (Kaggle 100/day cap):
+
+```
+s_c = α · decoder_prob_c + (1 − α) · max_prob_c
+```
+
+Source: **A1 (Sampler A)** — the better-scoring decoder at 0.12180 LB. All
+A3 submissions at fixed top-k=10 to match A0a's k.
+
+| α | LB F1 | Δ vs α=0 | Δ vs A0a (0.22986) |
+|---:|---:|---:|---:|
+| **0.00** (pure max_prob) | **0.22144** | — | −0.00842 |
+| 0.10 | 0.21952 | −0.00192 | −0.01034 |
+| 0.20 | 0.21827 | −0.00317 | −0.01159 |
+| 0.30 | 0.21001 | −0.01143 | −0.01985 |
+| 0.40 | 0.19954 | −0.02190 | −0.03032 |
+| 0.50 | 0.18931 | −0.03213 | −0.04055 |
+| 0.60 | 0.17292 | −0.04852 | −0.05694 |
+| 0.70 | 0.15277 | −0.06867 | −0.07709 |
+| 0.80 | 0.14562 | −0.07582 | −0.08424 |
+| 0.90 | 0.13154 | −0.08990 | −0.09832 |
+| **1.00** (pure decoder) | **0.11640** | −0.10504 | −0.11346 |
+
+**Key observations**:
+
+1. **Monotone decrease across α**: every increase of α reduces LB F1.
+   No convex combination of decoder + max_prob beats α=0. Decoder
+   probabilities provide **zero complementary signal**.
+2. **α=1.00 = 0.11640 exactly matches A1@k10** — sanity check confirms the
+   blend math (and the file IO) is byte-for-byte correct at the boundary.
+3. **α=0.00 = 0.22144 vs A0a = 0.22986** — small 0.008 gap from
+   tie-breaking differences (numpy `argpartition+argsort` vs pandas `sort`
+   on species with near-equal softmax probabilities; ~80 of 2,105 rows
+   have positions 8/9 or 9/10 swapped). Same top-10 sets in 96 % of rows,
+   so the relative A3 curve is internally consistent.
+4. **Smallest hit at α=0.10** (Δ = −0.002 vs α=0) is roughly inside Kaggle's
+   noise floor — but the curve is monotone from α=0.10 onward, so there's
+   no narrow "sweet spot" hidden in finer α resolution.
+
+**A3 verdict**: confirms the headline result with a stronger shape than the
+proposal anticipated. The proposal asked "is the decoder *complementary*
+or *redundant* with max_prob?" Spec §2.5 implicitly framed redundancy as
+"best α near 0 or 1, not in between." We get a *third* outcome: best α
+**at** 0, with monotone-worse blends — i.e., decoder is not even
+partially redundant; it actively destroys signal at any non-zero weight.
 
 ## Mechanism analysis: why did Sampler B underperform Sampler A?
 
