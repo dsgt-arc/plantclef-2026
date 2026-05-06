@@ -474,8 +474,10 @@ stage for paper appendix. Note any failure modes hit (§7 of spec).
   per-class queries would gradient-starve.
 - **Kaggle is the only test signal**. No public ground-truth labels for the
   2,105 test images. Synthetic-only val loss in training only confirms
-  fitting the training distribution. Each Kaggle submission costs a slot
-  (~5/day, 25 over 5 days). Plan submissions, don't burn slots.
+  fitting the training distribution. **Daily cap is 100 submissions/day**
+  (verified 2026-05-05; spec §4.2 + earlier CONTEXT.md said ~5/day, that
+  was wrong). Generous headroom — exp 003's full plan (4 headlines + 12
+  k-sweep + 11 A3 = 27 submissions) fits inside one day.
 - **Independence boundary is paper-driven, not technical**. Alper's
   artefacts work and would lift the score; the rule against using them is
   to keep the methodological contribution clean for the working notes
