@@ -93,6 +93,7 @@ checkpoints/
 **/artifacts/**/*.hdf5
 **/artifacts/**/*.arrow
 **/artifacts/**/*.parquet
+**/artifacts/tensorboard/
 artifacts/*
 !artifacts/.gitkeep
 

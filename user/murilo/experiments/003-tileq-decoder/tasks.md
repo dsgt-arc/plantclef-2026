@@ -179,8 +179,9 @@ each other can be parallelised across compute nodes / sessions.
       (numpy vs pandas sort) — relative A3 curve is internally consistent.
 
 ## 11. Analysis
-- [ ] 11.1 Ablation table compiled in `results.md` (rows A0a, A0b, A1@k{9,10},
-      A2@k{9,10}). Pending: A3-α* rows once submitted.
+- [x] 11.1 Ablation table compiled in `results.md` — A0a, A0b, A1@k{9,10},
+      A2@k{9,10}, all 11 A3-α rows, plus reference landscape (Alper exp 11
+      at 0.4379, no-grid baseline at 0.14506).
 - [x] 11.2 Failure modes documented in `results.md` § "Mechanism analysis":
       - Sampler A: spec §7.3 (synthetic-distribution overfit) — confirmed
         but NOT the binding mode for our LB; A held up better than B.
@@ -201,7 +202,8 @@ each other can be parallelised across compute nodes / sessions.
       - train Sampler A (RTX 6000): 12:05 (9.4 min training + venv install)
       - train Sampler B (RTX 6000): 11:46 (9.1 min training + venv install)
       - inference both samplers (login-node CPU): 7-8 s each
-- [ ] 11.5 Future-work directions confirmed by results (§8):
+- [x] 11.5 Future-work directions confirmed by results (§8) and recorded in
+      results.md and CONTEXT.md:
       - **DINOv2 attention-rollout for background tile selection** —
         promising alternative to FAISS-undersampling under-confidence
         failure mode; doesn't depend on cosine similarity to single-plant
@@ -212,3 +214,5 @@ each other can be parallelised across compute nodes / sessions.
       - **Abstain query (K+1 logit)** — could let the decoder explicitly
         predict "no species" without the implicit "low confidence on
         everything" pathology.
+      - All three are out-of-scope for v1 per spec §8; documented as
+        Discussion-section angles for the working-notes paper.
