@@ -3,17 +3,18 @@
 Session handoff document for Murilo's PlantCLEF 2026 experiments.
 Read this first, then read the referenced docs to get full context.
 
-**Last updated**: 2026-05-04 late evening. **Priority 1 (spec review) closed**:
-H1 anchor explicitly tightened to **A0b = 0.30810**; inference now produces
-both k=9 (matches A0b) and k=10 (organizers' convention) from one forward
-pass. **Priority 3 (test-CLS extraction) done**: `cls_grid_4x4.parquet`
-(49.6 MB, 33,680 rows × float16[768]) cached at
-`shared/inference/dinov2-vit-base/`, validated, joinable to existing
-`grid_4x4.parquet` on `(image_name, tile_idx)`. **Still no decoder source
-files** (`tileq_decoder.py`, `asl_loss.py`, `samplers.py`,
-`build_train_lookup.py`, `build_faiss_background_map.py`). Next session:
-Priority 4 — library code + sanity checks. Competition ends **2026-05-07**
-(~2 days remaining).
+**Last updated**: 2026-05-05 evening. **Priorities 4-6 done**: full library
+code, both decoder training runs, and 4 headline Kaggle submissions all
+complete. **Headline LB results**: A1@k9 = 0.12180 (Sampler A, H1 anchor),
+A1@k10 = 0.11640, A2@k9 = 0.09060 (Sampler B, H2 contrast), A2@k10 = 0.08445.
+**H1 rejected** (A1 0.166 below the spec's 0.288 reject threshold;
+0.186 below A0b = 0.30810). **H2 rejected, opposite direction predicted**
+(A2 − A1 = −0.0312; B significantly *worse* than A — third state the
+proposal didn't enumerate). Both publishable nulls per proposal.md. New
+failure mode discovered (FAISS-undersampling under-confidence on Sampler B);
+documented in `results.md`. Next session: P7 (A3 α-blend, 11 submissions
+once user picks; cheap given 100/day cap) and P8 (writeup). Competition
+ends **2026-05-07** (~2 days remaining).
 
 ---
 
@@ -144,15 +145,16 @@ A null result on H2 of exp 003 is publishable.
 
 **Competition deadline**: 2026-05-07 (~2 days remaining).
 
-**Active branch**: `mg/tileq-decoder` — PR #15 open. Scaffold + A0 derisk +
-venv restructure + spec review + test-CLS extraction landed; **no decoder
-source files yet** (Priority 4 — next).
+**Active branch**: `mg/tileq-decoder` — PR #15 open. P4 (full library code +
+samplers + FAISS map + sanity check) landed in commit `ad898bb`; P5 (both
+training runs) in `9febc5f`; P6 (infer.py + headlines) in `3d88553` /
+`eab81f3` (CSV format fix); P6 LB results writeup in `7c91007`.
 
 **Recent merges to main**:
 
 - PR #14 → Alper's Exp-10 ConvNeXt finetuning
 - PR #7 → exps 001 + 002 (Murilo, `mg/dinov2-grid-ablation`) — merged 2026-04-18-ish
-- (current) PR #15 → exp 003 scaffolding — open, awaiting review
+- (current) PR #15 → exp 003 (full library + headlines submitted) — open
 
 | Submission | F1 | Status |
 |---|---|---|
@@ -163,10 +165,101 @@ source files yet** (Priority 4 — next).
 | **A0a** max-prob top-10, grid_4x4 (exp 003 derisk) | **0.22986** | Public LB, 2026-05-03 |
 | Union top-5 (exp 002) | 0.21313 | |
 | No-grid baseline (exp 001) | 0.14506 | |
+| **A1@k9** TileQ-Decoder Sampler A top-9 (exp 003 H1 anchor) | **0.12180** | Public LB, 2026-05-05 — **H1 rejected** |
+| **A1@k10** TileQ-Decoder Sampler A top-10 | **0.11640** | Public LB, 2026-05-05 |
+| **A2@k9** TileQ-Decoder Sampler B (τ=0.65) top-9 (exp 003 H2 contrast) | **0.09060** | Public LB, 2026-05-05 — **H2 rejected, opposite direction** |
+| **A2@k10** TileQ-Decoder Sampler B (τ=0.65) top-10 | **0.08445** | Public LB, 2026-05-05 |
 
 ---
 
 ## What happened recently
+
+### 2026-05-05 — P4-P6 landed; H1 rejected, H2 rejected (opposite direction)
+
+**P4 (library code + sanity checks) done.** Library: `asl_loss.py`
+(`AsymmetricLoss(γ⁻=4, γ⁺=0, m=0.05)` per spec §2.2),
+`tileq_decoder.py` (4,509,824 params; matches spec §2.1 exactly),
+`data/samplers.py` (`SamplerA` naive + `SamplerB` test-anchored).
+Build pipeline: `build_train_lookup.py` (1.4 M train CLS sorted-by-class
+into a flat npz with offsets, 4.1 GB), `build_faiss_background_map.py`
+(`IndexFlatIP` over 1.4 M, 33,680 queries, ~10 min CPU),
+`rethreshold.py` (re-apply τ on cached FAISS results in seconds),
+`dataset.py` (multi-worker-safe `IterableDataset`),
+`sanity_check.py` (shape audit + overfit-one-batch gate).
+**88 unit tests all passing.** Sanity check on real artefacts:
+both samplers reduce loss > 13,000× in 200 steps, ratio well above the
+5× gate. Commits `ad898bb`, `9febc5f`, `3d88553`.
+
+**FAISS τ tuned to 0.65 from histogram, overriding spec's 0.85 default.**
+The cosine-similarity distribution between test tiles and their nearest
+train neighbour is **unimodal centred at 0.51, max 0.89** — *no shoulder*
+at the spec's 0.85 prior (would have labelled only 18 of 33,680 tiles).
+At τ = 0.65: 1,838 tiles labelled (5.46 %, ~0.9 surviving bg labels per
+pseudo-quadrat avg). Spot-check at the high-sim tail confirmed
+biological coherence — *Eryngium maritimum* × 4 tiles in one quadrat,
+*Quercus coccifera* × 5 across consecutive CBNMed sites. Histogram +
+percentile/coverage table committed as decision artefacts in
+`artifacts/`.
+
+**P5 (training Sampler A + Sampler B) done — 12 min wallclock each.**
+Both runs at 80,000 steps × batch 32 = 2.56 M pseudo-quadrats trained on,
+matching spec §4.1 hyperparameters exactly. RTX 6000 partition held
+(no V100 silent reroute this time). Sampler A job 8038028 wallclock
+12:05 (9.4 min training + venv install), 142.5 step/s, final train/val
+loss 4.91 / 4.85, val acc@10 = 99.65 %. Sampler B job 8038496 wallclock
+11:46, 146.7 step/s, final loss 0.93 / 0.92, val acc@10 = 100 %.
+Both checkpoints (52 MB each) saved at
+`artifacts/checkpoints/decoder_sampler{A,B}.pt`. W&B project
+`plantclef-2026-exp003`, runs `u5ma36yz` (A) and `hdcx1p23` (B).
+Loss curves committed as PNG decision artefacts.
+
+**Notable: B's 5.3× lower synthetic val loss did NOT predict higher LB.**
+At training time we observed B's loss collapsing to ~0.93 vs A's ~4.85,
+and per-image prediction distributions had B much sharper (median 0
+classes > 0.5) and more diverse (3,737 unique top-9 classes vs A's
+1,874). We read this then as encouraging for H2; the LB now reveals
+it as the warning sign — B was learning calibrated under-confidence
+on test-shaped inputs because most of those tiles had no FAISS label.
+
+**P6 (inference + 4 headline submissions) done.** Single `infer.py`:
+load checkpoint, forward over the 2,105 test quadrats (7-8 s on
+login-node CPU), sigmoid → top-k decode at multiple k from one pass
+(default `--topk 5,7,9,10,12,15`). Per-image probability vector also
+persisted to `probs_<tag>_seed42.npy` (66 MB) so `blend.py` can α-mix
+without re-running inference. **CSV format bug**: initial submissions
+errored "ID column quadrat_id not found" because the writer used `;`
+delimiter (matched the spec text but not exp 002's actual
+`pandas.to_csv(sep=",", quoting=csv.QUOTE_ALL)` format). Fixed in
+`eab81f3`; re-generated all 12 CSVs.
+
+**Headline LB results (2026-05-05)**: A1@k9 = **0.12180**,
+A1@k10 = 0.11640, A2@k9 = **0.09060**, A2@k10 = 0.08445.
+
+- **H1 rejected decisively**: A1=0.12180 is **0.166 below** the spec's
+  reject threshold of 0.288, **0.186 below** the A0b anchor (0.30810).
+  Decoder underperforms even the no-grid full-image baseline (0.14506
+  from exp 001) — i.e., the decoder destroys signal that's already in
+  the cached per-tile probs.
+- **H2 rejected, opposite direction predicted**: A2 − A1 = −0.0312;
+  Sampler B significantly *worse* than Sampler A, not better. The
+  proposal didn't enumerate this third state — only "≥ +0.01 confirm"
+  vs "|.| ≤ 0.005 reject". Worth flagging in the paper.
+
+**New failure mode discovered (worth a Discussion paragraph)**: at
+τ=0.65 only 5.5 % of test tiles get FAISS labels, so 94.5 % of B's
+pseudo-quadrats have 11 unlabelled-test-tile slots → decoder learns
+"test-shaped tile → no species in label" → outputs uniformly low
+logits at inference → forced top-k picks noise. Spec §7.3
+(synthetic-distribution overfit) was about Sampler A and DID hold
+empirically, but it was NOT the binding failure mode for our LB —
+A actually held up better than B did. The new mode (FAISS-undersampling
+under-confidence) is documented in `results.md` § "Mechanism analysis".
+
+**Kaggle daily cap correction**: the spec §4.2 + earlier CONTEXT.md
+note of "~5/day" was wrong. Verified with user 2026-05-05: cap is
+**100/day**. Plenty of headroom for the planned A3 sweep
+(11 submissions) plus k-sweep extras (8 ready in `submissions/`).
+Memory updated.
 
 ### 2026-05-04 late evening — Priority 1 closed; Priority 3 done; sbatch convention finalized
 
@@ -394,39 +487,71 @@ Job 7966845 on V100, 16 min. Output:
 33,680 rows × float16[768]. Schema as spec'd. Validation passed (2,105
 images, 16 tiles each, joinable to `grid_4x4.parquet`).
 
-### Priority 4 — Library code + sanity checks  ← **next session**
+### Priority 4 — Library code + sanity checks — DONE 2026-05-05
 
-- `user/murilo/src/plantclef/tileq_decoder.py` — `TileQDecoder` class
-  (spec §2.1).
-- `user/murilo/src/plantclef/asl_loss.py` — Asymmetric Loss (spec §2.2).
-- `user/murilo/src/plantclef/data/samplers.py` — Sampler A + B
-  (spec §2.3).
-- `experiments/003-tileq-decoder/{build_train_lookup, build_faiss_background_map}.py`
-  — preprocessing.
-- Sanity checks (overfit-one-batch, shape audit, sampler unit tests)
-  **must pass** before launching long training (spec §4.3).
+Full library shipped: `tileq_decoder.py` (4.5 M params), `asl_loss.py`,
+`data/samplers.py` (A + B), `build_train_lookup.py`,
+`build_faiss_background_map.py`, `rethreshold.py`, `dataset.py`,
+`sanity_check.py`. **88 unit tests passing.** Both samplers' overfit-
+one-batch ratio > 13,000× in 200 steps. FAISS τ tuned empirically to
+0.65 (spec's 0.85 default produced near-zero coverage). Commits
+`ad898bb`, `9febc5f`.
 
-### Priority 5 — Two training runs (~8 GPU-h total)
+### Priority 5 — Two training runs — DONE 2026-05-05
 
-Train Run 1 (Sampler A, 80 k steps, ~4 h on RTX 6000) and Run 2 (Sampler B,
-same config) — sequentially or in parallel on two GPUs. Save checkpoints
-every 10 k steps. Loss curves to `artifacts/`.
+Sampler A job 8038028 (RTX 6000, 12:05) and Sampler B job 8038496
+(RTX 6000, 11:46), both at spec's 80 k steps × batch 32 = 2.56 M
+pseudo-quadrats. Final losses: A 4.91 / 4.85 (train/val), B 0.93 / 0.92.
+Checkpoints `decoder_sampler{A,B}.pt` (52 MB each).
+W&B runs: A `u5ma36yz`, B `hdcx1p23`.
 
-### Priority 6 — Inference + headline submissions
+### Priority 6 — Inference + headline submissions — DONE 2026-05-05
 
-A1 (Sampler A) + A2 (Sampler B) → 2 Kaggle submissions. Record scores in
-`results.md` ablation table.
+`infer.py` runs in seconds on login-node CPU; persists per-image probs
+for `blend.py` to reuse. **All 4 headlines submitted to Kaggle**:
+A1@k9 = **0.12180** (H1 anchor — 0.186 below A0b = 0.30810,
+**H1 rejected**), A1@k10 = 0.11640, A2@k9 = **0.09060**
+(H2 contrast — 0.031 *below* A1, **H2 rejected, opposite direction**),
+A2@k10 = 0.08445. Both findings publishable per proposal.md.
 
-### Priority 7 — A3 score-blend bonus (only if time permits)
+8 additional k-sweep CSVs (k ∈ {5, 7, 12, 15} per sampler) ready in
+`submissions/` for free additional ablation rows; not yet submitted.
 
-α-blend decoder probs with cached `max_prob` baseline for
-α ∈ {0, 0.25, 0.5, 0.75, 1.0}. 5 CSVs, no retraining.
+### Priority 7 — A3 score-blend  ← **next**
+
+`blend.py` ready. Run for the better-LB decoder source (A1 = 0.12180):
+
+```bash
+python blend.py --decoder-probs artifacts/probs_A1_samplerA_seed42.npy \
+                --decoder-tag A3_samplerA --topk 10
+# emits 11 CSVs at α ∈ {0.0, 0.1, ..., 1.0}, default k=10
+```
+
+Submit each (Kaggle 100/day cap; 11 submissions trivially fits).
+α=0 should reproduce A0a (0.22986); α=1 should reproduce A1@k10 (0.11640).
+The interesting question is whether any α > 0 *improves* over α=0 — that
+would mean the decoder has *some* complementary signal even though it's
+worse standalone. My prior is no (decoder is just adding noise to a
+better baseline) but worth confirming with a clean curve.
 
 ### Priority 8 — Results writeup
 
-`user/murilo/experiments/003-tileq-decoder/results.md` filled out per
-proposal.md success criteria. Decide H1, H2 outcomes. Note wall-clock per
-stage for paper appendix. Note any failure modes hit (§7 of spec).
+`results.md` already has the H1/H2 verdicts, mechanism analysis (new
+failure mode for Sampler B documented), wall-clock-per-stage table,
+future-work directions. Once A3 results are in, add a final ablation
+table row and decide whether the blended-best matches/beats A0a/A0b.
+
+### Deferred / out of scope (paper Discussion section)
+
+- DINOv2 attention-rollout for background tile selection (would address
+  the FAISS-undersampling under-confidence failure mode discovered in B).
+- LUCAS land-cover Bayesian prior.
+- Abstain query (K+1 logit absorbing background tiles) — explicitly
+  predict "no species" instead of low-confidence everywhere.
+- Per-class F1-optimal thresholding.
+- Multiscale tile inputs (3×3, 5×5, 6×6).
+- Variation of `n_positives` per pseudo-quadrat.
+- End-to-end fine-tuning (decoder + backbone).
 
 ### Deferred / out of scope (paper Discussion section)
 
@@ -483,6 +608,25 @@ stage for paper appendix. Note any failure modes hit (§7 of spec).
   to keep the methodological contribution clean for the working notes
   paper. Re-evaluate after the paper is drafted if a follow-up wants to
   ensemble back in.
+- **Synthetic val loss is uncorrelated with LB F1** (verified 2026-05-05,
+  exp 003 P5/P6). Sampler B trained to ~5× lower synthetic val loss than
+  Sampler A (0.93 vs 4.85), with sharper and more diverse top-k
+  predictions on the test set — but on Kaggle B underperformed A by
+  0.031 F1 (0.0906 vs 0.1218 at k=9). The synthetic distribution is
+  different enough from the real test distribution that fitting it
+  better doesn't help. **Train monitoring is a pipeline-health check,
+  not a generalisation proxy** — Kaggle is the only signal that decides
+  H1/H2.
+- **FAISS-undersampling under-confidence** (new failure mode, 2026-05-05).
+  At τ=0.65 only 5.5 % of test tiles get FAISS-discovered species
+  labels. So 94.5 % of Sampler B's pseudo-quadrats have 11 unlabelled
+  test-tile slots → decoder learns "test-shaped tile → no species in
+  the multi-hot label" → outputs uniformly low logits at inference →
+  forced top-k decode picks noise. This is **NOT** the same as spec
+  §7.3's synthetic-distribution overfit (which was about A's confidently-
+  wrong negative labels). Beyond the spec's enumerated failure modes;
+  worth a Discussion paragraph in the paper. Mitigation directions
+  in spec §8: attention-rollout tile selection, abstain query.
 
 ---
 
