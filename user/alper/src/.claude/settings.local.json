@@ -53,7 +53,9 @@
       "Bash(mkdir -p ../Exp-16_Multi_Species_Discovery/outputs/n_floor_sweep)",
       "Bash(python ../Exp-16_Multi_Species_Discovery/scripts/apply_n_floor_admission.py --ensemble-parquet outputs/stage11_avg/v_ld12RNNBonly_w0.77_ensemble.parquet --species-map pace_downloads/class_to_species_id.json --geo-mask pace_downloads/sw_europe_mask_bool.npy --habitat-mask outputs/signals/aquatic_blacklist_mask.npy --biogeo-npz outputs/signals/biogeo_per_source.npz --out-csv ../Exp-16_Multi_Species_Discovery/outputs/n_floor_sweep/sanity_n0.csv --n-floor 0 --ratio-floor 1000.0)",
       "Bash(python diagnostics/sample_image_round2.py)",
-      "Bash(python \"C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-16_Multi_Species_Discovery/diagnostics/build_habitat_clusters.py\")"
+      "Bash(python \"C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-16_Multi_Species_Discovery/diagnostics/build_habitat_clusters.py\")",
+      "Bash(python -c \"from docx import Document; d = Document\\('Research Proposal v2 - PlantCLEF 2026 by aerten3.docx'\\); [print\\(p.text\\) for p in d.paragraphs if p.text.strip\\(\\)]\")",
+      "Bash(python -c \"from docx import Document; d = Document\\(r'C:/Users/alper/Documents/PlantCLEF_2026_Local/Alpers Proposal/Research Proposal v2 - PlantCLEF 2026 by aerten3.docx'\\); [print\\(p.text\\) for p in d.paragraphs if p.text.strip\\(\\)]\")"
     ]
   }
 }

@@ -22,6 +22,7 @@ OUT=$PLANTCLEF_ROOT/aerten3/submissions/exp10c_diag_scheme_G
 mkdir -p $OUT
 
 python $SRC_ROOT/multiscale_aggregate.py \
+    --scale4-dir $PLANTCLEF_ROOT/aerten3/parquet/exp11_ensemble/convnext_large/scale_5x5.parquet \
     --scale5-dir $PLANTCLEF_ROOT/aerten3/parquet/exp11_ensemble/convnext_large/scale_5x5.parquet \
     --model-path $PLANTCLEF_ROOT/pretrained_models/base_vit_model/vit_base_patch14_reg4_dinov2.pth \
     --species-map $PLANTCLEF_ROOT/data/raw/class_id_to_species_mapping/class_to_species_id.json \
