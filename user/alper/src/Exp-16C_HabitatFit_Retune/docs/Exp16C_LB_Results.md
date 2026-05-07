@@ -1,7 +1,8 @@
-# Exp-16C — All LB Results (2026-05-04 → 2026-05-05)
+# Exp-16C — All LB Results (2026-05-04 → 2026-05-06)
 
-Final lock: **F1 = 0.50623** (Stage 12B `alpine_b0.45`).
-Beats prior best 0.49842 by **+0.00781**, target 0.49896 by **+0.00727**.
+Final pipeline lock: **F1 = 0.51096** (Stage 14C `RNNB_b0.55`).
+Final ensemble lock: **F1 = 0.52739** (set-level augment of A=0.51096 ∪ B=0.49842, capped at 10).
+Beats prior best 0.49842 by **+0.02897** total, target 0.49896 by **+0.02843**.
 
 Held config (where unchanged): alt-on, R=200, k=10, alpha defaults (n_floor=3, ratio_floor=0.5).
 
@@ -131,16 +132,56 @@ Findings: OPTMix β-axis dead. Alpine wants LOOSER demotion (β≈0.50). β=1.00
 | 0.70 | (not LB) | — |
 | 1.00 (Stage 12) | 0.49106 | catastrophic |
 
+## Stage 14 — per-source β at alpine_b0.45 anchor (0.50623)
+
+| Variant | F1 | Δ |
+|---|---|---|
+| anchor (no extra override) | 0.50623 | 0 |
+| **RNNB_b0.50** | **0.50876** | **+0.00253** ← biggest single change |
+| RNNB_b0.05 | 0.50647 | +0.00024 |
+| OPTMix_b0.05 | 0.50623 | 0 (no-op) |
+| OPTMix_b0.30 | 0.50407 | −0.00216 |
+| OPTMix_b0.50 | 0.49924 | −0.00699 |
+| LISAH_b0.30 | 0.50282 | −0.00341 |
+| LISAH_b0.50 | 0.49683 | −0.00940 |
+| GUARDEN_b0.30 | 0.50166 | −0.00457 |
+| GUARDEN_b0.50 | 0.49831 | −0.00792 |
+| CBN-can b0.05/0.30/0.50 | 0.50623 | 0 (no-op, all 3) |
+| alpine_asym_PdlC0.30_Pla0.45 | 0.50634 | +0.00011 |
+| alpine_asym_PdlC0.45_Pla0.30 | 0.50540 | −0.00083 |
+
+Findings: RNNB wants LOOSE β (like alpine). OPTMix/CBN-can β are no-ops. LISAH/GUARDEN want global β=0.15.
+
+## Stage 14B — RNNB β refinement around 0.50
+
+| RNNB β | F1 |
+|---|---|
+| 0.30 | 0.50745 |
+| 0.40 | 0.50551 |
+| 0.50 (anchor) | 0.50876 |
+| **0.60** | **0.50991** ← new peak |
+| 0.70 | 0.50783 |
+
+## Stage 14C — RNNB β refinement around 0.60
+
+| RNNB β | F1 |
+|---|---|
+| 0.50 | 0.50876 |
+| **0.55** | **0.51096** ← FINAL peak |
+| 0.60 | 0.50991 |
+| 0.65 | 0.50876 |
+| 0.70 | 0.50783 |
+
 ## Final lock (2026-05-05)
 
 ```
 β_global=0.15, R=200, n_near_min=40, alt-on, thr=0.085, k=10
 Per-source admission: OPTMix n=2 + LISAH n=2 + RNNB n=2
-Per-source β: CBN-PdlC=0.45, CBN-Pla=0.45
-F1 = 0.50623
+Per-source β: CBN-PdlC=0.45, CBN-Pla=0.45, RNNB=0.55
+F1 = 0.51096
 ```
 
-Submission CSV: `exp16c_s12B_alpine_b0.45.csv`.
+Submission CSV: `exp16c_s14C_RNNB_b0.55.csv`.
 
 ## Stage 13 — ConvNeXt cooldown comparison (IN PROGRESS, regression)
 
@@ -155,4 +196,47 @@ Submission CSV: `exp16c_s12B_alpine_b0.45.csv`.
 Diagnostic in progress: extract scale 5 with `model_best.pth.tar` (vs `last.pth.tar`) to test whether 20-epoch cooldown drifted past peak.
 
 ## LB submissions used in Exp-16C
-~80 across Stages 4-13.
+~110 across Stages 4-14C.
+
+## Stage 15 — pseudo-ensemble at submission level (2026-05-06)
+
+Idea: combine A=`WINNER_exp16c_s14C_RNNB_b0.55.csv` (0.51096, ViT-L+per-source-β pipeline)
+with B=`OLD_WINNER_D_OPTMix_k5.csv` (0.49842, ViT-B+per-source-admission pipeline).
+Per-source overlap: RNNB 37%, CBN-Pla 47%, OPTMix 45% — high disagreement = real diversity.
+
+Merge schemes tested at cap=10:
+
+| Mode | F1 | Δ vs A=0.51096 |
+|---|---|---|
+| **augment_A (= union here)** | **0.52739** | **+0.01643** ← lock |
+| persrc_OPTMixRRF_alpineAonly | 0.52739 | +0.01643 (different content, 132 rows differ) |
+| interleave | 0.52387 | +0.01291 |
+| rrf | 0.52385 | +0.01289 |
+| borda | 0.52375 | +0.01279 |
+| persrc_OPTMixB_alpineINT | 0.51870 | +0.00774 |
+| intersection | 0.47787 | −0.03309 |
+
+Findings:
+- A-priority asymmetric merge wins (A is genuinely better, symmetric schemes dilute its edge)
+- augment_A and union are byte-identical for cap=10 with A's rankings preserved
+- Symmetric merges (rrf/borda/interleave) all plateau at ~0.524
+- Intersection collapses (recall starvation)
+- Merge-scheme axis fully explored — 0.52739 is the ceiling for this CSV pair
+
+## Final submission selection (5 slots)
+
+Diversity-weighted across project axes:
+
+1. **`ENS_union_*.csv`** (0.52739) — primary, A+B augment merge
+2. **`ENS_persrc_OPTMixRRF_alpineAonly_*.csv`** (0.52739) — same public score, 132 rows differ
+3. **`WINNER_exp16c_s14C_RNNB_b0.55.csv`** (0.51096) — A pipeline standalone (ViT-L + per-source β)
+4. **`OLD_WINNER_D_OPTMix_k5.csv`** (0.49842) — B pipeline standalone (ViT-B + per-source admission ratio_floor)
+5. **`ENS_interleave_*.csv`** (0.52387) — symmetric merge fallback
+
+Three independent diversity axes covered:
+- Merge math: picks 1, 2, 5
+- A pipeline (ViT-L stack): picks 1-3 use it
+- B pipeline (ViT-B stack): picks 1, 2, 4, 5 use it; pick 4 standalone
+
+ConvNeXt cooldown integration FAILED (model_best=0.30, last=0.27 vs production=0.34 standalone).
+Production ConvNeXt phase2 retained in both A and B pipelines.
