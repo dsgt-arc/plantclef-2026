@@ -27,7 +27,7 @@
 #SBATCH --partition=gpu-rtx6000
 #SBATCH --qos=inferno
 #SBATCH --gres=gpu:rtx_6000:1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=6
 #SBATCH --mem=64G
 #SBATCH --time=18:00:00
 #SBATCH --array=1,2,3,8
