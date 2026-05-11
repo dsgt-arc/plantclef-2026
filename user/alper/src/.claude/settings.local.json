@@ -55,7 +55,8 @@
       "Bash(python diagnostics/sample_image_round2.py)",
       "Bash(python \"C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-16_Multi_Species_Discovery/diagnostics/build_habitat_clusters.py\")",
       "Bash(python -c \"from docx import Document; d = Document\\('Research Proposal v2 - PlantCLEF 2026 by aerten3.docx'\\); [print\\(p.text\\) for p in d.paragraphs if p.text.strip\\(\\)]\")",
-      "Bash(python -c \"from docx import Document; d = Document\\(r'C:/Users/alper/Documents/PlantCLEF_2026_Local/Alpers Proposal/Research Proposal v2 - PlantCLEF 2026 by aerten3.docx'\\); [print\\(p.text\\) for p in d.paragraphs if p.text.strip\\(\\)]\")"
+      "Bash(python -c \"from docx import Document; d = Document\\(r'C:/Users/alper/Documents/PlantCLEF_2026_Local/Alpers Proposal/Research Proposal v2 - PlantCLEF 2026 by aerten3.docx'\\); [print\\(p.text\\) for p in d.paragraphs if p.text.strip\\(\\)]\")",
+      "Skill(gsd:resume-work)"
     ]
   }
 }

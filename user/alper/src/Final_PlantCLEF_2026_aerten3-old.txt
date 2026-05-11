@@ -1,0 +1,520 @@
+Working_Techniques_Summary.md  2026-05-06
+
+PlantCLEF 2026 -- Techniques That Worked
+
+Cumulative progression: F1 0.28093 (baseline)  0.50623 (current best, Exp-16C lock 2026-05-05).
+
+Below are the techniques that improved leaderboard score, in roughly the order they enter the pipeline.
+Negative experiments are omitted.
+
+All techniques described here are proposed and implemented by Alper Erten (aerten3@gatech.edu).
+Strategies tested by other teammates are excluded; they are not part of the final competition submission
+either.
+
+Project GitHub Repository: https://github.com/dsgt-arc/plantclef-2026
+
+Original Proposal (Exp-1, abandoned)
+
+        Cross-Region Transformer with noisy-student distillation on the 212K LUCAS unlabeled set (Exp-
+        1, original proposal) -- The original research plan was an end-to-end cross-region transformer: each
+        quadrat would be sliced into region windows, each region encoded independently by a frozen
+        pretrained ViT to produce region embeddings, and a lightweight self-attention transformer would learn
+        inter-tile spatial / co-occurrence structure across regions and pool to a single quadrat-level multi-label
+        prediction. A teacher-student / noisy-student loop would supervise the student on the ~212K unlabeled
+        "pseudo-quadrat" LUCAS images that PlantCLEF provides for optional adaptation, with the teacher
+        being a frozen ViT + simple tile-aggregation head. The expected gain was +0.01 to +0.03 macro-F1
+        over standard tiling-and-aggregation baselines.
+
+                 Why it was abandoned. The mechanism was sound, but the supervision signal was not: the
+                 212K LUCAS unlabeled adaptation set comes from a substantially different sampling distribution
+                 and image-statistics regime than the actual 2105-image PlantCLEF test set (different sites,
+                 different camera setups, different ecological mix). Pseudo-labels distilled on LUCAS taught the
+                 student to model a distribution the leaderboard does not score against, so any in-domain
+                 transfer was washed out by the train vs. test domain gap. Two related symptoms made the failure
+                 visible: KL/soft-distillation training over all 7806 classes caused mode collapse (the ~7742 near-
+                 zero targets per image overwhelmed the ~64 positive signals, F1  0); switching to BCE with
+                 negative sampling restored a working signal but only to F10.143, well below what direct tiling
+                 on the test set was already achieving. The cross-region transformer idea was shelved and the
+                 project pivoted to the tiling-and-aggregation lineage that became Exp-2 onward.
+
+Test Image Preprocessing
+
+        JPEG round-trip preprocessing (Exp-2) -- After Lanczos-resizing each test image, re-encode it
+        through PIL JPEG at quality=85, 4:2:2 chroma subsampling, then decode back to pixels before tiling. The
+        DINO backbones were pretrained on JPEG-compressed natural images, so passing the test images
+        through one round of compression matches the pixel-statistic distribution they expect. Cheap, no
+        parameters to tune, downside is zero.   +0.002 standalone, compounds with downstream stages.
+
+                                                                                                               1/4
+Working_Techniques_Summary.md  2026-05-06
+
+        Multiscale non-overlapping tiling, scales 4+5+6 = 77 tiles (Exp-7) -- A single 4×4 grid on a
+        3000×3000 quadrat fragments individual plants and mixes species. Instead, tile each image at three grid
+        sizes (4×4, 5×5, 6×6), giving 77 non-overlapping 518×518 tiles at three effective source resolutions
+        (~747, 600, 500 px). The downstream max_prob aggregator can then pick whichever scale best isolates
+        each species. Coarser scales (1×1, 2×2, 3×3) hurt because whole-image crops produce confident wrong
+        labels; 7×7 is diminishing return.   +0.028 over 4×4 alone.
+
+Aggregation & Fusion
+
+        max_prob per-tile aggregation, T = 1.5 (Exp-4) -- For each species class, take the maximum softmax
+        probability across the 77 tiles as the image-level prediction (with temperature T=1.5 sharpening per-tile
+        peaks). Noisy-OR multiplies tile noise; mean/quantile pooling dilutes strong signals. Max preserves the
+        single-best tile evidence per class independently, and is the only aggregator whose F1 is invariant to tile
+        count -- the precondition that lets multiscale work.   +0.039.
+
+        Temporal prior_blend across location visits (Exp-4) -- Each physical plot in the test set is
+        photographed multiple times. Build a location prior P_loc(c) = max over visits of P_visit(c),
+        then blend with the current image's prediction: P_final = (1-)·P_loc + ·P_image. Applied only
+        to multi-visit quadrats (~76% of the test set). Lets a weak current photo borrow species evidence from
+        earlier visits at the same plot.   +0.022.
+
+        Per-model  (Exp-11) -- Each branch of the ensemble gets its own : ViT+kNN =0.15 (already has
+        external evidence from kNN, so leans on the location prior), ConvNeXt =0.30 (no kNN arm, trusts its
+        own per-image prediction more, which preserves architecture diversity for the ensemble).   +0.001.
+
+        Per-source sim_w aggregator on RNNB + =0.30 (Exp-14, Stage 4) -- RNNB sites (saltmarsh /
+        coastal dunes in SW France) show year-to-year species turnover: a lush May visit looks nothing like the
+        bare-sand January visit at the same plot, but max-pooled prior was making them produce identical
+        predictions. Replace with a per-image prior aggregator weighted by cosine similarity between the
+        current image embedding and each historical sister visit: similar visits contribute fully, dissimilar ones
+        collapse out. Restricted to RNNB only -- applying it globally cratered alpine species counts (10.0 
+        4.85). Alpine sources keep max.  +0.00982.
+
+Classifier Model Ensembling (ViT-L-DINOv2 + ConvNext-L-DINOv3)
+
+        ConvNeXt-Large DINOv3 finetune, 2-phase (Exp-10) -- convnext_large.dinov3_lvd1689m (196M
+        params). Phase 1: freeze the backbone, train only the 7806-way classifier head with Adam, lr=0.01 for
+        100 epochs (cheap, stable head warmup). Phase 2: unfreeze everything and finetune end-to-end from
+        the Phase 1 EMA weights with AdamW, lr=3e-5, layer-wise lr decay 0.8, drop_path=0.3 (higher reg for
+        the larger model), RandAugment + mixup + cutmix, EMA decay 0.9998, 100 epochs on 4×H200.
+        Provides the second ensemble member needed for architecture diversity.
+
+        ViT-L Phase 2v3 cooldown (Exp-13) -- vit_large_patch14_reg4_dinov2.lvd142m finetuned in
+        two stages following the same head-only  full-finetune protocol, then a 10-epoch cooldown at lr=2e-
+        5 on combined train+val+test data on top of Phase 2. Replaces the earlier ViT-B as the production ViT
+        backbone. Standalone +0.011 F1.
+
+        ConvNeXt + ViT probability-level ensemble, w=0.77 (Exp-11, "Approach A") -- Run the ViT branch
+        with kNN blending first to get the ViT-side per-image probabilities, then linearly mix in ConvNeXt: P =
+
+                                                                                                               2/4
+Working_Techniques_Summary.md  2026-05-06
+
+        0.77·P_vit+knn + 0.23·P_cnxt. Order matters: blending logits before kNN breaks the
+        embeddinglogit alignment the FAISS index assumes (it was built on ViT embeddings only) and loses
+        ~0.02. Both branches use the same 4+5+6 scale scheme -- letting ConvNeXt use its own preferred
+        3+4+5+6+7 introduced disagreements ViT couldn't compensate for.   +0.020.
+
+Retrieval Model Ensembling (FAISS)
+
+        ViT-only FAISS kNN blend (Exp-9) -- Build an exact-search FAISS IndexFlatIP over ~860K geo-
+        filtered ViT training-set CLS embeddings (768-d, L2-normalised so inner product = cosine). For each
+        test tile embedding, retrieve the k=20 nearest training neighbours, softmax the similarities with =0.07
+        to get neighbour weights, and aggregate by class label to form a retrieval distribution p_knn. Blend
+        per-tile before max_prob aggregation: p_tile = ·softmax(logits/T) + (1-)·p_knn. The
+        classifier softmax is biased toward common species (long tail under-trained); the retrieval arm is
+        frequency-agnostic and supplies complementary "look-up" evidence for rare species clusters.  
+        +0.017.
+
+        Differentiated : _multi=0.80, _single=1.00 (Exp-9) -- Inject kNN only on multi-visit quadrats.
+        Single-visit images don't have the temporal prior to absorb retrieval noise; using kNN there cost up to
+        -0.08 F1. Multi-visit quadrats can tolerate =0.80 (20% kNN weight) because the location prior
+        smooths out noisy retrievals.
+
+Ecological Masking
+
+        Aquatic-species habitat-impossibility mask (Exp-14, Stage 12) -- Hand-curate 35 fully-aquatic
+        genera (Posidonia, Zostera, Cymodocea, Lemna, Potamogeton, etc.) and 6 aquatic specific epithets
+        (oceanica, submersa, fluitans, natans, ...). Mark any of the 7806 species whose Latin binomial matches as
+        habitat-impossible (91 species), and zero those probabilities post-fusion across all sources. Triggered by
+        inspection: Posidonia oceanica (a marine seagrass) was the most-predicted species on dry-soil RNNB
+        sand-dune quadrats. Pure precision improvement, zero parameters, ecologically defensible.  +0.00162.
+
+        Per-source biogeographic mask on alpine sources (Exp-14, Stage 13) -- On CBN-PdlC and CBN-Pla
+        (alpine summit plots only), zero 5 hand-vetted species that survived Stage 12 (no aquatic match) but
+        cannot occur at alpine elevation: tropical C4 carpetgrass (Axonopus compressus), coastal sea-thrift
+        (Armeria maritima), Mediterranean coastal annuals, etc. Other sources are unchanged.  +0.00039 LB
+        but proxy-positive on the full cohort; adopted as new best.
+
+Source-Aware Admission & Demotion
+
+        N-floor admission with confidence-tiered ratio gate, "N3_r0.5" (Exp-16) -- On count-bound
+        sources where the model under-predicts (GUARDEN, LISAH, OPTMix, RNNB), if fewer than 3 species
+        pass the standard threshold=0.100, admit additional candidates up to 3 -- but only those whose
+        probability ratio to the already-admitted top-1 is  0.5 (so we admit confident near-ties, not random
+        low-confidence noise). Doesn't touch sources that already predict enough species (alpine). Largest
+        single-mechanism gain since Stage 4.  +0.00557.
+
+        Habitat-fit demotion using external training-data geography (Exp-16) -- For each (test image,
+        candidate species) pair, compute a habitat-fit factor in [, 1]. Two components multiplied together: (1)
+        geo score -- count training observations of that species within 200 km of the source's refined regional
+        centroid; if  n_near_min (40) the species is unpenalised, if 0 it's demoted to , linear in between; (2)
+
+                                                                                                               3/4
+Working_Techniques_Summary.md       2026-05-06
+
+        altitude score -- penalise species whose training-data median altitude lies outside the source's
+        expected band. Multiply into the species probability before the N-floor admission. Uses external
+        information (PlantCLEF2024 training-data lat/lon/alt) the model never saw at inference. Cosmopolitans
+        (high n_near everywhere) untouched; range-restricted species observed only in distant regions get
+        demoted to .  +0.02361 standalone, final +0.03674 combined with admission retune.
+
+        Per-source  override on alpine sources (Exp-16C, NEW MECHANISM) -- The single global  was
+        demoting legitimate alpine species too hard, because alpine quadrats were pinned at the topk-10 cap
+        and any extra demotion just dropped real positives below threshold. Override  to 0.45 on CBN-PdlC
+        and CBN-Pla (vs global =0.15). Tested OPTMix per-source  too -- no-op because OPTMix's "out-of-
+        place" species (Plantago subulata-style) have high local n_near and aren't hit by the multiplicative knob.
+         +0.00065 LB, locks final F1=0.50623.
+
+        Habitat-fit retune at new ViT-L+ConvNeXt-P backbone (Exp-16C) -- When the production
+        backbone changed, the habitat-fit hyperparameters needed re-tuning: n_near_min 3040, _global
+        0.100.15. R=200 km, k=10, thr=0.085 unchanged. Final lock 2026-05-05.
+
+Final Submission
+
+        Fixed global threshold = 0.085 + topK = 10 + SW Europe geo mask -- Hard-threshold per-class
+        probabilities, then cap at 10 species per image. Adaptive per-image thresholds (Exp-6: max-gap,
+        relative-ratio, elbow) all lost to a well-tuned fixed threshold. The geo mask zeroes ~3000 of the 7806
+        classes that don't occur in southwest Europe. Threshold value drifted across experiments (0.04  0.10 
+        0.085) only because the probability scale shifts when the pipeline re-blends -- the rule (fixed global
+        threshold) is unchanged.
+
+                               4/4
+README.md                                                                                                  2026-05-06
+
+PlantCLEF 2026 -- README SECTION
+
+End-to-end inference pipeline for the F1 = 0.50623 PlantCLEF 2026 submission (Exp-16C lock, 2026-05-05).
+For a plain-English description of what each technique does and why, see Working_Techniques_Summary.md. This README covers how
+to run the code.
+
+1. Results
+
+Milestone     Mechanism added                                                                     LB F1    
+
+Exp-3         noisy_or aggregator, T=2.0                                                          0.28093  --
+baseline
+
+Exp-4         max_prob + JPEG q=85 + temporal prior_blend                                         0.35698 +0.07605
+                                                                                                  0.40100 +0.04402
+Exp-7/8       multiscale tiling 4+5+6 (77 tiles)                                                  0.41754 +0.01654
+                                                                                                  0.43790 +0.02036
+Exp-9         ViT FAISS kNN blend (_multi=0.80, _single=1.00)                                     0.45410 +0.01620
+
+Exp-11        ConvNeXt-L DINOv3 + ViT probability ensemble (w=0.77)
+
+Exp-14        per-source sim_w on RNNB + =0.30
+
+Exp-14 Stage  aquatic-species habitat mask                                                        0.45572 +0.00162
+12
+
+Exp-14 Stage  per-source biogeographic mask on alpine                                             0.45611 +0.00039
+13
+
+Exp-16        N-floor admission + ratio gate                                                      0.46168 +0.00557
+N3_r0.5                                                                                           0.49842 +0.03674
+                                                                                                  0.50623 +0.00781
+Exp-16        habitat-fit demotion (R=200 km, =0.25)
+
+                      ViT-L+ConvNeXt cooldown backbones; per-source  override on alpine (=0.45);
+Exp-16C lock
+
+                      habitat-fit retune (n_near_min=40, _global=0.15)
+
+Final submission CSV: ${PLANTCLEF_ROOT}/aerten3/submissions/exp16c/exp16c_s12B_alpine_b0.45.csv
+
+2. Environment and prerequisites
+
+        Cluster: Georgia Tech PACE.
+        SLURM account: paceship-clef2026_plantclef.
+        GPU partitions: gpu-rtx6000 (default) or gpu-h200 (training); QoS inferno.
+        CPU partitions: cpu-medium; QoS embers.
+        Email for job notifications: aerten3@gatech.edu.
+        Root path (set before running anything):
+
+           export PLANTCLEF_ROOT=/storage/home/hcoda1/2/aerten3/ps-clef2026_plantclef-0
+
+Python deps: torch, timm, faiss-cpu, pandas, pyarrow, numpy, Pillow, pyyaml. The PACE conda environment used during the
+run is pinned in Exp-10_ConvNext_finetuning/configs/.
+Data assumed present:
+
+        Test images: ${PLANTCLEF_ROOT}/data/raw/PlanCLEF_test_data/images/
+        Training images (1.4 M, used for FAISS index + habitat-fit lat/lon): ${PLANTCLEF_ROOT}/data/raw/train_full/
+        Species map: ${PLANTCLEF_ROOT}/data/raw/class_id_to_species_mapping/class_to_species_id.json
+        SW-Europe geo mask: ${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy
+
+                                                       1/6
+README.md                                                                                                     2026-05-06
+
+                     PlantCLEF2024 training metadata for habitat-fit:
+                     ${PLANTCLEF_ROOT}/data/raw/PlantCLEF2024singleplanttrainingdata.csv
+
+3. Repository layout
+
+Folder                           What it does                                                    Status
+
+Exp-                             Original cross-region transformer + noisy-student attempt on    Abandoned (domain
+1_steps_with_lucas_212k_set/     the 212K LUCAS set                                              gap)
+
+Exp-2-JPEG_Compression/          JPEG round-trip preprocessing                                   In pipeline
+
+Exp-                             MaxProbabilityAggregator, prior_blend temporal fusion           In pipeline
+4_Enhanced_Tile_Aggregation/
+
+Exp-7_Multiscale_tiling/         Multi-scale tile extraction (ViT) at scales 4+5+6               In pipeline
+
+Exp-9_kNN_Retrieval_Ensemble/    FAISS index build + per-tile kNN blend (ViT)                    In pipeline
+
+Exp-10_ConvNext_finetuning/      ConvNeXt-Large DINOv3 2-phase finetune + tile extraction        In pipeline
+
+Exp-10C_ConvNext_Cooldown/       10-epoch cooldown of ConvNeXt-L on combined train+val+test In pipeline (Exp-16C)
+
+Exp-11_Conv_ViT_Ensemble/        ConvNeXt + ViT probability-level ensemble ("Approach A")        In pipeline
+
+Exp-13_ViT_finetuning/           ViT-L DINOv2 2-phase finetune + Phase 2v3 cooldown              In pipeline (Exp-16C
+                                                                                                 backbone)
+
+Exp-                             Per-source sim_w aggregator + aquatic + biogeographic masks In pipeline
+14_Adaptive_Temporal_Fusion/
+
+Exp-16_Multi_Species_Discovery/ N-floor admission + habitat-fit demotion                         In pipeline
+
+Exp-16C_HabitatFit_Retune/       Habitat-fit re-tune at the new ViT-L+ConvNeXt-cooldown          Final lock
+                                 backbones; per-source  override
+
+Final_pipeline_methods_Summary/  Detailed methods writeup (frozen at F1=0.4379 -- superseded by  Reference
+
+                                 Exp-16C)
+
+4. End-to-end run (final submission)
+
+The minimal command sequence to reproduce F1 = 0.50623 from raw test images and pre-trained checkpoints. Each line is a SLURM
+submission; later stages depend on earlier ones.
+
+4.1 Train backbones (skip if checkpoints already exist)
+
+# ConvNeXt-Large DINOv3, 2-phase finetune (4×H200, ~3 days total)
+sbatch --export=VARIANT=large Exp-10_ConvNext_finetuning/slurm/phase1_train.sbatch
+sbatch --export=VARIANT=large,GPU_TYPE=h200,NGPUS=4 Exp-
+10_ConvNext_finetuning/slurm/phase2_train.sbatch
+
+# ViT-L DINOv2, 2-phase + Phase 2v3 cooldown
+sbatch Exp-13_ViT_finetuning/slurm/phase1_train.sbatch
+sbatch Exp-13_ViT_finetuning/slurm/phase2_train.sbatch
+sbatch Exp-13_ViT_finetuning/slurm/phase2v3_cooldown.sbatch
+
+# ConvNeXt cooldown (Exp-10C) -- same recipe applied to ConvNeXt
+sbatch Exp-10C_ConvNext_Cooldown/slurm/cooldown.sbatch
+
+4.2 Extract per-tile embeddings + logits at scales 4+5+6
+
+                                                          2/6
+README.md                                                                                                            2026-05-06
+
+     # ViT-L tile extraction (3 scales × ~1.5 h on rtx6000)
+     for SCALE in 4 5 6; do
+
+        sbatch --export=SCALE=$SCALE Exp-13_ViT_finetuning/slurm/extract_phase2v3_rtx6000.sbatch
+     done
+     # ConvNeXt-L cooldown tile extraction
+     sbatch Exp-10C_ConvNext_Cooldown/slurm/extract_4x4.sbatch
+     sbatch Exp-10C_ConvNext_Cooldown/slurm/extract_5x5_6x6.sbatch
+
+Both extractors apply JPEG round-trip (q=85, 4:2:2) before forward pass and write parquet at
+${PLANTCLEF_ROOT}/aerten3/parquet/.../scale_{4x4,5x5,6x6}.parquet.
+
+4.3 Build FAISS kNN index (ViT only, one-time)
+
+     sbatch Exp-9_kNN_Retrieval_Ensemble/slurm_build_index.sbatch
+     # Produces: faiss_index_geo.bin, faiss_labels_geo.npy, class_counts_geo.npy
+
+4.4 ViT branch: kNN blend + temporal fusion
+
+     # Per-tile kNN blend (_multi=0.80, _single=1.00, k=20, =0.07)
+     # then sim_w aggregator on RNNB + max elsewhere, _RNNB=0.30, _default=0.15
+     sbatch Exp-14_Adaptive_Temporal_Fusion/slurm/run_stage4_simw_BOTH_vitRNNB30.sbatch
+
+4.5 ConvNeXt branch: aggregation + temporal fusion
+
+     # max_prob over 77 tiles, T=1.5, image_topk=64, geo mask
+     # then sim_w on RNNB + max elsewhere, =0.30
+     sbatch Exp-14_Adaptive_Temporal_Fusion/slurm/run_convnext_branch.sbatch
+
+4.6 Probability-level ensemble + ecological masks
+
+     # w = 0.77 ViT+kNN + 0.23 ConvNeXt
+     # applies aquatic mask (Stage 12) and per-source biogeographic mask (Stage 13)
+     sbatch Exp-14_Adaptive_Temporal_Fusion/slurm/run_stage13_biogeo.sbatch
+
+4.7 Habitat-fit demotion + per-source admission + per-source  (Exp-16C)
+
+     # Build per-species geographic profile (one-time, ~30 min CPU)
+     python Exp-16_Multi_Species_Discovery/diagnostics/build_species_geo_profile.py
+     python Exp-16_Multi_Species_Discovery/diagnostics/refine_source_centroids.py
+     python Exp-16_Multi_Species_Discovery/diagnostics/add_radius_columns.py
+     # Final lock: alpine =0.45 override on top of global =0.15
+     sbatch Exp-16C_HabitatFit_Retune/slurm/stage12B_alpine_beta_refine.sbatch
+
+The final stage is implemented by Exp-16_Multi_Species_Discovery/scripts/apply_habitat_fit.py, invoked as:
+
+     python Exp-16_Multi_Species_Discovery/scripts/apply_habitat_fit.py \
+        --ensemble-parquet ${PLANTCLEF_ROOT}/aerten3/exp16c/ensemble_phase2v3_cnxt_cooldown.parquet \
+        --refined-ref-json
+
+     ${PLANTCLEF_ROOT}/aerten3/exp16/outputs/habitat_classifier/refined_source_ref.json \
+
+                                                                                                                3/6
+README.md                                                                                                      2026-05-06
+
+--species-geo-csv
+
+${PLANTCLEF_ROOT}/aerten3/exp16/outputs/habitat_classifier/species_geo_profile.csv \
+
+--geo-mask              ${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy \
+
+--aquatic-mask          ${PLANTCLEF_ROOT}/aerten3/exp14/outputs/signals/aquatic_mask.npy \
+
+--biogeo-json           ${PLANTCLEF_ROOT}/aerten3/exp14/outputs/signals/biogeo_per_source.npz \
+
+--radius-km 200 --beta 0.15 --n-near-min 40 --use-altitude \
+
+--per-source-json '{"CBN-PdlC":{"beta":0.45},"CBN-Pla":{"beta":0.45}}' \
+
+--n-floor 3 --ratio-floor 0.5 \
+
+--count-bound-sources GUARDEN,LISAH,OPTMix,RNNB \
+
+--threshold 0.085 --topk 10 \
+
+--out-csv ${PLANTCLEF_ROOT}/aerten3/submissions/exp16c/exp16c_s12B_alpine_b0.45.csv
+
+This is the single command that produces the F1 = 0.50623 submission CSV.
+
+5. Final hyperparameter manifest
+
+preprocessing:          # 4:2:2
+   jpeg_quality: 85
+   jpeg_subsampling: 1
+   resize: lanczos
+
+tiling:
+   scales: [4, 5, 6]
+   tiles_per_image: 77
+   tile_size: 518
+
+vit_branch:
+   backbone: vit_large_patch14_reg4_dinov2.lvd142m # Exp-13 phase2v3 cooldown checkpoint
+   temperature: 1.5
+   aggregator: max_prob
+   image_topk: 64
+   knn:
+      index_type: IndexFlatIP
+      k: 20
+      tau: 0.07
+      beta_multi: 0.80
+      beta_single: 1.00
+      blend_point: per_tile_pre_aggregation
+   temporal_fusion:
+      aggregator_per_source: {RNNB: sim_w, default: max}
+      alpha_per_source: {RNNB: 0.30, default: 0.15}
+
+convnext_branch:
+   backbone: convnext_large.dinov3_lvd1689m # Exp-10C cooldown checkpoint
+   temperature: 1.5
+   aggregator: max_prob
+   image_topk: 64
+   temporal_fusion:
+      aggregator_per_source: {RNNB: sim_w, default: max}
+      alpha: 0.30
+
+ensemble:
+   weights: {vit_plus_knn: 0.77, convnext: 0.23}
+
+masks:
+   geo: sw_europe_mask_bool.npy
+   aquatic: 91 species (genus + epithet pattern match)
+   biogeo_alpine: 5 species zeroed on CBN-PdlC, CBN-Pla
+
+habitat_fit:
+   beta_global: 0.15
+   per_source_beta:
+      CBN-PdlC: 0.45
+
+                                                                                                          4/6
+README.md                                                                                                      2026-05-06
+
+               CBN-Pla: 0.45
+            radius_km: 200
+            n_near_min: 40
+            use_altitude: true
+
+         admission:
+            n_floor: 3
+            ratio_floor: 0.5
+            count_bound_sources: [GUARDEN, LISAH, OPTMix, RNNB]
+
+         submission:
+            threshold: 0.085
+            topk: 10
+
+6. Key file index
+
+Artefact       Path
+
+Final          ${PLANTCLEF_ROOT}/aerten3/submissions/exp16c/exp16c_s12B_alpine_b0.45.csv
+submission
+CSV
+
+ViT-L Phase    ${PLANTCLEF_ROOT}/aerten3/checkpoints/exp13_vitl/phase2v3_cooldown/model_best.pth.tar
+2v3 cooldown
+checkpoint
+
+ConvNeXt-L     ${PLANTCLEF_ROOT}/aerten3/checkpoints/exp10c_convnext_cooldown/model_best.pth.tar
+cooldown
+checkpoint
+
+FAISS index +  ${PLANTCLEF_ROOT}/aerten3/exp9_knn/faiss_index/{faiss_index_geo.bin, faiss_labels_geo.npy}
+labels
+
+Geo mask (SW
+                       ${PLANTCLEF_ROOT}/aerten3/species_masking/sw_europe_mask_bool.npy
+
+Europe)
+
+Aquatic mask ${PLANTCLEF_ROOT}/aerten3/exp14/outputs/signals/aquatic_mask.npy
+
+Per-source     ${PLANTCLEF_ROOT}/aerten3/exp14/outputs/signals/biogeo_per_source.npz
+biogeographic
+mask
+
+Refined        ${PLANTCLEF_ROOT}/aerten3/exp16/outputs/habitat_classifier/refined_source_ref.json
+source
+centroids
+
+Species geo    ${PLANTCLEF_ROOT}/aerten3/exp16/outputs/habitat_classifier/species_geo_profile.csv
+profile
+
+ViT tile       ${PLANTCLEF_ROOT}/aerten3/parquet/plantclef_2026_test/exp13_phase2v3/scale_{4x4,5x5,6x6}.parquet
+parquets
+
+ConvNeXt tile
+                       ${PLANTCLEF_ROOT}/aerten3/parquet/exp10c_convnext_cooldown/scale_{4x4,5x5,6x6}.parquet
+
+parquets
+
+7. Reference documents
+
+        Working_Techniques_Summary.md -- what each working technique does and why.
+        Final_pipeline_methods_Summary/Final_Pipeline_Methods_Summary.md -- detailed methods writeup at the F1=0.4379
+        milestone (superseded by Exp-16C but still the reference for stages 1­11).
+        Per-experiment results: Exp-*/docs/*Results*.md -- every stage in every experiment is logged with its LB F1, hyperparameters,
+        and the reasoning behind adoption or rejection.
+
+                                                                                                                5/6
+README.md                                                                  2026-05-06
+
+            GitHub repository: https://github.com/dsgt-arc/plantclef-2026
+
+6/6
+
