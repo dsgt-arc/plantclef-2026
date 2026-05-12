@@ -197,6 +197,11 @@ def main() -> None:
     ap.add_argument("--geo-mask", required=True)
     ap.add_argument("--habitat-mask", required=True)
     ap.add_argument("--biogeo-npz", required=True)
+    ap.add_argument("--skip-aquatic", action="store_true",
+                    help="Skip the aquatic blacklist mask (treat as all-True).")
+    ap.add_argument("--skip-biogeo", action="store_true",
+                    help="Skip the biogeographic per-source alpine mask "
+                         "(treat as all-True).")
     ap.add_argument("--out-csv", required=True)
     ap.add_argument("--beta", type=float, required=True,
                     help="Demotion floor in [0,1]. 1.0 = identity.")
@@ -239,9 +244,17 @@ def main() -> None:
     print(f"  scope:             {args.scope_sources}")
 
     geo = load_class_mask_npy(args.geo_mask, NUM_CLASSES)
-    aquatic = np.load(args.habitat_mask).astype(np.bool_)
-    biogeo = np.load(args.biogeo_npz)
-    mask_alpine = biogeo["mask_alpine"].astype(np.bool_)
+    if args.skip_aquatic:
+        aquatic = np.ones(NUM_CLASSES, dtype=np.bool_)
+        print("  aquatic mask:      SKIPPED (--skip-aquatic)")
+    else:
+        aquatic = np.load(args.habitat_mask).astype(np.bool_)
+    if args.skip_biogeo:
+        mask_alpine = np.ones(NUM_CLASSES, dtype=np.bool_)
+        print("  biogeo alpine:     SKIPPED (--skip-biogeo)")
+    else:
+        biogeo = np.load(args.biogeo_npz)
+        mask_alpine = biogeo["mask_alpine"].astype(np.bool_)
     combined_global = geo & aquatic
     combined_alpine = combined_global & mask_alpine
 

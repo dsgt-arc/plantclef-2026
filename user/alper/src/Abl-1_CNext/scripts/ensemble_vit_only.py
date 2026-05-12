@@ -88,8 +88,16 @@ def main():
 
     print("\n=== Fusing ViT branch ===")
     vit_ctrl = _load_controller(args.vit_controller)
-    vit_per_src = json.loads(args.vit_aggregator_per_source) \
-        if args.vit_aggregator_per_source else None
+    if args.vit_aggregator_per_source:
+        # Accept either a JSON literal or a path to a JSON file (lets
+        # PowerShell callers avoid double-quote-stripping headaches).
+        if os.path.exists(args.vit_aggregator_per_source):
+            with open(args.vit_aggregator_per_source, "r", encoding="utf-8") as fh:
+                vit_per_src = json.load(fh)
+        else:
+            vit_per_src = json.loads(args.vit_aggregator_per_source)
+    else:
+        vit_per_src = None
     print(f"  controller: {vit_ctrl.to_dict()}")
     print(f"  aggregator: {args.vit_aggregator}  per_source={vit_per_src}")
     vit_fused: Dict[str, np.ndarray] = fuse_branch(

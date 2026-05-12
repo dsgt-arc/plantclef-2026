@@ -56,7 +56,20 @@
       "Bash(python \"C:/Users/alper/Documents/PlantCLEF_2026_Local/_GitHub/plantclef-2026/user/alper/src/Exp-16_Multi_Species_Discovery/diagnostics/build_habitat_clusters.py\")",
       "Bash(python -c \"from docx import Document; d = Document\\('Research Proposal v2 - PlantCLEF 2026 by aerten3.docx'\\); [print\\(p.text\\) for p in d.paragraphs if p.text.strip\\(\\)]\")",
       "Bash(python -c \"from docx import Document; d = Document\\(r'C:/Users/alper/Documents/PlantCLEF_2026_Local/Alpers Proposal/Research Proposal v2 - PlantCLEF 2026 by aerten3.docx'\\); [print\\(p.text\\) for p in d.paragraphs if p.text.strip\\(\\)]\")",
-      "Skill(gsd:resume-work)"
+      "Skill(gsd:resume-work)",
+      "Read(//c/Users/alper/Desktop/**)",
+      "Bash(unzip -p \"C:/Users/alper/Desktop/Ablation order.docx\" \"word/document.xml\")",
+      "Bash(grep -oP '\\(?<=<w:t[^>]{0,200}>\\)[^<]+')",
+      "Bash(cp \"C:/Users/alper/Desktop/Ablation order.docx\" /tmp/abl.zip)",
+      "Read(//c/tmp/**)",
+      "Bash(unzip -o abl.zip word/document.xml -d /tmp/abl_extract)",
+      "Bash(grep -v '^\\\\s*$')",
+      "Bash(pwsh -Command \"Get-Command pandoc 2>&1 | Select-Object -ExpandProperty Source\")",
+      "Read(//c/Users/alper/anaconda3/**)",
+      "Read(//c/Users/alper/miniconda3/**)",
+      "Read(//c/ProgramData/anaconda3/**)",
+      "Bash(\"C:/Users/alper/anaconda3/python.exe\" -c \"import docx; print\\(docx.__version__\\)\")",
+      "Bash(C:/Users/alper/anaconda3/python.exe *)"
     ]
   }
 }
