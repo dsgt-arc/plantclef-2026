@@ -3,10 +3,11 @@
 Session handoff document for Murilo's PlantCLEF 2026 experiments.
 Read this first, then read the referenced docs to get full context.
 
-**Last updated**: 2026-05-06 early morning. **Priorities 4-7 done**: full
-library code, both training runs, 4 headlines + 11 A3 α-blends submitted.
-**Headlines**: A1@k9 = 0.12180 (H1 anchor), A1@k10 = 0.11640,
-A2@k9 = 0.09060 (H2 contrast), A2@k10 = 0.08445.
+**Last updated**: 2026-05-17. **Exp 003 complete; PR #15 squash-merged
+to main** as commit `9208c07` on 2026-05-17; `mg/tileq-decoder` branch
+deleted (both remote and local). **Headlines**: A1@k9 = 0.12180
+(H1 anchor), A1@k10 = 0.11640, A2@k9 = 0.09060 (H2 contrast),
+A2@k10 = 0.08445.
 **A3 α-curve monotone decreasing**: α=0 (max_prob only) = 0.22144;
 α=1 (decoder only) = 0.11640. **No α > 0 improves over α=0** — decoder
 provides zero complementary signal.
@@ -14,9 +15,11 @@ provides zero complementary signal.
 (B 0.031 *below* A). **A3** confirms decoder is purely additive noise
 (stronger result than spec's complementary-vs-redundant framing). New
 Sampler B failure mode (FAISS-undersampling under-confidence) documented
-in `results.md`. Only P8 (writeup) remains; most of it is already
-populated in results.md, tasks.md, CONTEXT.md. Competition ends
-**2026-05-07** (~1.5 days remaining).
+in `results.md`. **P8 paper writeup handed off**: 1,159-line
+`paper-briefing.md` synthesizes all four exp-003 docs into a single
+narrative-ordered input for Claude Research to draft the CLEF 2026
+working-notes paper. Competition closed **2026-05-07**; **no active
+PlantCLEF work planned**.
 
 ---
 
@@ -147,16 +150,18 @@ A null result on H2 of exp 003 is publishable.
 
 **Competition deadline**: 2026-05-07 (~2 days remaining).
 
-**Active branch**: `mg/tileq-decoder` — PR #15 open. P4 (full library code +
-samplers + FAISS map + sanity check) landed in commit `ad898bb`; P5 (both
-training runs) in `9febc5f`; P6 (infer.py + headlines) in `3d88553` /
-`eab81f3` (CSV format fix); P6 LB results writeup in `7c91007`.
+**Active branch**: none — `mg/tileq-decoder` deleted after PR #15 was
+squash-merged to main on 2026-05-17 as commit `9208c07` ("exp 003
+(TileQ-Decoder): full experiment + paper briefing"). 52 files changed,
++8,663 / −32 in the squash. Pre-merge milestone commits (now collapsed):
+P4 library `ad898bb`, P5 training `9febc5f`, P6 inference/headlines
+`3d88553` + `eab81f3`, P7 A3 α-blend `27779f5`, paper-briefing `8ba24ea`.
 
 **Recent merges to main**:
 
+- **PR #15 → exp 003 (TileQ-Decoder full experiment + paper briefing) — merged 2026-05-17 (squash commit `9208c07`)**
 - PR #14 → Alper's Exp-10 ConvNeXt finetuning
 - PR #7 → exps 001 + 002 (Murilo, `mg/dinov2-grid-ablation`) — merged 2026-04-18-ish
-- (current) PR #15 → exp 003 (full library + headlines submitted) — open
 
 | Submission | F1 | Status |
 |---|---|---|
@@ -186,6 +191,28 @@ training runs) in `9febc5f`; P6 (infer.py + headlines) in `3d88553` /
 ---
 
 ## What happened recently
+
+### 2026-05-17 — PR #15 squash-merged; paper briefing handed off to Claude Research
+
+Drafted `user/murilo/experiments/003-tileq-decoder/paper-briefing.md`
+(1,159 lines, commit `8ba24ea` on `mg/tileq-decoder` before merge):
+self-contained narrative-ordered synthesis of proposal.md / spec.md /
+tasks.md / results.md, intended as the single input artefact for a
+Claude Research session to draft the CLEF 2026 working-notes paper.
+Every number reproduced inline; no internal repo links to follow.
+Thirteen sections following the paper's natural arc — TL;DR →
+context → hypotheses → method → setup → training (synthetic) →
+Kaggle results → mechanism analysis → contributions synthesis →
+auxiliary findings → discussion/future work → reproducibility →
+references → suggested paper structure. Mirrors the
+`deep-research-briefing.md` pattern that originally seeded exp 003.
+
+PR #15 squash-merged to main as commit `9208c07` on 2026-05-17 with a
+commit message summarising the full PR arc (verdict, new failure mode
+characterised, all deliverables). 52 files / +8,663 / −32 squashed.
+`mg/tileq-decoder` branch deleted both remote and local; stale
+remote-tracking refs pruned. **No active PlantCLEF work planned**
+beyond running the paper briefing through Claude Research externally.
 
 ### 2026-05-06 early morning — A3 α-blend done; decoder is purely additive noise
 
@@ -578,12 +605,16 @@ A2@k10 = 0.08445. Both findings publishable per proposal.md.
 exactly matches A1@k10 (sanity check). No α > 0 improves over α=0.
 Decoder provides zero complementary signal — purely additive noise.
 
-### Priority 8 — Results writeup ← **only remaining**
+### Priority 8 — Results writeup — DONE 2026-05-17
 
-`results.md` already has the H1/H2 verdicts, mechanism analysis (new
-failure mode for Sampler B documented), wall-clock-per-stage table,
-future-work directions. Once A3 results are in, add a final ablation
-table row and decide whether the blended-best matches/beats A0a/A0b.
+`results.md` carries the H1/H2 verdicts, full ablation tables, A3
+α-curve, mechanism analysis (including the new
+FAISS-undersampling-under-confidence failure mode for Sampler B),
+wall-clock per stage, and future-work directions. The paper-writing
+hand-off is `paper-briefing.md` (1,159 lines, narrative-ordered,
+self-contained, no internal repo links) — intended as the single
+input for a Claude Research session to draft the CLEF 2026
+working notes. PR #15 squash-merged 2026-05-17 as commit `9208c07`.
 
 ### Deferred / out of scope (paper Discussion section)
 
@@ -681,6 +712,7 @@ table row and decide whether the blended-best matches/beats A0a/A0b.
 | `user/murilo/experiments/003-tileq-decoder/spec.md` | **Active experiment ground truth.** Architecture, samplers, training, ablation table, failure modes, paths. |
 | `user/murilo/experiments/003-tileq-decoder/proposal.md` | H1/H2, success/reject criteria. |
 | `user/murilo/experiments/003-tileq-decoder/tasks.md` | Implementation checklist. |
+| `user/murilo/experiments/003-tileq-decoder/paper-briefing.md` | **Paper writeup hand-off** — 1,159-line narrative-ordered synthesis of proposal/spec/tasks/results for a Claude Research session to draft the CLEF 2026 working-notes paper. Self-contained; every number reproduced inline. |
 | `user/murilo/experiments/003-tileq-decoder/pyproject.toml` | Adds `torch`, `timm`, `faiss-cpu`, `pyyaml` on top of exp-001 deps. |
 | `user/murilo/experiments/001-dinov2-grid-ablation/inference.py` | Extended with `--save-cls` flag (commit `1811f94`). Default behavior unchanged. |
 | `user/murilo/experiments/003-tileq-decoder/sbatch/extract_test_cls.{sh,sbatch}` | Per-task launcher + sbatch (template for future build_faiss / train / infer pairs). Pin `torch>=2.1.0,<2.11` cu121. |
