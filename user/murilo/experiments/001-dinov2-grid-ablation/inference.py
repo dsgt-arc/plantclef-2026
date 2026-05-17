@@ -3,7 +3,8 @@
 
 Runs a frozen fine-tuned DINOv2 classifier with configurable grid tiling on
 vegetation plot images. Saves full softmax probability vectors to parquet for
-downstream classification (see classify.py in exp 002).
+downstream classification (see classify.py in exp 002), or per-tile CLS
+embeddings (--save-cls) for downstream decoding (see exp 003 TileQ-Decoder).
 
 Usage:
     # Full image (no grid)
@@ -17,6 +18,9 @@ Usage:
 
     # GPU profiling (20 images)
     python inference.py --grid-size 3 --gpu-check 20
+
+    # Extract per-tile CLS embeddings (768-d) instead of probs
+    python inference.py --grid-size 4 --save-cls
 """
 
 import argparse
@@ -92,6 +96,12 @@ def parse_args():
         default=0,
         help="Process N images for GPU utilization profiling",
     )
+    parser.add_argument(
+        "--save-cls",
+        action="store_true",
+        help="Extract per-tile CLS embeddings (768-d) instead of probs; "
+             "output to cls_<grid_label>.parquet alongside the existing probs parquet.",
+    )
     return parser.parse_args()
 
 
@@ -132,6 +142,37 @@ def save_probs_to_parquet(
     print(f"Parquet saved: {output_path} ({file_size_mb:.1f} MB)")
 
 
+def save_cls_to_parquet(
+    image_names: list[str],
+    image_cls: dict[int, torch.Tensor],
+    tiles_per_image: int,
+    output_path: Path,
+):
+    """Save per-tile CLS embeddings to parquet, schema mirrors grid_NxN.parquet.
+
+    Schema: image_name (str), tile_idx (int32), cls_embedding (binary float16[768]).
+    Reconstruct with: np.frombuffer(row["cls_embedding"], dtype=np.float16)
+    """
+    rows = {"image_name": [], "tile_idx": [], "cls_embedding": []}
+    for idx, name in enumerate(image_names):
+        cls_f16 = image_cls[idx].numpy().astype(np.float16)  # (T, 768)
+        for t in range(tiles_per_image):
+            rows["image_name"].append(name)
+            rows["tile_idx"].append(t)
+            rows["cls_embedding"].append(cls_f16[t].tobytes())
+    table = pa.table(
+        {
+            "image_name": pa.array(rows["image_name"], type=pa.string()),
+            "tile_idx": pa.array(rows["tile_idx"], type=pa.int32()),
+            "cls_embedding": pa.array(rows["cls_embedding"], type=pa.binary()),
+        }
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(table, output_path)
+    file_size_mb = output_path.stat().st_size / (1024 * 1024)
+    print(f"Parquet saved: {output_path} ({file_size_mb:.1f} MB)")
+
+
 def main():
     args = parse_args()
 
@@ -149,6 +190,7 @@ def main():
     print(f"Output dir:   {args.output_dir}")
     print(f"Num workers:  {args.num_workers}")
     print(f"Dev mode:     {'fast-dev-run' if args.fast_dev_run else f'gpu-check({args.gpu_check})' if args.gpu_check else 'off'}")
+    print(f"Output:       {'CLS embeddings (768-d)' if args.save_cls else 'softmax probs (7806-d)'}")
     print()
 
     # ---- Load model ----
@@ -206,10 +248,11 @@ def main():
     print()
 
     # ---- Batched inference ----
-    image_probs: dict[int, torch.Tensor] = {}
+    image_outputs: dict[int, torch.Tensor] = {}
+    output_label = "CLS" if args.save_cls else "probs"
     t_start = time.time()
 
-    for batch_indices, batch_tiles in tqdm(dataloader, desc=f"Inference ({grid_label})"):
+    for batch_indices, batch_tiles in tqdm(dataloader, desc=f"Inference ({grid_label}, {output_label})"):
         B, T = batch_tiles.shape[:2]
         flat_tiles = batch_tiles.view(B * T, *batch_tiles.shape[2:])
 
@@ -218,16 +261,20 @@ def main():
 
         flat_tiles = flat_tiles.to(device, non_blocking=True)
         with torch.no_grad():
-            logits = model(flat_tiles)
-            probs = torch.softmax(logits, dim=1)
+            if args.save_cls:
+                feats = model.forward_features(flat_tiles)
+                output = model.forward_head(feats, pre_logits=True)  # (B*T, 768)
+            else:
+                logits = model(flat_tiles)
+                output = torch.softmax(logits, dim=1)  # (B*T, 7806)
 
         if gpu_monitor:
             gpu_monitor.batch_end(batch_size=flat_tiles.shape[0])
 
-        # Reshape back to (B, T, num_classes) and store per image
-        probs = probs.view(B, T, -1).cpu()
+        # Reshape back to (B, T, D) and store per image
+        output = output.view(B, T, -1).cpu()
         for i, img_idx in enumerate(batch_indices.tolist()):
-            image_probs[img_idx] = probs[i]  # (T, num_classes)
+            image_outputs[img_idx] = output[i]  # (T, D) where D = 7806 (probs) or 768 (CLS)
 
     elapsed = time.time() - t_start
 
@@ -246,19 +293,28 @@ def main():
 
     if dev_mode:
         print()
-        print("=== Dev mode — sample probs shape check ===")
+        print(f"=== Dev mode — sample {output_label} shape check ===")
         for idx in range(min(3, num_images)):
-            p = image_probs[idx]
-            print(f"  {image_names[idx]}: shape={tuple(p.shape)}, "
-                  f"sum={p.sum(dim=1).mean():.4f}, max={p.max():.4f}")
+            p = image_outputs[idx]
+            if args.save_cls:
+                # Train-CLS mean L2 ≈ 18.6 (raw, pre-norm); test should be similar.
+                print(f"  {image_names[idx]}: shape={tuple(p.shape)}, "
+                      f"L2_norm={p.norm(dim=1).mean():.4f}, max={p.max():.4f}")
+            else:
+                print(f"  {image_names[idx]}: shape={tuple(p.shape)}, "
+                      f"sum={p.sum(dim=1).mean():.4f}, max={p.max():.4f}")
         return
 
     # ---- Save to parquet ----
-    output_path = Path(args.output_dir) / f"{grid_label}.parquet"
-    save_probs_to_parquet(image_names, image_probs, grid_size, tiles_per_image, output_path)
-
-    print(f"\nStage 1 complete. Run stage 2 (exp 002):")
-    print(f"  python ../002-classification-methods/classify.py --input {output_path} --method expanded-list --top-k 5 --max-species 20")
+    if args.save_cls:
+        output_path = Path(args.output_dir) / f"cls_{grid_label}.parquet"
+        save_cls_to_parquet(image_names, image_outputs, tiles_per_image, output_path)
+        print(f"\nCLS extraction complete. Used by exp 003 TileQ-Decoder.")
+    else:
+        output_path = Path(args.output_dir) / f"{grid_label}.parquet"
+        save_probs_to_parquet(image_names, image_outputs, grid_size, tiles_per_image, output_path)
+        print(f"\nStage 1 complete. Run stage 2 (exp 002):")
+        print(f"  python ../002-classification-methods/classify.py --input {output_path} --method expanded-list --top-k 5 --max-species 20")
 
 
 if __name__ == "__main__":

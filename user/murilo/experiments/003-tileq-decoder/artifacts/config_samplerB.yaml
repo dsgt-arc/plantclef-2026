@@ -1,0 +1,20 @@
+sampler: B
+seed: 42
+steps: 80000
+batch_size: 32
+lr: 0.0003
+min_lr: 1.0e-05
+warmup_steps: 1000
+weight_decay: 0.05
+grad_clip: 1.0
+n_positives: 5
+n_tiles: 16
+n_val: 2000
+validate_every: 2000
+checkpoint_every: 10000
+precision: bf16
+n_classes: 7806
+n_params: 4509824
+device: cuda
+gpu: Quadro RTX 6000
+run_name: exp003-samplerB-seed42
